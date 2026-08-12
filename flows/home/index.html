@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simetrik V3 — Home</title>
+<link rel="icon" type="image/png" href="../../assets/img/Simetrik_isologo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../../shared/tokens.css" />
+<style>
+  /* ---------- Home-specific layout: main area, chat, artifact pane ---------- */
+
+  .main-area {
+    flex: 1; display: flex; min-width: 0; position: relative;
+  }
+
+  .chat-pane {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-surface);
+    transition: flex-basis var(--dur-slow) var(--ease-out), max-width var(--dur-slow) var(--ease-out);
+  }
+  .main-area.is-split .chat-pane { flex: 0 0 42%; max-width: 42%; border-right: 1px solid var(--color-border); }
+
+  /* Empty / greeting state */
+  .chat-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; padding: 24px; text-align: center;
+  }
+  .chat-empty h1 { font-size: 26px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
+  .chat-empty p { font-size: 14px; color: var(--color-ink-soft); max-width: 420px; }
+
+  .chat-input-shell {
+    width: 100%; max-width: 620px; background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md); padding: 12px 14px; display: flex; align-items: flex-end; gap: 10px;
+    transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .chat-input-shell:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-tint); }
+  .chat-input-shell textarea {
+    flex: 1; border: none; outline: none; resize: none; font-size: 14.5px; font-family: inherit;
+    color: var(--color-ink); background: transparent; max-height: 140px; line-height: 1.5;
+  }
+  .chat-input-shell textarea::placeholder { color: var(--color-ink-faint); }
+  .send-btn {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: var(--color-primary); color: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  }
+  .send-btn:hover { background: var(--color-primary-hover); }
+  .send-btn:active { transform: scale(.92); }
+  .send-btn svg, .send-btn i { width: 16px; height: 16px; }
+
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 620px; }
+  .suggestion-chip {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid var(--color-border-strong);
+    background: var(--color-surface); font-size: 13px; color: var(--color-ink-soft); cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  }
+  .suggestion-chip:hover { border-color: var(--color-primary); color: var(--color-primary-ink); background: var(--color-primary-tint); }
+
+  /* Active state: message thread */
+  .chat-thread { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  .msg { display: flex; align-items: center; gap: 10px; max-width: 640px; opacity: 0; transform: translateY(6px); animation: msgIn var(--dur-slow) var(--ease-out) forwards; }
+  @keyframes msgIn { to { opacity: 1; transform: translateY(0); } }
+  .msg--user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+  }
+  .msg--user .msg-avatar { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .msg--ai .msg-avatar { background: var(--color-ink); color: #fff; }
+  .msg-bubble { padding: 10px 14px; border-radius: var(--radius-md); font-size: 14px; line-height: 1.5; }
+  .msg--user .msg-bubble { background: var(--color-primary); color: #fff; border-top-right-radius: 4px; }
+  .msg--ai .msg-bubble { background: var(--color-surface-sunken); color: var(--color-ink); border-top-left-radius: 4px; }
+
+  .typing-indicator { display: flex; align-items: center; gap: 10px; max-width: 640px; }
+  .typing-dots {
+    display: flex; align-items: center; gap: 4px; padding: 12px 14px;
+    background: var(--color-surface-sunken); border-radius: var(--radius-md); border-top-left-radius: 4px;
+  }
+  .typing-dots span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--color-ink-faint);
+    animation: typingBounce 1s var(--ease-out) infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: .15s; }
+  .typing-dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+  .chat-input-shell--docked { margin: 0 24px 20px; max-width: none; }
+
+  /* Artifact panel (split-pane) */
+  .artifact-pane {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg);
+    transform: translateX(16px); opacity: 0;
+  }
+  .artifact-pane.is-visible { animation: artifactIn var(--dur-slow) var(--ease-out) forwards; }
+  @keyframes artifactIn { to { transform: translateX(0); opacity: 1; } }
+  .artifact-pane.is-pulsing { animation: artifactPulse var(--dur-slow) var(--ease-out); }
+  @keyframes artifactPulse { 0% { box-shadow: inset 0 0 0 2px var(--color-primary-tint); } 50% { box-shadow: inset 0 0 0 2px var(--color-primary); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
+
+  .artifact-pane-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); flex-shrink: 0;
+  }
+  .artifact-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--color-ink); }
+  .artifact-title i { width: 16px; height: 16px; color: var(--color-primary); }
+
+  .artifact-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  .artifact-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px; }
+  .artifact-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .artifact-card-title { font-size: 15px; font-weight: 700; color: var(--color-ink); }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 1100px) { .stat-grid { grid-template-columns: 1fr; } }
+  .stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .stat-label { font-size: 12px; font-weight: 600; color: var(--color-ink-faint); text-transform: uppercase; letter-spacing: .03em; }
+  .stat-value { font-size: 24px; font-weight: 800; color: var(--color-ink); letter-spacing: -0.01em; }
+  .stat-note { font-size: 12.5px; color: var(--color-ink-soft); line-height: 1.4; }
+
+  .source-row {
+    display: flex; align-items: center; justify-content: space-between; padding: 12px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .source-row:last-child { border-bottom: none; }
+  .source-row-main { display: flex; align-items: center; gap: 10px; }
+  .source-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--color-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft); flex-shrink: 0; }
+  .source-icon svg, .source-icon i { width: 15px; height: 15px; }
+  .source-name { font-size: 13.5px; font-weight: 600; color: var(--color-ink); }
+  .source-detail { font-size: 12px; color: var(--color-ink-faint); }
+  .source-row-end { display: flex; align-items: center; gap: 10px; }
+  .source-amount { font-size: 13px; font-weight: 600; color: var(--color-ink); }
+
+  .artifact-footnote {
+    font-size: 12.5px; color: var(--color-ink-faint); display: flex; align-items: center; gap: 6px;
+    padding-top: 4px;
+  }
+  .artifact-footnote i { width: 14px; height: 14px; }
+
+  /* Empty states for Apps / Agents (sections to be built later) */
+  .section-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center;
+  }
+  .section-empty-icon {
+    width: 52px; height: 52px; border-radius: var(--radius-lg); background: var(--color-primary-tint);
+    color: var(--color-primary-ink); display: flex; align-items: center; justify-content: center;
+  }
+  .section-empty-icon svg, .section-empty-icon i { width: 24px; height: 24px; }
+  .section-empty h2 { font-size: 18px; font-weight: 700; color: var(--color-ink); }
+  .section-empty p { font-size: 13.5px; color: var(--color-ink-soft); max-width: 380px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ Sidebar ============ -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- Header: full logo + search + collapse (expanded) / icon-only, hover-to-expand (collapsed) -->
+    <div class="sidebar-header">
+      <img src="../../assets/img/Simetrik_logo.svg" alt="Simetrik" class="sidebar-logo-full" />
+      <button class="logo-mark sidebar-logo-icon" id="sidebarLogoExpand" aria-label="Open sidebar" data-tooltip="Open sidebar">
+        <img src="../../assets/img/Simetrik_isologo.png" alt="Simetrik" class="sidebar-logo-icon-img" />
+        <i data-lucide="panel-right" class="sidebar-logo-icon-expand"></i>
+      </button>
+      <div class="sidebar-header-actions">
+        <button class="icon-btn" aria-label="Search">
+          <i data-lucide="search"></i>
+          <span class="tooltip-bubble">Search <kbd>⌘K</kbd></span>
+        </button>
+        <button class="icon-btn tooltip-bottom" id="sidebarToggle" aria-label="Close sidebar" data-tooltip="Close sidebar"><i data-lucide="panel-left"></i></button>
+      </div>
+    </div>
+
+    <!-- Main nav -->
+    <nav class="sidebar-nav">
+      <!-- Search: only visible when the sidebar is collapsed, sits above New Chat. The header's own
+           Search button (with the ⌘K tooltip) stays as-is and handles the expanded state. -->
+      <button class="nav-item sidebar-search-collapsed" aria-label="Search">
+        <span class="nav-icon"><i data-lucide="search"></i></span>
+        <span class="tooltip-bubble tooltip-bubble--right">Search <kbd>⌘K</kbd></span>
+      </button>
+
+      <button class="nav-item nav-item--primary" id="newChatBtn" data-tooltip="New chat">
+        <span class="nav-icon"><i data-lucide="plus"></i></span>
+        <span class="nav-label">New Chat</span>
+      </button>
+
+      <button class="nav-item" data-nav="projects" data-tooltip="Projects">
+        <span class="nav-icon"><i data-lucide="folder"></i></span>
+        <span class="nav-label">Projects</span>
+        <span class="nav-item-add" aria-label="New Project" data-tooltip="New Project"><i data-lucide="plus"></i></span>
+      </button>
+
+      <button class="nav-item" data-nav="apps" data-tooltip="Apps">
+        <span class="nav-icon"><i data-lucide="layout-grid"></i></span>
+        <span class="nav-label">Apps</span>
+        <span class="nav-item-add" aria-label="New App" data-tooltip="New App"><i data-lucide="plus"></i></span>
+      </button>
+
+      <button class="nav-item" data-nav="agents" data-tooltip="Agents">
+        <span class="nav-icon"><i data-lucide="bot"></i></span>
+        <span class="nav-label">Agents</span>
+        <span class="nav-item-add" aria-label="New Agent" data-tooltip="New Agent"><i data-lucide="plus"></i></span>
+      </button>
+    </nav>
+
+    <!-- Pinned: curated/starred projects, collapsible as a whole -->
+    <div class="sidebar-section sidebar-section--collapsible is-expanded" style="flex-shrink: 0; max-height: 42%;">
+      <button class="sidebar-section-header" aria-label="Pinned" data-tooltip="Pinned">
+        <span class="sidebar-section-icon sidebar-section-icon--pin"><i data-lucide="pin"></i></span>
+        <span class="sidebar-section-title sidebar-section-title--plain">Pinned</span>
+        <span class="sidebar-section-chevron"><i data-lucide="chevron-right"></i></span>
+      </button>
+      <div class="sidebar-section-body"><div class="sidebar-section-body-inner">
+      <ul class="project-list">
+        <li class="project-item is-expanded">
+          <button class="project-row">
+            <span class="folder-icon">
+              <i data-lucide="folder" class="folder-icon-closed"></i>
+              <i data-lucide="folder-open" class="folder-icon-open"></i>
+            </span>
+            <span class="project-name">LATAM Bank Reconciliation</span>
+          </button>
+          <div class="chat-sublist"><div class="chat-sublist-inner">
+            <a class="chat-row" href="#">July period close</a>
+            <a class="chat-row" href="#">Nequi source differences</a>
+          </div></div>
+        </li>
+        <li class="project-item">
+          <button class="project-row">
+            <span class="folder-icon">
+              <i data-lucide="folder" class="folder-icon-closed"></i>
+              <i data-lucide="folder-open" class="folder-icon-open"></i>
+            </span>
+            <span class="project-name">Q2 Journal Entry Audit</span>
+          </button>
+          <div class="chat-sublist"><div class="chat-sublist-inner">
+            <a class="chat-row" href="#">Manual entries review</a>
+          </div></div>
+        </li>
+        <li class="project-item">
+          <button class="project-row">
+            <span class="folder-icon">
+              <i data-lucide="folder" class="folder-icon-closed"></i>
+              <i data-lucide="folder-open" class="folder-icon-open"></i>
+            </span>
+            <span class="project-name">Q3 Treasury Forecast</span>
+          </button>
+          <div class="chat-sublist"><div class="chat-sublist-inner">
+            <a class="chat-row" href="#">Base vs. optimistic scenario</a>
+          </div></div>
+        </li>
+      </ul>
+      </div></div>
+    </div>
+
+    <!-- Recent: general chats, no project — also collapsible as a whole -->
+    <div class="sidebar-section sidebar-section--collapsible is-expanded">
+      <button class="sidebar-section-header" aria-label="Recent" data-tooltip="Recent">
+        <span class="sidebar-section-icon"><i data-lucide="clock"></i></span>
+        <span class="sidebar-section-title sidebar-section-title--plain">Recent</span>
+        <span class="sidebar-section-chevron"><i data-lucide="chevron-right"></i></span>
+      </button>
+      <div class="sidebar-section-body"><div class="sidebar-section-body-inner">
+      <ul>
+        <li><a class="chat-row" href="#">How do I build a reconciliation rule?</a></li>
+        <li><a class="chat-row" href="#">This week's anomaly summary</a></li>
+      </ul>
+      </div></div>
+    </div>
+
+    <!-- Footer: user management -->
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <span class="avatar" aria-label="Ivan Roa" data-tooltip="Ivan Roa">IR</span>
+        <span class="user-meta">
+          <span class="user-name">Ivan Roa</span>
+          <span class="user-account">Simetrik</span>
+        </span>
+        <button class="icon-btn" id="logoutBtn" aria-label="Log out" data-tooltip="Log out"><i data-lucide="log-out"></i></button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ============ Main area ============ -->
+  <main class="main-area" id="mainArea">
+
+    <div class="chat-pane" id="chatPane">
+
+      <!-- Empty / greeting state -->
+      <div class="chat-empty" id="chatEmpty">
+        <h1>What do you want to build today?</h1>
+        <p>Tell me the financial scenario and we'll build the project, the artifact, or the agent together.</p>
+        <div class="chat-input-shell">
+          <textarea id="emptyInput" rows="1" placeholder="e.g. Build a July bank reconciliation summary for LATAM"></textarea>
+          <button class="send-btn" id="emptySendBtn" title="Send"><i data-lucide="arrow-up"></i></button>
+        </div>
+        <div class="chat-suggestions">
+          <button class="suggestion-chip" data-prompt="Build a July bank reconciliation summary for LATAM">Create a reconciliation project</button>
+          <button class="suggestion-chip" data-prompt="Show me a sample artifact with the status of my sources">Generate a sample artifact</button>
+          <button class="suggestion-chip" data-prompt="I want to design an agent that checks differences every day">Design an agent</button>
+        </div>
+      </div>
+
+      <!-- Active state: chat thread -->
+      <div class="chat-thread" id="chatThread" hidden>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-shell chat-input-shell--docked">
+          <textarea id="dockedInput" rows="1" placeholder="Type to keep building…"></textarea>
+          <button class="send-btn" id="dockedSendBtn" title="Send"><i data-lucide="arrow-up"></i></button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Artifact panel: split-pane -->
+    <div class="artifact-pane" id="artifactPane" hidden>
+      <div class="artifact-pane-header">
+        <span class="artifact-title"><i data-lucide="file-text"></i> Reconciliation Summary · July 2026</span>
+        <button class="icon-btn" id="closeArtifact" title="Close artifact"><i data-lucide="x"></i></button>
+      </div>
+      <div class="artifact-body" id="artifactBody">
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-label">Reconciled entries</span>
+            <span class="stat-value">1,842 / 2,001</span>
+            <span class="stat-note">118 with amount differences, 41 without a source match.</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Connected sources</span>
+            <span class="stat-value">4</span>
+            <span class="stat-note">Nequi, Banco de Bogotá, Banco de Occidente, internal ERP.</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Last updated</span>
+            <span class="stat-value">12 min ago</span>
+            <span class="stat-note">The agent automatically re-reconciles every hour.</span>
+          </div>
+        </div>
+
+        <div class="artifact-card">
+          <div class="artifact-card-header">
+            <span class="artifact-card-title">Sources with differences</span>
+            <span class="badge badge--warning">3 pending</span>
+          </div>
+          <div>
+            <div class="source-row">
+              <div class="source-row-main">
+                <span class="source-icon"><i data-lucide="landmark"></i></span>
+                <div>
+                  <div class="source-name">Nequi</div>
+                  <div class="source-detail">41 journal entries without a match</div>
+                </div>
+              </div>
+              <div class="source-row-end">
+                <span class="source-amount">$ 3,240,000</span>
+                <span class="badge badge--danger">Difference</span>
+              </div>
+            </div>
+            <div class="source-row">
+              <div class="source-row-main">
+                <span class="source-icon"><i data-lucide="landmark"></i></span>
+                <div>
+                  <div class="source-name">Banco de Occidente</div>
+                  <div class="source-detail">18 journal entries under review</div>
+                </div>
+              </div>
+              <div class="source-row-end">
+                <span class="source-amount">$ 812,000</span>
+                <span class="badge badge--warning">Pending</span>
+              </div>
+            </div>
+            <div class="source-row">
+              <div class="source-row-main">
+                <span class="source-icon"><i data-lucide="database"></i></span>
+                <div>
+                  <div class="source-name">Internal ERP</div>
+                  <div class="source-detail">Accounting period closed 2 days ago</div>
+                </div>
+              </div>
+              <div class="source-row-end">
+                <span class="badge badge--success">Reconciled</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="artifact-footnote">
+          <i data-lucide="refresh-cw"></i>
+          This artifact updates live while you keep talking with the agent.
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<script src="../../shared/shell.js"></script>
+<script>
+  const chatEmpty = document.getElementById('chatEmpty');
+  const chatThread = document.getElementById('chatThread');
+  const chatMessages = document.getElementById('chatMessages');
+  const mainArea = document.getElementById('mainArea');
+  const artifactPane = document.getElementById('artifactPane');
+  const closeArtifact = document.getElementById('closeArtifact');
+  const chatPane = document.getElementById('chatPane');
+
+  let artifactRevealed = false;
+
+  function addMessage(role, text) {
+    const msg = document.createElement('div');
+    msg.className = `msg msg--${role}`;
+    msg.innerHTML = `
+      <span class="msg-avatar">${role === 'user' ? 'IR' : '<img src="../../assets/img/Simetrik_isologo.png" alt="" style="width:14px;height:14px;object-fit:contain" />'}</span>
+      <span class="msg-bubble">${text}</span>
+    `;
+    chatMessages.appendChild(msg);
+    if (window.lucide) lucide.createIcons();
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function showTyping() {
+    const typing = document.createElement('div');
+    typing.className = 'typing-indicator';
+    typing.id = 'typingIndicator';
+    typing.innerHTML = `
+      <span class="msg-avatar" style="background:var(--color-ink);color:#fff;"><img src="../../assets/img/Simetrik_isologo.png" alt="" style="width:14px;height:14px;object-fit:contain" /></span>
+      <span class="typing-dots"><span></span><span></span><span></span></span>
+    `;
+    chatMessages.appendChild(typing);
+    if (window.lucide) lucide.createIcons();
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  function revealArtifact() {
+    if (artifactRevealed) return;
+    artifactRevealed = true;
+    mainArea.classList.add('is-split');
+    artifactPane.hidden = false;
+    requestAnimationFrame(() => artifactPane.classList.add('is-visible'));
+  }
+
+  function pulseArtifact() {
+    artifactPane.classList.remove('is-pulsing');
+    void artifactPane.offsetWidth; // reflow to re-trigger the animation
+    artifactPane.classList.add('is-pulsing');
+  }
+
+  function startChat(firstPrompt) {
+    chatEmpty.hidden = true;
+    chatThread.hidden = false;
+    addMessage('user', firstPrompt);
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      addMessage('ai', "I put together a LATAM bank reconciliation summary for July using the sources you already had connected. I'm leaving it open on the side so you can review it while we keep adjusting whatever's needed.");
+      revealArtifact();
+    }, 900);
+  }
+
+  function continueChat(text) {
+    addMessage('user', text);
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      addMessage('ai', 'Done, I updated the artifact with that change.');
+      if (artifactRevealed) pulseArtifact();
+    }, 800);
+  }
+
+  // Empty state: first message
+  const emptyInput = document.getElementById('emptyInput');
+  const emptySendBtn = document.getElementById('emptySendBtn');
+  function sendFromEmpty() {
+    const text = emptyInput.value.trim() || emptyInput.placeholder;
+    startChat(text);
+  }
+  emptySendBtn.addEventListener('click', sendFromEmpty);
+  emptyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromEmpty(); }
+  });
+  document.querySelectorAll('.suggestion-chip').forEach((chip) => {
+    chip.addEventListener('click', () => startChat(chip.dataset.prompt));
+  });
+
+  // Active state: follow-up messages
+  const dockedInput = document.getElementById('dockedInput');
+  const dockedSendBtn = document.getElementById('dockedSendBtn');
+  function sendFromDocked() {
+    const text = dockedInput.value.trim();
+    if (!text) return;
+    dockedInput.value = '';
+    continueChat(text);
+  }
+  dockedSendBtn.addEventListener('click', sendFromDocked);
+  dockedInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromDocked(); }
+  });
+
+  closeArtifact.addEventListener('click', () => {
+    artifactPane.classList.remove('is-visible');
+    mainArea.classList.remove('is-split');
+    setTimeout(() => { artifactPane.hidden = true; }, 200);
+    artifactRevealed = false;
+  });
+
+  document.getElementById('newChatBtn').addEventListener('click', () => {
+    chatThread.hidden = true;
+    chatEmpty.hidden = false;
+    chatMessages.innerHTML = '';
+    emptyInput.value = '';
+    if (artifactRevealed) closeArtifact.click();
+  });
+
+  // Apps / Agents: empty states for sections to be built in a later iteration
+  const sectionCopy = {
+    apps: {
+      icon: 'layout-grid',
+      title: 'Connect apps to your agents',
+      body: 'Apps extend what your agents can do with your sources. This section will be built out in the next prototype iteration.',
+    },
+    agents: {
+      icon: 'bot',
+      title: 'Your agents work under your supervision',
+      body: 'Design an agent to take care of a recurring task. This section will be built out in the next prototype iteration.',
+    },
+  };
+
+  window.onNavSectionChange = function (section) {
+    if (section === 'projects') return; // already represented in the sidebar, no extra view for now
+    const copy = sectionCopy[section];
+    if (!copy) return;
+    chatThread.hidden = true;
+    if (artifactRevealed) closeArtifact.click();
+    chatEmpty.hidden = true;
+    let empty = document.getElementById('sectionEmpty');
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.id = 'sectionEmpty';
+      empty.className = 'section-empty';
+      chatPane.appendChild(empty);
+    }
+    empty.innerHTML = `
+      <span class="section-empty-icon"><i data-lucide="${copy.icon}"></i></span>
+      <h2>${copy.title}</h2>
+      <p>${copy.body}</p>
+    `;
+    empty.hidden = false;
+    if (window.lucide) lucide.createIcons();
+  };
+
+  document.getElementById('newChatBtn').addEventListener('click', () => {
+    const empty = document.getElementById('sectionEmpty');
+    if (empty) empty.hidden = true;
+    chatEmpty.hidden = false;
+  });
+
+  // Log out: exits the prototype back to the login screen
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    window.location.href = '../../index.html';
+  });
+</script>
+
+</body>
+</html>

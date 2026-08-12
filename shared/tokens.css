@@ -1,0 +1,459 @@
+/*
+  Simetrik Agéntico — prototype tokens
+  Modo prototipo (simetrik-ui /prototype): valores placeholder, NO son hex finales de desyk.
+  Ley 6: light mode consistente, nunca mezclar con dark en la misma vista.
+*/
+
+:root {
+  /* Superficie */
+  --color-bg: #F6F6F9;
+  --color-surface: #FFFFFF;
+  --color-surface-sunken: #F0F0F4;
+  --color-sidebar-bg: #FCFBFC;
+  --color-border: #E5E5EA;
+  --color-border-strong: #D6D6DE;
+
+  /* Texto */
+  --color-ink: #17171F;
+  --color-ink-soft: #55555F;
+  --color-ink-faint: #96969F;
+
+  /* Acento Simetrik (atención dirigida, ley 2) */
+  --color-primary: #5B4FE9;
+  --color-primary-hover: #4A3ED9;
+  --color-primary-tint: #EEEDFC;
+  --color-primary-ink: #3E33C7;
+
+  /* Estado */
+  --color-success: #1B8354;
+  --color-success-tint: #E7F5EE;
+  --color-warning: #A5690A;
+  --color-warning-tint: #FBF0DF;
+  --color-danger: #C43A3A;
+  --color-danger-tint: #FCEAEA;
+
+  /* Elevación */
+  --shadow-sm: 0 1px 2px rgba(23,23,31,.05);
+  --shadow-md: 0 8px 24px rgba(23,23,31,.10);
+  --shadow-lg: 0 24px 64px rgba(23,23,31,.18);
+
+  /* Forma */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Motion — duraciones canónicas Simetrik */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+
+  /* Layout */
+  --sidebar-w: 260px;
+  --sidebar-w-collapsed: 52px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+}
+
+h1, h2, h3, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+button { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Componentes genéricos ---------- */
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: var(--radius-sm);
+  color: var(--color-ink-soft); background: transparent; border: none; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  position: relative; flex-shrink: 0;
+}
+.icon-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+
+/* Search + Close sidebar (header, next to the logo): lighter weight than the primary nav actions */
+.sidebar-header-actions .icon-btn { color: var(--color-ink-faint); }
+.sidebar-header-actions .icon-btn:hover { color: var(--color-ink-soft); }
+.icon-btn svg, .icon-btn i { width: 18px; height: 18px; }
+.icon-btn .dot {
+  position: absolute; top: 6px; right: 6px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--color-primary); border: 1.5px solid var(--color-surface);
+}
+
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--color-primary); color: #fff; border: none; border-radius: var(--radius-sm);
+  padding: 10px 16px; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.btn-primary:hover { background: var(--color-primary-hover); }
+.btn-primary:active { transform: scale(.98); }
+.btn-primary[disabled] { opacity: .65; cursor: default; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm); padding: 8px 14px; font-weight: 600; font-size: 13px; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.btn-secondary:hover { background: var(--color-surface-sunken); border-color: var(--color-border-strong); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.badge--success { background: var(--color-success-tint); color: var(--color-success); }
+.badge--warning { background: var(--color-warning-tint); color: var(--color-warning); }
+.badge--danger { background: var(--color-danger-tint); color: var(--color-danger); }
+.badge--neutral { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
+
+/* ---------- Shell: sidebar + nav (reusable cross-flujo) ---------- */
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--color-sidebar-bg);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--dur-base) var(--ease-out);
+  overflow: visible; /* was hidden — clipped tooltips extending past the sidebar's edge */
+}
+.sidebar.is-collapsed { width: var(--sidebar-w-collapsed); }
+
+.sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 12px; flex-shrink: 0;
+}
+.sidebar-header-actions { display: flex; align-items: center; gap: 2px; }
+
+/* Sidebar logo: full wordmark when expanded, icon-only when collapsed.
+   padding matches .nav-item (8px) so the wordmark's left edge lines up with
+   the New Chat / Projects icons below it. */
+.sidebar-logo-full { height: 27px; width: auto; flex-shrink: 0; padding-left: 8px; margin: 0; }
+.logo-mark.sidebar-logo-icon { display: none; }
+.sidebar.is-collapsed .sidebar-logo-full { display: none; }
+.sidebar.is-collapsed .logo-mark.sidebar-logo-icon { display: flex; }
+
+.logo-mark {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: var(--radius-sm);
+  background: var(--color-primary-tint); flex-shrink: 0;
+}
+.logo-mark svg { width: 18px; height: 18px; }
+.logo-mark img { width: 20px; height: 20px; object-fit: contain; }
+
+.sidebar-nav { padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px; border-radius: var(--radius-sm);
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-ink); font-size: 13.5px; font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-out);
+  white-space: nowrap; /* overflow: hidden removed — it clipped tooltips; .nav-label already truncates its own text */
+}
+.nav-item:hover { background: var(--color-surface-sunken); }
+.nav-item.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+.nav-item--primary { color: var(--color-primary-ink); font-weight: 600; }
+/* New Chat had text-only blue with no background on focus, unlike Projects/Apps/Agents' .is-active look */
+.nav-item--primary:focus-visible { background: var(--color-primary-tint); outline: none; }
+.nav-icon { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.nav-icon svg, .nav-icon i { width: 18px; height: 18px; }
+.nav-label { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.nav-item-add {
+  width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-ink-faint); opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.nav-item-add svg, .nav-item-add i { width: 14px; height: 14px; }
+.nav-item:hover .nav-item-add { opacity: 1; }
+.nav-item-add:hover { background: var(--color-surface); color: var(--color-ink); }
+
+/* ---------- Icon micro-interactions: hover/click only, never looping ---------- */
+
+/* New Chat + the small "+" add-affordances: rotate 90°, "creating something new" */
+#newChatBtn .nav-icon svg { transition: transform calc(var(--dur-fast) * 2) var(--ease-out); }
+#newChatBtn:hover .nav-icon svg { transform: rotate(90deg); }
+.nav-item-add svg { transition: transform calc(var(--dur-fast) * 2) var(--ease-out); }
+.nav-item-add:hover svg { transform: rotate(90deg); }
+
+/* Search: scale pop on hover, settles back to its initial size (same pattern as Projects/Apps/Close sidebar) */
+.icon-btn[aria-label="Search"]:hover svg,
+.sidebar-search-collapsed:hover .nav-icon svg {
+  animation: navIconPop var(--dur-slow) var(--ease-out);
+}
+
+/* Agents (bot): a single gentle bounce on hover, not continuous */
+@keyframes navBotBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.nav-item[data-nav="agents"]:hover .nav-icon svg { animation: navBotBounce var(--dur-slow) var(--ease-out); }
+
+/* Projects / Apps: one-shot scale pop on hover, settles back to the icon's default size */
+@keyframes navIconPop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+.nav-item[data-nav="projects"]:hover .nav-icon svg,
+.nav-item[data-nav="apps"]:hover .nav-icon svg {
+  animation: navIconPop var(--dur-slow) var(--ease-out);
+}
+
+/* Pinned: pin "wiggle" on hover of the section header */
+@keyframes pinWiggle { 0% { transform: rotate(0deg); } 35% { transform: rotate(-16deg); } 100% { transform: rotate(0deg); } }
+.sidebar-section-header:hover .sidebar-section-icon--pin svg { animation: pinWiggle var(--dur-slow) var(--ease-out); }
+
+/* Collapse / expand sidebar: nudge in the direction the panel moves.
+   Half speed (2x --dur-fast) — at 120ms it read as a glitch/off-center icon
+   instead of an intentional nudge. */
+#sidebarToggle:hover svg { animation: navIconPop var(--dur-slow) var(--ease-out); }
+.sidebar-logo-icon-expand { transition: transform calc(var(--dur-fast) * 2) var(--ease-out); }
+.logo-mark.sidebar-logo-icon:hover .sidebar-logo-icon-expand { transform: translateX(2px); }
+
+/* Log out: the arrow slides a little further out on hover */
+#logoutBtn svg { transition: transform var(--dur-fast) var(--ease-out); }
+#logoutBtn:hover svg { transform: translateX(2px); }
+
+.sidebar-section { padding: 8px 12px; overflow-y: auto; overflow-x: hidden; }
+.sidebar-section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--color-ink-faint); padding: 6px 8px; white-space: nowrap;
+}
+
+/* Collapsible section header (pinned / recent): icon + lowercase label + chevron */
+.sidebar-section-header {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: transparent; border: none; cursor: pointer; padding: 6px 8px; color: var(--color-ink);
+  border-radius: var(--radius-sm); transition: background var(--dur-fast) var(--ease-out);
+  position: relative; z-index: 2; /* explicit, so its tooltip never loses a stacking tie against siblings */
+}
+.sidebar-section-header:hover { background: var(--color-surface-sunken); }
+/* Expanded sidebar: icon hidden, text-only label.
+   Sized/colored to match .nav-icon (Projects/Apps/Agents) for consistency when collapsed. */
+.sidebar-section-icon { display: none; width: 18px; height: 18px; }
+.sidebar-section-icon svg, .sidebar-section-icon i { width: 18px; height: 18px; }
+.sidebar-section-title--plain {
+  text-transform: none; letter-spacing: .01em; flex: 1; text-align: left; padding: 0;
+  font-size: 13px; /* was 11px — +2px per explicit request */
+}
+.sidebar-section-chevron {
+  width: 14px; height: 14px; flex-shrink: 0; color: var(--color-ink-faint); display: flex;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.sidebar-section-chevron svg, .sidebar-section-chevron i { width: 14px; height: 14px; }
+.sidebar-section--collapsible.is-expanded .sidebar-section-chevron { transform: rotate(90deg); }
+
+.sidebar-section-body {
+  display: grid; grid-template-rows: 1fr; overflow: hidden;
+  transition: grid-template-rows var(--dur-base) var(--ease-out);
+}
+.sidebar-section-body-inner { overflow: hidden; min-height: 0; }
+.sidebar-section--collapsible:not(.is-expanded) .sidebar-section-body { grid-template-rows: 0fr; }
+
+.project-item { display: flex; flex-direction: column; }
+.project-row {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 8px; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer;
+  color: var(--color-ink); font-size: 13.5px; font-weight: 500; text-align: left;
+  white-space: nowrap; overflow: hidden;
+}
+.project-row:hover { background: var(--color-surface-sunken); }
+.project-row .folder-icon {
+  width: 16px; height: 16px; flex-shrink: 0; color: var(--color-ink-soft); position: relative; opacity: .75;
+  transition: opacity var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out);
+}
+.project-item.is-expanded .folder-icon { opacity: 1; color: var(--color-primary); }
+/* Closed/open folder icons stacked and crossfaded — no chevron needed, the icon itself signals state */
+.folder-icon-closed, .folder-icon-open {
+  position: absolute; top: 0; left: 0; width: 16px; height: 16px;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.folder-icon-open { opacity: 0; }
+.project-item.is-expanded .folder-icon-closed { opacity: 0; }
+.project-item.is-expanded .folder-icon-open { opacity: 1; }
+.project-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+
+.chat-sublist {
+  position: relative;
+  display: grid; grid-template-rows: 0fr; overflow: hidden;
+  transition: grid-template-rows var(--dur-base) var(--ease-out);
+  padding-left: 30px;
+}
+.chat-sublist::before {
+  content: ''; position: absolute; left: 14px; top: 2px; bottom: 6px; width: 1px;
+  background: var(--color-border-strong);
+}
+.chat-sublist > .chat-sublist-inner { overflow: hidden; min-height: 0; }
+.project-item.is-expanded .chat-sublist { grid-template-rows: 1fr; }
+
+.chat-row {
+  display: block; padding: 6px 8px; border-radius: var(--radius-sm);
+  color: var(--color-ink-soft); font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.chat-row:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+
+.sidebar-footer {
+  margin-top: auto; padding: 10px 12px; border-top: 1px solid var(--color-border); flex-shrink: 0;
+}
+.user-chip {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px; border-radius: var(--radius-sm); background: transparent; border: none; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.user-chip:hover { background: var(--color-surface-sunken); }
+.avatar {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); flex-shrink: 0;
+  background: #08080B url('../assets/img/Cover.png') center / cover no-repeat; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.user-meta { flex: 1; display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.user-account { font-size: 11.5px; color: var(--color-ink-faint); }
+.info-icon { color: var(--color-ink-faint); width: 16px; height: 16px; flex-shrink: 0; display:flex; }
+.info-icon svg, .info-icon i { width: 16px; height: 16px; }
+
+/* Collapsed state: ocultar labels, mantener íconos centrados */
+.sidebar.is-collapsed .nav-label,
+.sidebar.is-collapsed .sidebar-section:not(.sidebar-section--collapsible),
+.sidebar.is-collapsed .sidebar-header-actions,
+.sidebar.is-collapsed .user-meta,
+.sidebar.is-collapsed .info-icon,
+.sidebar.is-collapsed .nav-item-add,
+.sidebar.is-collapsed .project-name {
+  display: none;
+}
+.sidebar.is-collapsed .nav-item,
+.sidebar.is-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+/* Collapsed state: fixed 36x36 square icon containers, centered in the rail */
+.sidebar.is-collapsed .sidebar-nav,
+.sidebar.is-collapsed .sidebar-header,
+.sidebar.is-collapsed .sidebar-footer {
+  padding-left: 8px; padding-right: 8px;
+}
+.sidebar.is-collapsed .nav-item {
+  width: 36px; height: 36px; padding: 0; margin: 0 auto;
+}
+/* Collapsed-only Search icon, sits above New Chat in the rail */
+.nav-item.sidebar-search-collapsed { display: none; position: relative; }
+.sidebar.is-collapsed .nav-item.sidebar-search-collapsed { display: flex; }
+.sidebar.is-collapsed .logo-mark.sidebar-logo-icon {
+  width: 36px; height: 36px; margin: 0 auto;
+}
+.sidebar.is-collapsed .user-chip {
+  padding: 0; justify-content: center; gap: 0;
+}
+.sidebar.is-collapsed #logoutBtn {
+  display: none;
+}
+
+/* Pinned / Recent sections when the sidebar collapses: only the icon remains,
+   sized/centered like the other collapsed rail icons. Text, chevron and the
+   list body all hide — there's no room, and no way to read a list at 52px. */
+.sidebar.is-collapsed .sidebar-section--collapsible {
+  padding: 0; overflow: visible;
+}
+.sidebar.is-collapsed .sidebar-section-header {
+  width: 36px; height: 36px; padding: 0; margin: 0 auto; justify-content: center;
+}
+.sidebar.is-collapsed .sidebar-section-icon {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;
+}
+.sidebar.is-collapsed .sidebar-section-title--plain,
+.sidebar.is-collapsed .sidebar-section-chevron,
+.sidebar.is-collapsed .sidebar-section-body {
+  display: none;
+}
+
+/* Tooltip: shown to the right of the trigger on hover/focus */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute; left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: var(--color-ink); color: #fff; font-size: 12px; font-weight: 500;
+  padding: 5px 9px; border-radius: 6px; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 999;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+[data-tooltip]:hover::after, [data-tooltip]:focus-visible::after {
+  opacity: 1; transform: translateY(-50%) translateX(0);
+}
+
+/* Bottom variant — tooltip appears below the trigger instead of to the right */
+[data-tooltip].tooltip-bottom::after {
+  left: 50%; right: auto; top: calc(100% + 8px); bottom: auto;
+  transform: translateX(-50%) translateY(-4px);
+}
+[data-tooltip].tooltip-bottom:hover::after,
+[data-tooltip].tooltip-bottom:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Suppress tooltips that would be redundant with an already-visible text label —
+   only matters when the sidebar is expanded (New Chat, Projects, Pinned, the
+   footer name, etc. all show their label right next to the icon there).
+   Icon-only controls with no adjacent label ever (header Search, Close sidebar,
+   Log out) are NOT in this list — their tooltip stays active regardless of state. */
+.sidebar:not(.is-collapsed) .nav-item[data-tooltip]::after,
+.sidebar:not(.is-collapsed) .sidebar-section-header[data-tooltip]::after,
+.sidebar:not(.is-collapsed) .avatar[data-tooltip]::after {
+  display: none;
+}
+
+/* Rich tooltip (real markup, not attr()) — used where a tooltip needs more than plain text, e.g. a <kbd> shortcut */
+.tooltip-bubble {
+  position: absolute; left: 50%; top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  display: flex; align-items: center; gap: 6px;
+  background: var(--color-ink); color: #fff; font-size: 12px; font-weight: 500;
+  padding: 5px 9px; border-radius: 6px; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 999;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.icon-btn:hover .tooltip-bubble, .icon-btn:focus-visible .tooltip-bubble,
+.nav-item:hover .tooltip-bubble, .nav-item:focus-visible .tooltip-bubble {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+/* Right-side variant — for the collapsed rail, consistent with its sibling icons' tooltip position */
+.tooltip-bubble--right {
+  left: calc(100% + 10px); top: 50%; right: auto;
+  transform: translateY(-50%) translateX(-4px);
+}
+.nav-item:hover .tooltip-bubble--right, .nav-item:focus-visible .tooltip-bubble--right {
+  transform: translateY(-50%) translateX(0);
+}
+.tooltip-bubble kbd {
+  font-family: inherit; font-size: 10.5px; font-weight: 600; line-height: 1;
+  background: rgba(255,255,255,.16); color: #fff; padding: 2px 5px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.22);
+}
+
+/* Collapsed-state logo button: shows the icon by default, swaps to a
+   "panel-right" expand affordance on hover. Click toggles the sidebar. */
+.logo-mark.sidebar-logo-icon { border: none; padding: 0; cursor: pointer; }
+.sidebar-logo-icon-expand { display: none; width: 18px; height: 18px; }
+.logo-mark.sidebar-logo-icon:hover .sidebar-logo-icon-img { display: none; }
+.logo-mark.sidebar-logo-icon:hover .sidebar-logo-icon-expand { display: block; }

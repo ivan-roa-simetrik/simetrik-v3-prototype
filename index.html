@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simetrik V3 — Sign in</title>
+<link rel="icon" type="image/png" href="assets/img/Simetrik_isologo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="shared/tokens.css" />
+<style>
+  /* ---------- Login layout ----------
+     Reference: light panel (sign-in) left, dark panel (value prop) right.
+     Ley 6 exception, scoped to this screen only — see docs/login.md */
+
+  .login-shell {
+    display: grid;
+    grid-template-columns: 0.85fr 1.15fr;
+    min-height: 100vh;
+  }
+  @media (max-width: 900px) {
+    .login-shell { grid-template-columns: 1fr; }
+    .login-value { display: none; }
+  }
+
+  /* ---------- Left: sign-in panel (light) ---------- */
+  .login-access {
+    background: var(--color-surface);
+    padding: 56px 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Logo lives inside the centered block now, directly above the title —
+     left-justified within that block, while the block itself centers on both axes */
+  .login-brand-logo { height: 36px; width: auto; display: block; margin-bottom: 32px; }
+
+  .login-access-body { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 22px; }
+  .login-title { font-size: 26px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
+  .login-subtitle { font-size: 14px; color: var(--color-ink-soft); margin-top: 4px; }
+
+  .btn-google {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 10px 16px; border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-strong); background: var(--color-surface);
+    font-size: 14px; font-weight: 600; color: var(--color-ink); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .btn-google:hover { background: var(--color-surface-sunken); }
+  .btn-google svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--color-ink-faint); font-size: 12.5px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--color-border); }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; font-weight: 600; color: var(--color-ink); }
+  .field input {
+    padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong);
+    font-size: 14px; color: var(--color-ink); background: var(--color-surface);
+    transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .field input:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-tint);
+  }
+  .field-password-wrap { position: relative; }
+  .field-password-wrap input { width: 100%; padding-right: 40px; }
+  .field-password-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+
+  .btn-signin {
+    width: 100%; padding: 11px 16px; font-size: 14.5px; border-radius: var(--radius-sm);
+    background: var(--color-ink); color: #fff; border: none; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  }
+  .btn-signin:hover { background: #000; }
+  .btn-signin:active { transform: scale(.98); }
+  .btn-signin .spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+    animation: spin .7s linear infinite; display: none;
+  }
+  .btn-signin.is-loading .spinner { display: inline-block; }
+  .btn-signin.is-loading .submit-label::after { content: 'Signing in'; }
+  .btn-signin .submit-label::after { content: 'Sign in'; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .login-footnote { font-size: 12.5px; color: var(--color-ink-faint); max-width: 360px; }
+  .login-footnote a { color: var(--color-ink-soft); font-weight: 600; }
+  .login-footnote a:hover { color: var(--color-primary-ink); }
+
+  /* ---------- Right: value prop panel (dark, deliberate Ley 6 exception) ---------- */
+  .login-value {
+    position: relative;
+    background: #08080B url('assets/img/Cover.png') center / cover no-repeat;
+    padding: 56px 224px;
+    margin: 24px 24px 24px 0; /* inset from the viewport edge so the radius reads as a floating card; flush against the left panel */
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;    /* content centered within the panel on both axes */
+    justify-content: center;
+    gap: 22px;
+    color: #fff;
+    overflow: hidden;
+  }
+
+  .value-eyebrow {
+    align-self: flex-start; /* left-justified — only the pills/badges/mockup stay centered */
+    font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: rgba(255,255,255,.55);
+  }
+  .value-headline {
+    align-self: flex-start;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 32px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15;
+    max-width: 620px;
+  }
+  .value-headline img { width: 36px; height: 36px; flex-shrink: 0; }
+  .value-sub {
+    align-self: flex-start;
+    font-size: 15px; color: rgba(255,255,255,.72); max-width: 520px; line-height: 1.55;
+  }
+
+  .value-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .value-pill {
+    padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,.16); color: rgba(255,255,255,.75); background: rgba(255,255,255,.04);
+  }
+  .value-pill.is-active { background: #fff; color: #0A0A0F; border-color: #fff; }
+
+  /* Floating workflow mockup */
+  .mockup-wrap { position: relative; margin-top: 28px; width: 560px; max-width: 100%; }
+  .mockup-border {
+    padding: 1.5px; border-radius: 18px;
+    background: linear-gradient(135deg, #4B5CF5 0%, #7B4CF5 45%, #E24CC9 100%);
+  }
+  .mockup-card {
+    background: #FBFBFE; border-radius: 16.5px; padding: 18px 20px 22px;
+  }
+  .mockup-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .mockup-dot { width: 8px; height: 8px; border-radius: 50%; background: #D8D8E0; }
+  .mockup-title { font-size: 12.5px; color: var(--color-ink-soft); font-weight: 600; margin-left: 4px; }
+
+  .mockup-msg-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+  .mockup-msg {
+    max-width: 78%;
+    background: var(--color-primary-tint); color: var(--color-primary-ink);
+    padding: 8px 12px; border-radius: 10px 10px 2px 10px; font-size: 12.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mockup-msg-avatar {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    background: var(--color-ink); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mockup-msg-avatar svg { width: 12px; height: 12px; }
+
+  .mockup-steps { display: flex; align-items: flex-start; justify-content: space-between; position: relative; padding: 0 4px; }
+  .mockup-steps::before {
+    content: ''; position: absolute; top: 19px; left: 34px; right: 34px; height: 1px; background: var(--color-border);
+  }
+  .mockup-step { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; position: relative; z-index: 1; }
+  .mockup-step-icon {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--color-surface);
+    border: 1px solid var(--color-border); box-shadow: var(--shadow-sm);
+    display: flex; align-items: center; justify-content: center; color: var(--color-primary);
+    transition: background var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out),
+                border-color var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+  }
+  .mockup-step.is-active .mockup-step-icon {
+    background: var(--color-primary); color: #fff; border-color: var(--color-primary); transform: scale(1.08);
+  }
+  .mockup-step-icon svg { width: 17px; height: 17px; }
+  .mockup-step-label { font-size: 11.5px; font-weight: 600; color: var(--color-ink-soft); }
+
+  /* Typewriter cursor for the animated chat prompt */
+  .mockup-cursor {
+    display: inline-block; width: 2px; height: 13px; margin-left: 2px; vertical-align: -2px;
+    background: var(--color-primary-ink); animation: mockupBlink .9s steps(1) infinite;
+  }
+  @keyframes mockupBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+  .mockup-badge {
+    position: absolute; display: flex; align-items: center; gap: 6px;
+    background: #fff; border-radius: 999px; padding: 8px 14px;
+    box-shadow: var(--shadow-lg); font-size: 12px; font-weight: 600; color: var(--color-ink);
+    opacity: 0; transform: translateY(6px) scale(.96);
+    transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+  }
+  .mockup-badge.is-shown { opacity: 1; transform: translateY(0) scale(1); }
+  .mockup-badge--top { top: -16px; right: -8px; color: var(--color-primary-ink); }
+  .mockup-badge--top svg { width: 14px; height: 14px; }
+  .mockup-badge--bottom {
+    bottom: -26px; left: -18px; padding: 10px 16px 10px 10px; gap: 10px; align-items: center;
+  }
+  .ring {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: conic-gradient(var(--color-primary) 0% 92%, var(--color-border) 92% 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ring-inner {
+    width: 26px; height: 26px; border-radius: 50%; background: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: var(--color-ink);
+  }
+  .mockup-badge--bottom .badge-text { display: flex; flex-direction: column; line-height: 1.25; }
+  .mockup-badge--bottom .badge-text strong { font-size: 12.5px; }
+  .mockup-badge--bottom .badge-text span { font-size: 11px; font-weight: 500; color: var(--color-ink-faint); }
+</style>
+</head>
+<body>
+
+<div class="login-shell">
+
+  <!-- ============ Left: sign-in ============ -->
+  <section class="login-access">
+    <div class="login-access-body">
+      <div>
+        <img src="assets/img/Simetrik_logo.svg" alt="Simetrik" class="login-brand-logo" />
+        <div class="login-title">Welcome to Simetrik V3</div>
+        <div class="login-subtitle">Sign in with your account.</div>
+      </div>
+
+      <button type="button" class="btn-google" id="googleBtn">
+        <svg viewBox="0 0 18 18">
+          <path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2582h2.9087c1.7018-1.5668 2.6836-3.874 2.6836-6.6151z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.4673-.8059 5.9564-2.1805l-2.9087-2.2582c-.8059.54-1.8368.8591-3.0477.8591-2.3436 0-4.3282-1.5831-5.0359-3.7104H.9573v2.3318C2.4382 15.9832 5.4818 18 9 18z"/>
+          <path fill="#FBBC05" d="M3.9641 10.71c-.18-.54-.2822-1.1168-.2822-1.71s.1023-1.17.2822-1.71V4.9582H.9573C.3477 6.1731 0 7.5477 0 9s.3477 2.8268.9573 4.0418L3.9641 10.71z"/>
+          <path fill="#EA4335" d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4632.8918 11.4259 0 9 0 5.4818 0 2.4382 2.0168.9573 4.9582L3.9641 7.29C4.6718 5.1627 6.6564 3.5795 9 3.5795z"/>
+        </svg>
+        Continue with Google
+      </button>
+
+      <div class="divider">or continue with email</div>
+
+      <form id="loginForm" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="you@simetrik.com" value="demo@simetrik.com" required />
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="field-password-wrap">
+            <input type="password" id="password" name="password" placeholder="••••••••" value="demo1234" required />
+            <button type="button" class="icon-btn field-password-toggle" id="togglePassword" title="Show password">
+              <i data-lucide="eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-signin" id="loginSubmit">
+          <span class="spinner"></span>
+          <span class="submit-label"></span>
+        </button>
+      </form>
+
+      <div class="login-footnote">Restricted access. If you need to get in, reach out to <a href="#">Iván Roa</a>.</div>
+    </div>
+  </section>
+
+  <!-- ============ Right: value prop (dark, Ley 6 exception) ============ -->
+  <section class="login-value">
+    <div class="value-eyebrow">Simetrik as Code · V3</div>
+
+    <div class="value-headline">
+      <img src="assets/img/simetrik-agent-icon.png" alt="" />
+      Everything goes through the agent.
+    </div>
+    <p class="value-sub">
+      Build and operate reconciliations by having a conversation. The logic that runs is deterministic and auditable: same flow, same result, every time.
+    </p>
+
+    <div class="value-pills">
+      <span class="value-pill">Card reconciliation</span>
+      <span class="value-pill is-active">Accounting close</span>
+      <span class="value-pill">Marketplaces</span>
+      <span class="value-pill">Settlement</span>
+    </div>
+
+    <!-- Floating workflow mockup -->
+    <div class="mockup-wrap">
+      <div class="mockup-badge mockup-badge--top"><i data-lucide="shield-check"></i> Deterministic · Auditable</div>
+
+      <div class="mockup-border">
+        <div class="mockup-card">
+          <div class="mockup-header">
+            <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+            <span class="mockup-title">Workflow · Period close</span>
+          </div>
+          <div class="mockup-msg-row">
+            <div class="mockup-msg"><span id="mockupTypedText"></span><span class="mockup-cursor" id="mockupCursor"></span></div>
+            <span class="mockup-msg-avatar" title="Person chatting"><i data-lucide="user"></i></span>
+          </div>
+          <div class="mockup-steps">
+            <div class="mockup-step">
+              <span class="mockup-step-icon"><i data-lucide="database"></i></span>
+              <span class="mockup-step-label">Dataset</span>
+            </div>
+            <div class="mockup-step">
+              <span class="mockup-step-icon"><i data-lucide="shuffle"></i></span>
+              <span class="mockup-step-label">Rule</span>
+            </div>
+            <div class="mockup-step">
+              <span class="mockup-step-icon"><i data-lucide="check-check"></i></span>
+              <span class="mockup-step-label">Reconciliation</span>
+            </div>
+            <div class="mockup-step">
+              <span class="mockup-step-icon"><i data-lucide="bar-chart-3"></i></span>
+              <span class="mockup-step-label">Output</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mockup-badge mockup-badge--bottom">
+        <span class="ring"><span class="ring-inner">92%</span></span>
+        <span class="badge-text"><strong>Matches</strong><span>this cycle</span></span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="shared/shell.js"></script>
+<script>
+  const togglePassword = document.getElementById('togglePassword');
+  const passwordInput = document.getElementById('password');
+  togglePassword.addEventListener('click', () => {
+    const isPassword = passwordInput.type === 'password';
+    passwordInput.type = isPassword ? 'text' : 'password';
+    togglePassword.innerHTML = isPassword ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
+    lucide.createIcons();
+  });
+
+  const form = document.getElementById('loginForm');
+  const submitBtn = document.getElementById('loginSubmit');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (submitBtn.classList.contains('is-loading')) return;
+    submitBtn.classList.add('is-loading');
+    submitBtn.disabled = true;
+    setTimeout(() => {
+      window.location.href = 'flows/home/index.html';
+    }, 650);
+  });
+
+  document.getElementById('googleBtn').addEventListener('click', () => {
+    submitBtn.dispatchEvent(new Event('click'));
+    form.requestSubmit();
+  });
+
+  // ---------- Mockup demo loop: typed prompt -> pipeline steps light up -> agent response badges ----------
+  (function () {
+    const typedEl = document.getElementById('mockupTypedText');
+    const cursorEl = document.getElementById('mockupCursor');
+    const steps = document.querySelectorAll('.mockup-step');
+    const badgeTop = document.querySelector('.mockup-badge--top');
+    const badgeBottom = document.querySelector('.mockup-badge--bottom');
+    const FULL_MESSAGE = 'Find discrepancies between the ERP and…';
+
+    function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+    async function typeMessage() {
+      typedEl.textContent = '';
+      for (let i = 0; i < FULL_MESSAGE.length; i++) {
+        typedEl.textContent += FULL_MESSAGE[i];
+        await wait(28);
+      }
+    }
+
+    function resetDemo() {
+      badgeTop.classList.remove('is-shown');
+      badgeBottom.classList.remove('is-shown');
+      steps.forEach((step) => step.classList.remove('is-active'));
+      typedEl.textContent = '';
+      cursorEl.style.opacity = '1';
+    }
+
+    async function runLoop() {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        resetDemo();
+        await wait(500);
+        await typeMessage();
+        cursorEl.style.opacity = '0';
+        await wait(300);
+        for (const step of steps) {
+          step.classList.add('is-active');
+          await wait(380);
+        }
+        await wait(250);
+        badgeTop.classList.add('is-shown');
+        await wait(180);
+        badgeBottom.classList.add('is-shown');
+        await wait(2600);
+      }
+    }
+
+    runLoop();
+  })();
+</script>
+
+</body>
+</html>

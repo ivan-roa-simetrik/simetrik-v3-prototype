@@ -12,17 +12,16 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <link rel="stylesheet" href="../../shared/tokens.css" />
 <style>
-  /* ---------- Home-specific layout: main area, chat, artifact pane ---------- */
+  /* ---------- Home-specific layout: main area, chat ---------- */
 
   .main-area {
     flex: 1; display: flex; min-width: 0; position: relative;
   }
 
   .chat-pane {
-    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-surface);
-    transition: flex-basis var(--dur-slow) var(--ease-out), max-width var(--dur-slow) var(--ease-out);
+    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-sidebar-bg);
+    overflow: hidden;
   }
-  .main-area.is-split .chat-pane { flex: 0 0 42%; max-width: 42%; border-right: 1px solid var(--color-border); }
 
   /* Empty / greeting state */
   .chat-empty {
@@ -32,27 +31,173 @@
   .chat-empty h1 { font-size: 26px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
   .chat-empty p { font-size: 14px; color: var(--color-ink-soft); max-width: 420px; }
 
+  /* Agent icon above the greeting */
+  .chat-agent-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
+  .chat-agent-icon { width: 48px; height: 48px; object-fit: contain; }
+
   .chat-input-shell {
     width: 100%; max-width: 620px; background: var(--color-surface);
     border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md); padding: 12px 14px; display: flex; align-items: flex-end; gap: 10px;
+    box-shadow: var(--shadow-md); display: flex; flex-direction: column; justify-content: space-between;
     transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   }
+  .chat-empty .chat-input-shell { min-height: 100px; }
   .chat-input-shell:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-tint); }
   .chat-input-shell textarea {
-    flex: 1; border: none; outline: none; resize: none; font-size: 14.5px; font-family: inherit;
+    border: none; outline: none; resize: none; font-size: 14.5px; font-family: inherit;
     color: var(--color-ink); background: transparent; max-height: 140px; line-height: 1.5;
+    padding: 12px 14px 4px;
   }
   .chat-input-shell textarea::placeholder { color: var(--color-ink-faint); }
+
+  /* Project selector: a gray "tab" that sits behind the composer, peeking
+     out above it (the input shell overlaps its bottom edge). Click opens a
+     popover with search + project list + "New project", above the bar. */
+  .project-select-wrap { position: relative; width: 100%; max-width: 620px; display: flex; flex-direction: column; }
+  .project-select-dropdown { position: relative; z-index: 1; width: 550px; max-width: 100%; margin: 0 auto; }
+  .project-select-bar {
+    display: flex; align-items: center; width: 100%;
+    padding: 9px 14px 22px; margin-bottom: -14px;
+    background: var(--color-surface-sunken); border-radius: var(--radius-lg);
+  }
+  /* Once a project is picked, the bar keeps its original size (no shrink/
+     centering) — only the label changes and an "x" appears at the far
+     right to clear the selection, reverting the label back to default. */
+  .project-select-bar.has-project .project-select-trigger { color: var(--color-ink-soft); }
+  .project-select-trigger {
+    display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0;
+    background: none; border: none; padding: 0; font: inherit;
+    font-size: 12.5px; font-weight: 500; color: var(--color-ink-faint);
+    cursor: pointer; text-align: left;
+    transition: color var(--dur-fast) var(--ease-out);
+  }
+  .project-select-trigger:hover { color: var(--color-ink-soft); }
+  .project-select-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-select-trigger svg, .project-select-trigger i { width: 18px; height: 18px; flex-shrink: 0; }
+  .project-select-clear {
+    display: none; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
+    background: transparent; border: none; color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .project-select-clear:hover { background: var(--color-border); color: var(--color-ink); }
+  .project-select-clear svg, .project-select-clear i { width: 12px; height: 12px; }
+  .project-select-bar.has-project .project-select-clear { display: flex; }
+  .project-select-wrap .chat-input-shell { position: relative; z-index: 2; }
+  .project-select-wrap--docked { width: auto; margin: 0 24px 20px; flex-shrink: 0; max-width: none; }
+  .project-select-wrap--docked .chat-input-shell--docked { margin: 0; width: 100%; }
+  /* The project selector only makes sense before the conversation starts —
+     once the chat is running (docked composer), the gray bar disappears
+     and the composer sits alone, same as before this feature existed. */
+  .project-select-wrap--docked .project-select-dropdown { display: none; }
+
+  .composer-menu.project-select-menu { width: 260px; padding: 0; }
+  .project-select-search {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-border);
+  }
+  .project-select-search svg, .project-select-search i { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .project-select-search input {
+    border: none; outline: none; background: transparent; font-size: 13px; color: var(--color-ink); width: 100%;
+  }
+  .project-select-search input::placeholder { color: var(--color-ink-faint); }
+  .project-select-menu .composer-menu-list { padding: 6px; }
+  .project-select-menu .composer-menu-option { padding: 4px 2px; }
+  .project-select-divider { height: 1px; background: var(--color-border); }
+  .project-select-empty-msg { display: none; padding: 14px 12px; font-size: 12.5px; color: var(--color-ink-faint); text-align: center; }
+  .project-select-empty-msg.is-shown { display: block; }
+
+  /* Composer toolbar: Add context · Mode | Model · Voice · Send */
+  .composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; gap: 8px; }
+  .composer-toolbar-left, .composer-toolbar-right { display: flex; align-items: center; gap: 2px; }
+  .composer-icon-btn {
+    width: 28px; height: 28px; border-radius: var(--radius-sm); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--color-ink-faint); background: transparent; border: none; cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .composer-icon-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .composer-icon-btn svg, .composer-icon-btn i { width: 16px; height: 16px; }
+
+  .composer-pill-btn {
+    display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border-radius: var(--radius-sm);
+    background: transparent; border: none; font-size: 12.5px; font-weight: 600; color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .composer-pill-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
+  .composer-pill-btn svg, .composer-pill-btn i { width: 14px; height: 14px; }
+  .composer-pill-icon { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; }
+  .composer-pill-icon svg, .composer-pill-icon i, .composer-pill-icon img { width: 14px; height: 14px; object-fit: contain; }
+
+  .composer-dropdown { position: relative; }
+  .composer-menu {
+    display: none; position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 60;
+    width: 288px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+  }
+  .composer-menu.is-open { display: block; }
+  .composer-menu--model { width: 256px; max-height: 250px; overflow-y: auto; left: auto; right: 0; bottom: auto; top: calc(100% + 6px); }
+  .composer-menu--attach { width: max-content; bottom: auto; top: calc(100% + 6px); }
+  .composer-menu--attach .composer-menu-list { padding: 4px; }
+  .composer-menu--attach .composer-menu-option { padding: 4px 2px; gap: 8px; white-space: nowrap; }
+  .composer-menu--attach .opt-icon { width: 14px; height: 14px; }
+  .composer-menu--attach .opt-icon svg, .composer-menu--attach .opt-icon i { width: 14px; height: 14px; }
+  .composer-menu--attach .opt-title { font-size: 13px; white-space: nowrap; }
+
+  /* Dismiss a tooltip immediately on click, instead of waiting for mouseleave —
+     used when a click opens a popover right where the tooltip was showing. */
+  [data-tooltip].tooltip-suppressed::after { display: none; }
+  .composer-menu-section {
+    display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px;
+    font-size: 11px; font-weight: 500; color: var(--color-ink-faint);
+  }
+  .composer-menu-badge { background: var(--color-surface-sunken); color: var(--color-ink-soft); font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+  .composer-menu-list { padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+  .composer-menu-list + .composer-menu-section { border-top: 1px solid var(--color-border); }
+
+  /* Mode options: two-line (title + description), icon/check top-aligned — matches the reference's build-mode-option */
+  .composer-menu-option {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 2px solid transparent; background: transparent; cursor: pointer; text-align: left;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .composer-menu-option:hover { background: var(--color-surface-sunken); }
+  .composer-menu-option .opt-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--color-ink-faint); display: flex; margin-top: 2px; }
+  .composer-menu-option .opt-icon svg, .composer-menu-option .opt-icon i { width: 16px; height: 16px; }
+  .opt-icon-img { width: 14px; height: 14px; object-fit: contain; }
+  .composer-menu-option .opt-body { flex: 1; min-width: 0; }
+  .composer-menu-option .opt-title { display: block; font-size: 13.5px; font-weight: 500; color: var(--color-ink); }
+  .composer-menu-option .opt-sub { display: block; font-size: 12px; color: var(--color-ink-faint); margin-top: 1px; }
+  .composer-menu-option .opt-check { width: 16px; height: 16px; color: var(--color-primary); display: none; flex-shrink: 0; margin-top: 2px; }
+  .composer-menu-option.is-selected .opt-check { display: flex; }
+
+  /* Model options: single-line, centered, plain (non-brand) check — matches build-model-option */
+  .composer-menu-option--model { align-items: center; gap: 10px; padding: 4px 2px; justify-content: space-between; }
+  .composer-menu-option--model .opt-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .composer-menu-option--model .opt-icon { margin-top: 0; }
+  .composer-menu-option--model .opt-title { font-weight: 400; }
+  .composer-menu-option--model .opt-check { margin-top: 0; color: var(--color-ink); }
+
+  .composer-menu-footer { border-top: 1px solid var(--color-border); padding: 8px 12px; font-size: 12px; color: var(--color-ink-faint); }
+
   .send-btn {
-    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: var(--radius-sm); flex-shrink: 0;
     background: var(--color-primary); color: #fff; border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
   }
   .send-btn:hover { background: var(--color-primary-hover); }
   .send-btn:active { transform: scale(.92); }
-  .send-btn svg, .send-btn i { width: 16px; height: 16px; }
+  .send-btn svg, .send-btn i { width: 14px; height: 14px; }
+  .composer-icon-btn.is-listening { color: var(--color-danger); background: var(--color-danger-tint); }
+
+  /* Voice dictation row: replaces the toolbar while listening.
+     Two rows, like the reference's #build-voice-row: canvas waveform on
+     top (full width), Cancel/Send spread below. */
+  .composer-voice-row { display: none; flex-direction: column; }
+  .composer-voice-row.is-active { display: flex; }
+  .composer-voice-canvas-wrap { padding: 10px 14px 4px; }
+  .composer-voice-canvas-wrap canvas { width: 100%; height: 36px; display: block; }
+  .composer-voice-actions { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; }
 
   .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 620px; }
   .suggestion-chip {
@@ -63,7 +208,24 @@
   .suggestion-chip:hover { border-color: var(--color-primary); color: var(--color-primary-ink); background: var(--color-primary-tint); }
 
   /* Active state: message thread */
-  .chat-thread { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .chat-thread { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+  /* Chat thread header: chat icon + name, or (when a project was picked
+     before starting) project icon + project name / chat icon + chat name. */
+  .chat-thread-header {
+    display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 20px;
+    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+  }
+  .chat-thread-header-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .chat-thread-header-item span {
+    font-size: 13px; font-weight: 500; color: var(--color-ink-soft);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chat-thread-header-item svg, .chat-thread-header-item i { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chat-thread-header-sep { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  /* Project crumb is the ancestor (fainter); chat name is the current item (full emphasis) */
+  #chatThreadProjectItem span { color: var(--color-ink-faint); font-weight: 400; }
+  #chatThreadChatLabel { color: var(--color-ink); }
   .chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
 
   .msg { display: flex; align-items: center; gap: 10px; max-width: 640px; opacity: 0; transform: translateY(6px); animation: msgIn var(--dur-slow) var(--ease-out) forwards; }
@@ -74,7 +236,7 @@
     display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
   }
   .msg--user .msg-avatar { background: var(--color-primary-tint); color: var(--color-primary-ink); }
-  .msg--ai .msg-avatar { background: var(--color-ink); color: #fff; }
+  .msg--ai .msg-avatar { background: none; }
   .msg-bubble { padding: 10px 14px; border-radius: var(--radius-md); font-size: 14px; line-height: 1.5; }
   .msg--user .msg-bubble { background: var(--color-primary); color: #fff; border-top-right-radius: 4px; }
   .msg--ai .msg-bubble { background: var(--color-surface-sunken); color: var(--color-ink); border-top-left-radius: 4px; }
@@ -92,56 +254,8 @@
   .typing-dots span:nth-child(3) { animation-delay: .3s; }
   @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
 
-  .chat-input-shell--docked { margin: 0 24px 20px; max-width: none; }
+  .chat-input-shell--docked { width: auto; margin: 0 24px 20px; max-width: none; flex-shrink: 0; }
 
-  /* Artifact panel (split-pane) */
-  .artifact-pane {
-    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg);
-    transform: translateX(16px); opacity: 0;
-  }
-  .artifact-pane.is-visible { animation: artifactIn var(--dur-slow) var(--ease-out) forwards; }
-  @keyframes artifactIn { to { transform: translateX(0); opacity: 1; } }
-  .artifact-pane.is-pulsing { animation: artifactPulse var(--dur-slow) var(--ease-out); }
-  @keyframes artifactPulse { 0% { box-shadow: inset 0 0 0 2px var(--color-primary-tint); } 50% { box-shadow: inset 0 0 0 2px var(--color-primary); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
-
-  .artifact-pane-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); flex-shrink: 0;
-  }
-  .artifact-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--color-ink); }
-  .artifact-title i { width: 16px; height: 16px; color: var(--color-primary); }
-
-  .artifact-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-
-  .artifact-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px; }
-  .artifact-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-  .artifact-card-title { font-size: 15px; font-weight: 700; color: var(--color-ink); }
-
-  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  @media (max-width: 1100px) { .stat-grid { grid-template-columns: 1fr; } }
-  .stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
-  .stat-label { font-size: 12px; font-weight: 600; color: var(--color-ink-faint); text-transform: uppercase; letter-spacing: .03em; }
-  .stat-value { font-size: 24px; font-weight: 800; color: var(--color-ink); letter-spacing: -0.01em; }
-  .stat-note { font-size: 12.5px; color: var(--color-ink-soft); line-height: 1.4; }
-
-  .source-row {
-    display: flex; align-items: center; justify-content: space-between; padding: 12px 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .source-row:last-child { border-bottom: none; }
-  .source-row-main { display: flex; align-items: center; gap: 10px; }
-  .source-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--color-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft); flex-shrink: 0; }
-  .source-icon svg, .source-icon i { width: 15px; height: 15px; }
-  .source-name { font-size: 13.5px; font-weight: 600; color: var(--color-ink); }
-  .source-detail { font-size: 12px; color: var(--color-ink-faint); }
-  .source-row-end { display: flex; align-items: center; gap: 10px; }
-  .source-amount { font-size: 13px; font-weight: 600; color: var(--color-ink); }
-
-  .artifact-footnote {
-    font-size: 12.5px; color: var(--color-ink-faint); display: flex; align-items: center; gap: 6px;
-    padding-top: 4px;
-  }
-  .artifact-footnote i { width: 14px; height: 14px; }
 
   /* Empty states for Apps / Agents (sections to be built later) */
   .section-empty {
@@ -368,11 +482,102 @@
 
       <!-- Empty / greeting state -->
       <div class="chat-empty" id="chatEmpty">
+        <div class="chat-agent-icon-wrap">
+          <img src="../../assets/img/simetrik-agent-icon.png" alt="" class="chat-agent-icon" />
+        </div>
         <h1>What do you want to build today?</h1>
         <p>Tell me the financial scenario and we'll build the project, the artifact, or the agent together.</p>
+        <div class="project-select-wrap">
+          <div class="composer-dropdown project-select-dropdown">
+            <div class="project-select-bar" data-project-bar="empty">
+              <button type="button" class="project-select-trigger" data-menu-trigger="project-empty">
+                <i data-lucide="folder"></i>
+                <span data-project-label>Select project</span>
+              </button>
+              <button type="button" class="project-select-clear" data-project-clear="empty" aria-label="Remove project" data-tooltip="Remove project"><i data-lucide="x"></i></button>
+            </div>
+            <div class="composer-menu project-select-menu" id="projectMenu-empty" data-menu="project-empty">
+              <div class="project-select-search">
+                <i data-lucide="search"></i>
+                <input type="text" placeholder="Search projects" data-project-search="empty" />
+              </div>
+              <div class="composer-menu-list" data-project-list="empty">
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="LATAM Bank Reconciliation"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">LATAM Bank Reconciliation</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q2 Journal Entry Audit"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q2 Journal Entry Audit</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q3 Treasury Forecast"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q3 Treasury Forecast</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+              </div>
+              <div class="project-select-empty-msg" data-project-empty="empty">No projects found</div>
+              <div class="project-select-divider"></div>
+              <div class="composer-menu-list">
+                <button type="button" class="composer-menu-option" data-project-new="empty"><span class="opt-icon"><i data-lucide="plus"></i></span><span class="opt-body"><span class="opt-title">New project</span></span></button>
+              </div>
+            </div>
+          </div>
+
         <div class="chat-input-shell">
           <textarea id="emptyInput" rows="1" placeholder="e.g. Build a July bank reconciliation summary for LATAM"></textarea>
-          <button class="send-btn" id="emptySendBtn" title="Send"><i data-lucide="arrow-up"></i></button>
+
+          <div class="composer-toolbar">
+            <div class="composer-toolbar-left">
+              <div class="composer-dropdown">
+                <button class="composer-icon-btn tooltip-bottom" data-menu-trigger="attach-empty" data-attach-trigger="empty" aria-label="Add context" data-tooltip="Add context"><i data-lucide="plus"></i></button>
+                <div class="composer-menu composer-menu--attach" id="attachMenu-empty" data-menu="attach-empty">
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-attach-option="empty">
+                      <span class="opt-left">
+                        <span class="opt-icon"><i data-lucide="paperclip"></i></span>
+                        <span class="opt-body"><span class="opt-title">Add images, PDFs, or CSVs</span></span>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <input type="file" id="attachFile-empty" accept="image/*,.pdf,.csv" hidden />
+              </div>
+            </div>
+
+            <div class="composer-toolbar-right">
+              <div class="composer-dropdown">
+                <button class="composer-pill-btn" data-menu-trigger="model-empty">
+                  <span class="composer-pill-icon" data-model-icon></span>
+                  <span data-model-label>Auto</span>
+                </button>
+                <div class="composer-menu composer-menu--model" id="modelMenu-empty" data-menu="model-empty">
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model is-selected" data-model="Auto"><span class="opt-left"><span class="opt-icon"><i data-lucide="asterisk"></i></span><span class="opt-body"><span class="opt-title">Auto</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                  <div class="composer-menu-section">Select a model <span class="composer-menu-badge">Beta</span></div>
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Sonnet 4.6"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Sonnet 4.6</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Sonnet 5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Sonnet 5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Opus 4.8"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Opus 4.8</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Opus 5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Opus 5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Gemini 3.1 Pro"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-gemini-ai-48.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Gemini 3.1 Pro</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="GPT-5.6"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-chatgpt-50.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">GPT-5.6</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Grok 4.5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-grok-50.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Grok 4.5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                  <div class="composer-menu-section">Small models <span class="composer-menu-badge">Beta</span></div>
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Gemini 3.5 Flash"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-gemini-ai-48.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Gemini 3.5 Flash</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="composer-icon-btn tooltip-bottom" data-mic-trigger="empty" aria-label="Voice input" data-tooltip="Voice input"><i data-lucide="mic"></i></button>
+              <button class="send-btn tooltip-bottom" id="emptySendBtn" aria-label="Talk to the agent" data-tooltip="Talk to the agent"><i data-lucide="audio-lines"></i></button>
+            </div>
+          </div>
+
+          <!-- Voice dictation: real mic input, waveform driven by getUserMedia + speech-to-text -->
+          <div class="composer-voice-row" data-voice-row="empty">
+            <div class="composer-voice-canvas-wrap">
+              <canvas data-voice-canvas="empty"></canvas>
+            </div>
+            <div class="composer-voice-actions">
+              <button type="button" class="composer-icon-btn tooltip-bottom" data-voice-cancel="empty" data-tooltip="Cancel"><i data-lucide="x"></i></button>
+              <button type="button" class="send-btn tooltip-bottom" data-voice-send="empty" data-tooltip="Send"><i data-lucide="arrow-up"></i></button>
+            </div>
+          </div>
+        </div>
         </div>
         <div class="chat-suggestions">
           <button class="suggestion-chip" data-prompt="Build a July bank reconciliation summary for LATAM">Create a reconciliation project</button>
@@ -383,98 +588,115 @@
 
       <!-- Active state: chat thread -->
       <div class="chat-thread" id="chatThread" hidden>
+        <div class="chat-thread-header" id="chatThreadHeader">
+          <div class="chat-thread-header-item" id="chatThreadProjectItem" hidden>
+            <i data-lucide="folder"></i>
+            <span id="chatThreadProjectLabel"></span>
+          </div>
+          <i data-lucide="chevron-right" class="chat-thread-header-sep" id="chatThreadHeaderSep" hidden></i>
+          <div class="chat-thread-header-item">
+            <i data-lucide="message-circle-more"></i>
+            <span id="chatThreadChatLabel"></span>
+          </div>
+        </div>
         <div class="chat-messages" id="chatMessages"></div>
+        <div class="project-select-wrap project-select-wrap--docked">
+          <div class="composer-dropdown project-select-dropdown">
+            <div class="project-select-bar" data-project-bar="docked">
+              <button type="button" class="project-select-trigger" data-menu-trigger="project-docked">
+                <i data-lucide="folder"></i>
+                <span data-project-label>Select project</span>
+              </button>
+              <button type="button" class="project-select-clear" data-project-clear="docked" aria-label="Remove project" data-tooltip="Remove project"><i data-lucide="x"></i></button>
+            </div>
+            <div class="composer-menu project-select-menu" id="projectMenu-docked" data-menu="project-docked">
+              <div class="project-select-search">
+                <i data-lucide="search"></i>
+                <input type="text" placeholder="Search projects" data-project-search="docked" />
+              </div>
+              <div class="composer-menu-list" data-project-list="docked">
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="LATAM Bank Reconciliation"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">LATAM Bank Reconciliation</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q2 Journal Entry Audit"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q2 Journal Entry Audit</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q3 Treasury Forecast"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q3 Treasury Forecast</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+              </div>
+              <div class="project-select-empty-msg" data-project-empty="docked">No projects found</div>
+              <div class="project-select-divider"></div>
+              <div class="composer-menu-list">
+                <button type="button" class="composer-menu-option" data-project-new="docked"><span class="opt-icon"><i data-lucide="plus"></i></span><span class="opt-body"><span class="opt-title">New project</span></span></button>
+              </div>
+            </div>
+          </div>
+
         <div class="chat-input-shell chat-input-shell--docked">
           <textarea id="dockedInput" rows="1" placeholder="Type to keep building…"></textarea>
-          <button class="send-btn" id="dockedSendBtn" title="Send"><i data-lucide="arrow-up"></i></button>
+
+          <div class="composer-toolbar">
+            <div class="composer-toolbar-left">
+              <div class="composer-dropdown">
+                <button class="composer-icon-btn tooltip-bottom" data-menu-trigger="attach-docked" data-attach-trigger="docked" aria-label="Add context" data-tooltip="Add context"><i data-lucide="plus"></i></button>
+                <div class="composer-menu composer-menu--attach" id="attachMenu-docked" data-menu="attach-docked">
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-attach-option="docked">
+                      <span class="opt-left">
+                        <span class="opt-icon"><i data-lucide="paperclip"></i></span>
+                        <span class="opt-body"><span class="opt-title">Add images, PDFs, or CSVs</span></span>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <input type="file" id="attachFile-docked" accept="image/*,.pdf,.csv" hidden />
+              </div>
+            </div>
+
+            <div class="composer-toolbar-right">
+              <div class="composer-dropdown">
+                <button class="composer-pill-btn" data-menu-trigger="model-docked">
+                  <span class="composer-pill-icon" data-model-icon></span>
+                  <span data-model-label>Auto</span>
+                </button>
+                <div class="composer-menu composer-menu--model" id="modelMenu-docked" data-menu="model-docked">
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model is-selected" data-model="Auto"><span class="opt-left"><span class="opt-icon"><i data-lucide="asterisk"></i></span><span class="opt-body"><span class="opt-title">Auto</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                  <div class="composer-menu-section">Select a model <span class="composer-menu-badge">Beta</span></div>
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Sonnet 4.6"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Sonnet 4.6</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Sonnet 5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Sonnet 5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Opus 4.8"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Opus 4.8</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Opus 5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/claude-logo_svgstack_com_36971785419340.svg" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Opus 5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Gemini 3.1 Pro"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-gemini-ai-48.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Gemini 3.1 Pro</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="GPT-5.6"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-chatgpt-50.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">GPT-5.6</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Grok 4.5"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-grok-50.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Grok 4.5</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                  <div class="composer-menu-section">Small models <span class="composer-menu-badge">Beta</span></div>
+                  <div class="composer-menu-list">
+                    <button type="button" class="composer-menu-option composer-menu-option--model" data-model="Gemini 3.5 Flash"><span class="opt-left"><span class="opt-icon"><img src="../../assets/img/icons8-gemini-ai-48.png" alt="" class="opt-icon-img" /></span><span class="opt-body"><span class="opt-title">Gemini 3.5 Flash</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="composer-icon-btn tooltip-bottom" data-mic-trigger="docked" aria-label="Voice input" data-tooltip="Voice input"><i data-lucide="mic"></i></button>
+              <button class="send-btn tooltip-bottom" id="dockedSendBtn" aria-label="Talk to the agent" data-tooltip="Talk to the agent"><i data-lucide="audio-lines"></i></button>
+            </div>
+          </div>
+
+          <div class="composer-voice-row" data-voice-row="docked">
+            <div class="composer-voice-canvas-wrap">
+              <canvas data-voice-canvas="docked"></canvas>
+            </div>
+            <div class="composer-voice-actions">
+              <button type="button" class="composer-icon-btn tooltip-bottom" data-voice-cancel="docked" data-tooltip="Cancel"><i data-lucide="x"></i></button>
+            <button type="button" class="send-btn tooltip-bottom" data-voice-send="docked" data-tooltip="Send"><i data-lucide="arrow-up"></i></button>
+          </div>
+        </div>
         </div>
       </div>
 
-    </div>
-
-    <!-- Artifact panel: split-pane -->
-    <div class="artifact-pane" id="artifactPane" hidden>
-      <div class="artifact-pane-header">
-        <span class="artifact-title"><i data-lucide="file-text"></i> Reconciliation Summary · July 2026</span>
-        <button class="icon-btn" id="closeArtifact" title="Close artifact"><i data-lucide="x"></i></button>
-      </div>
-      <div class="artifact-body" id="artifactBody">
-
-        <div class="stat-grid">
-          <div class="stat-card">
-            <span class="stat-label">Reconciled entries</span>
-            <span class="stat-value">1,842 / 2,001</span>
-            <span class="stat-note">118 with amount differences, 41 without a source match.</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Connected sources</span>
-            <span class="stat-value">4</span>
-            <span class="stat-note">Nequi, Banco de Bogotá, Banco de Occidente, internal ERP.</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Last updated</span>
-            <span class="stat-value">12 min ago</span>
-            <span class="stat-note">The agent automatically re-reconciles every hour.</span>
-          </div>
-        </div>
-
-        <div class="artifact-card">
-          <div class="artifact-card-header">
-            <span class="artifact-card-title">Sources with differences</span>
-            <span class="badge badge--warning">3 pending</span>
-          </div>
-          <div>
-            <div class="source-row">
-              <div class="source-row-main">
-                <span class="source-icon"><i data-lucide="landmark"></i></span>
-                <div>
-                  <div class="source-name">Nequi</div>
-                  <div class="source-detail">41 journal entries without a match</div>
-                </div>
-              </div>
-              <div class="source-row-end">
-                <span class="source-amount">$ 3,240,000</span>
-                <span class="badge badge--danger">Difference</span>
-              </div>
-            </div>
-            <div class="source-row">
-              <div class="source-row-main">
-                <span class="source-icon"><i data-lucide="landmark"></i></span>
-                <div>
-                  <div class="source-name">Banco de Occidente</div>
-                  <div class="source-detail">18 journal entries under review</div>
-                </div>
-              </div>
-              <div class="source-row-end">
-                <span class="source-amount">$ 812,000</span>
-                <span class="badge badge--warning">Pending</span>
-              </div>
-            </div>
-            <div class="source-row">
-              <div class="source-row-main">
-                <span class="source-icon"><i data-lucide="database"></i></span>
-                <div>
-                  <div class="source-name">Internal ERP</div>
-                  <div class="source-detail">Accounting period closed 2 days ago</div>
-                </div>
-              </div>
-              <div class="source-row-end">
-                <span class="badge badge--success">Reconciled</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="artifact-footnote">
-          <i data-lucide="refresh-cw"></i>
-          This artifact updates live while you keep talking with the agent.
-        </div>
-
-      </div>
     </div>
 
   </main>
 
+</div>
 </div>
 
 <!-- Search modal: Cmd+K or click the lupa (header or collapsed rail) -->
@@ -500,18 +722,296 @@
   const chatEmpty = document.getElementById('chatEmpty');
   const chatThread = document.getElementById('chatThread');
   const chatMessages = document.getElementById('chatMessages');
-  const mainArea = document.getElementById('mainArea');
-  const artifactPane = document.getElementById('artifactPane');
-  const closeArtifact = document.getElementById('closeArtifact');
   const chatPane = document.getElementById('chatPane');
 
-  let artifactRevealed = false;
+  // ---------- Composer: mode/model dropdowns + voice dictation ----------
+  // First version per the flows/build reference: full toolbar (Add context,
+  // Mode, Model, Voice, Send) on both the empty and docked composer. Voice
+  // is real dictation (getUserMedia + SpeechRecognition), not scripted —
+  // the fuller "Talk to the agent" conversational back-and-forth (TTS+STT
+  // loop) from the reference is deferred, this first pass only wires
+  // dictation-into-the-textbox.
+  function closeAllComposerMenus(exceptKey) {
+    document.querySelectorAll('.composer-menu.is-open').forEach((menu) => {
+      if (menu.dataset.menu !== exceptKey) menu.classList.remove('is-open');
+    });
+  }
+
+  document.querySelectorAll('[data-menu-trigger]').forEach((trigger) => {
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = trigger.dataset.menuTrigger;
+      const menu = document.querySelector(`.composer-menu[data-menu="${key}"]`);
+      if (!menu) return;
+      const willOpen = !menu.classList.contains('is-open');
+      closeAllComposerMenus(null);
+      menu.classList.toggle('is-open', willOpen);
+    });
+  });
+
+  document.addEventListener('click', () => closeAllComposerMenus(null));
+
+  document.querySelectorAll('.composer-menu').forEach((menu) => {
+    menu.addEventListener('click', (e) => e.stopPropagation());
+
+    menu.querySelectorAll('.composer-menu-option[data-mode]').forEach((option) => {
+      option.addEventListener('click', () => {
+        menu.querySelectorAll('.composer-menu-option').forEach((o) => o.classList.remove('is-selected'));
+        option.classList.add('is-selected');
+        const trigger = document.querySelector(`[data-menu-trigger="${menu.dataset.menu}"]`);
+        const label = trigger && trigger.querySelector('[data-mode-label]');
+        if (label) label.textContent = option.querySelector('.opt-title').textContent;
+        menu.classList.remove('is-open');
+      });
+    });
+
+    menu.querySelectorAll('.composer-menu-option[data-model]').forEach((option) => {
+      option.addEventListener('click', () => {
+        menu.querySelectorAll('.composer-menu-option').forEach((o) => o.classList.remove('is-selected'));
+        option.classList.add('is-selected');
+        const trigger = document.querySelector(`[data-menu-trigger="${menu.dataset.menu}"]`);
+        const label = trigger && trigger.querySelector('[data-model-label]');
+        if (label) label.textContent = option.querySelector('.opt-title').textContent;
+        const iconSlot = trigger && trigger.querySelector('[data-model-icon]');
+        const sourceIcon = option.querySelector('.opt-icon');
+        if (iconSlot && sourceIcon) iconSlot.innerHTML = sourceIcon.innerHTML;
+        if (window.lucide) lucide.createIcons();
+        menu.classList.remove('is-open');
+      });
+    });
+
+    // Initialize the trigger's icon to match whichever model starts selected (Auto)
+    const initiallySelected = menu.querySelector('.composer-menu-option[data-model].is-selected');
+    if (initiallySelected) {
+      const trigger = document.querySelector(`[data-menu-trigger="${menu.dataset.menu}"]`);
+      const iconSlot = trigger && trigger.querySelector('[data-model-icon]');
+      const sourceIcon = initiallySelected.querySelector('.opt-icon');
+      if (iconSlot && sourceIcon) iconSlot.innerHTML = sourceIcon.innerHTML;
+    }
+
+    menu.querySelectorAll('.composer-menu-option[data-project]').forEach((option) => {
+      option.addEventListener('click', () => {
+        menu.querySelectorAll('.composer-menu-option[data-project]').forEach((o) => o.classList.remove('is-selected'));
+        option.classList.add('is-selected');
+        const trigger = document.querySelector(`[data-menu-trigger="${menu.dataset.menu}"]`);
+        const label = trigger && trigger.querySelector('[data-project-label]');
+        if (label) label.textContent = option.dataset.project;
+        const bar = trigger && trigger.closest('.project-select-bar');
+        if (bar) bar.classList.add('has-project');
+        menu.classList.remove('is-open');
+      });
+    });
+  });
+
+  // Project selector: live search filters the project list, "New project"
+  // just closes the popover for now (no real project-creation flow yet —
+  // matches the sidebar's own "+" New Project button, also a no-op today).
+  document.querySelectorAll('[data-project-search]').forEach((input) => {
+    const suffix = input.dataset.projectSearch;
+    const list = document.querySelector(`[data-project-list="${suffix}"]`);
+    const emptyMsg = document.querySelector(`[data-project-empty="${suffix}"]`);
+    if (!list) return;
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('input', () => {
+      const query = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+      list.querySelectorAll('[data-project]').forEach((option) => {
+        const match = option.dataset.project.toLowerCase().includes(query);
+        option.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+      if (emptyMsg) emptyMsg.classList.toggle('is-shown', visibleCount === 0);
+    });
+  });
+
+  document.querySelectorAll('[data-project-new]').forEach((btn) => {
+    btn.addEventListener('click', () => closeAllComposerMenus(null));
+  });
+
+  // Clearing a selected project ("x" on the badge) reverts the bar back to
+  // its full-width "Select project" state and clears the menu's selection.
+  document.querySelectorAll('[data-project-clear]').forEach((clearBtn) => {
+    const suffix = clearBtn.dataset.projectClear;
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const bar = clearBtn.closest('.project-select-bar');
+      const trigger = document.querySelector(`[data-menu-trigger="project-${suffix}"]`);
+      const label = trigger && trigger.querySelector('[data-project-label]');
+      if (label) label.textContent = 'Select project';
+      if (bar) bar.classList.remove('has-project');
+      const menu = document.querySelector(`.composer-menu[data-menu="project-${suffix}"]`);
+      if (menu) menu.querySelectorAll('.composer-menu-option[data-project]').forEach((o) => o.classList.remove('is-selected'));
+    });
+  });
+
+  // Voice dictation: real mic permission, live audio-reactive waveform, real
+  // speech-to-text via the Web Speech API where the browser supports it.
+  const voiceState = {}; // per-suffix: { stream, audioCtx, analyser, raf, recognition }
+
+  function initVoiceCanvas(canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  function drawVoiceWaveform(ctx, canvas, values) {
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+    ctx.clearRect(0, 0, w, h);
+    const gap = 3;
+    const barWidth = (w - gap * (values.length - 1)) / values.length;
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() || '#5B4FE9';
+    values.forEach((v, i) => {
+      const barH = Math.max(3, v * h);
+      const x = i * (barWidth + gap);
+      const y = (h - barH) / 2;
+      const r = Math.min(2, barWidth / 2);
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, barWidth, barH, r); else ctx.rect(x, y, barWidth, barH);
+      ctx.fill();
+    });
+  }
+
+  async function startDictation(suffix, textarea) {
+    const voiceRow = document.querySelector(`[data-voice-row="${suffix}"]`);
+    const canvas = document.querySelector(`[data-voice-canvas="${suffix}"]`);
+    const micBtn = document.querySelector(`[data-mic-trigger="${suffix}"]`);
+    if (!voiceRow || !canvas) return;
+
+    voiceRow.classList.add('is-active');
+    if (micBtn) micBtn.classList.add('is-listening');
+    const ctx = initVoiceCanvas(canvas);
+    const barCount = 32;
+    let values = new Array(barCount).fill(0.08);
+    drawVoiceWaveform(ctx, canvas, values);
+
+    let stream, audioCtx, analyser, raf;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        values = Array.from({ length: barCount }, (_, i) => data[i % data.length] / 255);
+        drawVoiceWaveform(ctx, canvas, values);
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (err) {
+      // No mic permission / no getUserMedia: keep the row up with a flat
+      // baseline so dictation still visually "listens", just without live react.
+      drawVoiceWaveform(ctx, canvas, values);
+    }
+
+    let recognition = null;
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognitionCtor) {
+      recognition = new SpeechRecognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      const baseValue = textarea.value ? textarea.value + ' ' : '';
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+        textarea.value = baseValue + transcript;
+      };
+      recognition.onerror = () => {};
+      try { recognition.start(); } catch (err) { /* already started, ignore */ }
+    }
+
+    voiceState[suffix] = { stream, audioCtx, analyser, raf, recognition };
+  }
+
+  function stopDictation(suffix) {
+    const voiceRow = document.querySelector(`[data-voice-row="${suffix}"]`);
+    const micBtn = document.querySelector(`[data-mic-trigger="${suffix}"]`);
+    if (voiceRow) voiceRow.classList.remove('is-active');
+    if (micBtn) micBtn.classList.remove('is-listening');
+
+    const state = voiceState[suffix];
+    if (!state) return;
+    if (state.raf) cancelAnimationFrame(state.raf);
+    if (state.recognition) { try { state.recognition.stop(); } catch (err) {} }
+    if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
+    if (state.audioCtx) state.audioCtx.close();
+    delete voiceState[suffix];
+  }
+
+  // Add context: click opens the popover (reuses the generic dropdown
+  // wiring below, since the trigger has data-menu-trigger too) and
+  // immediately dismisses its own tooltip so it doesn't sit on top of the
+  // popover. Selecting the one option opens the native file picker.
+  document.querySelectorAll('[data-attach-trigger]').forEach((trigger) => {
+    const suffix = trigger.dataset.attachTrigger;
+    trigger.addEventListener('click', () => {
+      trigger.classList.add('tooltip-suppressed');
+    });
+    trigger.addEventListener('mouseleave', () => {
+      trigger.classList.remove('tooltip-suppressed');
+    });
+
+    const option = document.querySelector(`[data-attach-option="${suffix}"]`);
+    const fileInput = document.getElementById(`attachFile-${suffix}`);
+    if (option && fileInput) {
+      option.addEventListener('click', () => {
+        closeAllComposerMenus(null);
+        fileInput.click();
+      });
+    }
+  });
+
+  function wireComposerVoice(suffix, textarea, onSend) {
+    const micBtn = document.querySelector(`[data-mic-trigger="${suffix}"]`);
+    const cancelBtn = document.querySelector(`[data-voice-cancel="${suffix}"]`);
+    const sendBtn = document.querySelector(`[data-voice-send="${suffix}"]`);
+    if (micBtn) {
+      micBtn.addEventListener('click', () => {
+        const active = voiceState[suffix];
+        if (active) stopDictation(suffix); else startDictation(suffix, textarea);
+      });
+    }
+    if (cancelBtn) cancelBtn.addEventListener('click', () => stopDictation(suffix));
+    if (sendBtn) {
+      sendBtn.addEventListener('click', () => {
+        stopDictation(suffix);
+        onSend();
+      });
+    }
+  }
+
+  // Send button icon swaps with typing — identical mechanism to the
+  // reference's updateConversationalButtonIcon: empty input = "Talk to the
+  // agent" (audio-lines), any typed text = "Send" (arrow-up). The
+  // reference's third state (conversational mode active → stop/square) is
+  // deferred until we build that mode.
+  function updateSendButtonIcon(textarea, button) {
+    const hasText = textarea.value.trim().length > 0;
+    const iconName = hasText ? 'arrow-up' : 'audio-lines';
+    const tooltip = hasText ? 'Send' : 'Talk to the agent';
+    button.innerHTML = `<i data-lucide="${iconName}"></i>`;
+    button.setAttribute('aria-label', tooltip);
+    button.setAttribute('data-tooltip', tooltip);
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function wireSendIconSwap(textarea, button) {
+    textarea.addEventListener('input', () => updateSendButtonIcon(textarea, button));
+    updateSendButtonIcon(textarea, button);
+  }
 
   function addMessage(role, text) {
     const msg = document.createElement('div');
     msg.className = `msg msg--${role}`;
     msg.innerHTML = `
-      <span class="msg-avatar">${role === 'user' ? 'IR' : '<img src="../../assets/img/Simetrik_isologo.png" alt="" style="width:14px;height:14px;object-fit:contain" />'}</span>
+      <span class="msg-avatar">${role === 'user' ? 'IR' : '<img src="../../assets/img/simetrik-agent-icon.png" alt="" style="width:16px;height:16px;object-fit:contain" />'}</span>
       <span class="msg-bubble">${text}</span>
     `;
     chatMessages.appendChild(msg);
@@ -524,7 +1024,7 @@
     typing.className = 'typing-indicator';
     typing.id = 'typingIndicator';
     typing.innerHTML = `
-      <span class="msg-avatar" style="background:var(--color-ink);color:#fff;"><img src="../../assets/img/Simetrik_isologo.png" alt="" style="width:14px;height:14px;object-fit:contain" /></span>
+      <span class="msg-avatar"><img src="../../assets/img/simetrik-agent-icon.png" alt="" style="width:16px;height:16px;object-fit:contain" /></span>
       <span class="typing-dots"><span></span><span></span><span></span></span>
     `;
     chatMessages.appendChild(typing);
@@ -537,29 +1037,48 @@
     if (el) el.remove();
   }
 
-  function revealArtifact() {
-    if (artifactRevealed) return;
-    artifactRevealed = true;
-    mainArea.classList.add('is-split');
-    artifactPane.hidden = false;
-    requestAnimationFrame(() => artifactPane.classList.add('is-visible'));
+  // Chat thread header: derives a chat name from the first prompt (like
+  // the real product auto-titling a conversation), and shows the project
+  // crumb only if a project was picked in the empty-state composer before
+  // the chat started.
+  function deriveChatTitle(text) {
+    const clean = (text || '').trim().replace(/\s+/g, ' ');
+    if (!clean) return 'New chat';
+    const maxLen = 48;
+    if (clean.length <= maxLen) return clean;
+    return clean.slice(0, maxLen).trim() + '…';
   }
 
-  function pulseArtifact() {
-    artifactPane.classList.remove('is-pulsing');
-    void artifactPane.offsetWidth; // reflow to re-trigger the animation
-    artifactPane.classList.add('is-pulsing');
+  function updateChatThreadHeader(firstPrompt) {
+    const chatLabel = document.getElementById('chatThreadChatLabel');
+    const projectItem = document.getElementById('chatThreadProjectItem');
+    const projectLabel = document.getElementById('chatThreadProjectLabel');
+    const sep = document.getElementById('chatThreadHeaderSep');
+
+    chatLabel.textContent = deriveChatTitle(firstPrompt);
+
+    const emptyBar = document.querySelector('[data-project-bar="empty"]');
+    const hasProject = emptyBar && emptyBar.classList.contains('has-project');
+    if (hasProject) {
+      const label = emptyBar.querySelector('[data-project-label]');
+      projectLabel.textContent = label ? label.textContent : '';
+      projectItem.hidden = false;
+      sep.hidden = false;
+    } else {
+      projectItem.hidden = true;
+      sep.hidden = true;
+    }
   }
 
   function startChat(firstPrompt) {
     chatEmpty.hidden = true;
     chatThread.hidden = false;
+    updateChatThreadHeader(firstPrompt);
     addMessage('user', firstPrompt);
     showTyping();
     setTimeout(() => {
       removeTyping();
-      addMessage('ai', "I put together a LATAM bank reconciliation summary for July using the sources you already had connected. I'm leaving it open on the side so you can review it while we keep adjusting whatever's needed.");
-      revealArtifact();
+      addMessage('ai', "I put together a LATAM bank reconciliation summary for July using the sources you already had connected. Let me know what you'd like to adjust.");
     }, 900);
   }
 
@@ -568,8 +1087,7 @@
     showTyping();
     setTimeout(() => {
       removeTyping();
-      addMessage('ai', 'Done, I updated the artifact with that change.');
-      if (artifactRevealed) pulseArtifact();
+      addMessage('ai', 'Done, updated.');
     }, 800);
   }
 
@@ -587,6 +1105,8 @@
   document.querySelectorAll('.suggestion-chip').forEach((chip) => {
     chip.addEventListener('click', () => startChat(chip.dataset.prompt));
   });
+  wireComposerVoice('empty', emptyInput, sendFromEmpty);
+  wireSendIconSwap(emptyInput, emptySendBtn);
 
   // Active state: follow-up messages
   const dockedInput = document.getElementById('dockedInput');
@@ -595,26 +1115,22 @@
     const text = dockedInput.value.trim();
     if (!text) return;
     dockedInput.value = '';
+    updateSendButtonIcon(dockedInput, dockedSendBtn);
     continueChat(text);
   }
   dockedSendBtn.addEventListener('click', sendFromDocked);
   dockedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromDocked(); }
   });
-
-  closeArtifact.addEventListener('click', () => {
-    artifactPane.classList.remove('is-visible');
-    mainArea.classList.remove('is-split');
-    setTimeout(() => { artifactPane.hidden = true; }, 200);
-    artifactRevealed = false;
-  });
+  wireComposerVoice('docked', dockedInput, sendFromDocked);
+  wireSendIconSwap(dockedInput, dockedSendBtn);
 
   document.getElementById('newChatBtn').addEventListener('click', () => {
     chatThread.hidden = true;
     chatEmpty.hidden = false;
     chatMessages.innerHTML = '';
     emptyInput.value = '';
-    if (artifactRevealed) closeArtifact.click();
+    updateSendButtonIcon(emptyInput, emptySendBtn);
   });
 
   // Apps / Agents: empty states for sections to be built in a later iteration
@@ -636,7 +1152,6 @@
     const copy = sectionCopy[section];
     if (!copy) return;
     chatThread.hidden = true;
-    if (artifactRevealed) closeArtifact.click();
     chatEmpty.hidden = true;
     let empty = document.getElementById('sectionEmpty');
     if (!empty) {

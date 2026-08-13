@@ -18,11 +18,11 @@
   --color-ink-soft: #55555F;
   --color-ink-faint: #96969F;
 
-  /* Acento Simetrik (atención dirigida, ley 2) */
-  --color-primary: #5B4FE9;
-  --color-primary-hover: #4A3ED9;
-  --color-primary-tint: #EEEDFC;
-  --color-primary-ink: #3E33C7;
+  /* Acento Simetrik (atención dirigida, ley 2) — azul real de marca confirmado por el usuario */
+  --color-primary: #3838F9;
+  --color-primary-hover: #2D2DC7;
+  --color-primary-tint: #E9E9FE;
+  --color-primary-ink: #2D2DC7;
 
   /* Estado */
   --color-success: #1B8354;
@@ -70,7 +70,7 @@ ul { list-style: none; }
 button { font-family: inherit; }
 a { color: inherit; text-decoration: none; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 

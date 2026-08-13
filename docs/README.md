@@ -11,7 +11,7 @@ Un archivo por sección. Se actualiza en cada iteración, no se reescribe desde 
 | Login | [`login.md`](./login.md) | Layout split light/dark, referencia visual usada, excepción a Ley 6 |
 | Home | [`home.md`](./home.md) | Layout general post-login, estado inicial, relación sidebar/chat/artefacto |
 | Sidebar | [`sidebar.md`](./sidebar.md) | Jerarquía de navegación, estructura de Proyectos/Apps/Agents, comportamiento collapse |
-| Chat | [`chat.md`](./chat.md) | El eje central: estados, generación de artefactos, microinteracciones |
+| Chat | [`chat.md`](./chat.md) | El eje central: estados, composer completo, selector de proyecto, generación de apps (pendiente de implementar), microinteracciones |
 | Search | [`search.md`](./search.md) | Modal command-palette, tabs de filtro, bug de aria-label encontrado y corregido |
 
 **Nota de idioma (2026-08-12):** por instrucción explícita del usuario, todo el copy del prototipo (login, home, sidebar, chat) pasó de español a inglés. Los `.md` de esta carpeta se siguen escribiendo en español (son para el equipo interno), pero el copy citado dentro de cada uno ya refleja el inglés real de la UI.

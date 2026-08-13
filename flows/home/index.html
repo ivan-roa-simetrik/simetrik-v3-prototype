@@ -189,8 +189,11 @@
         <span class="tooltip-bubble tooltip-bubble--right">Search <kbd>⌘K</kbd></span>
       </button>
 
-      <button class="nav-item nav-item--primary" id="newChatBtn" data-tooltip="New chat">
-        <span class="nav-icon"><i data-lucide="plus"></i></span>
+      <button class="nav-item nav-item--primary" id="newChatBtn" data-nav="new-chat" data-tooltip="New chat">
+        <span class="nav-icon">
+          <i data-lucide="message-circle-plus" class="nav-icon-default"></i>
+          <i data-lucide="message-circle-more" class="nav-icon-hover"></i>
+        </span>
         <span class="nav-label">New Chat</span>
       </button>
 
@@ -545,7 +548,7 @@
   };
 
   window.onNavSectionChange = function (section) {
-    if (section === 'projects') return; // already represented in the sidebar, no extra view for now
+    if (section === 'projects' || section === 'new-chat') return; // Projects: already represented in the sidebar. New Chat: handled by its own click handler below, not a section view.
     const copy = sectionCopy[section];
     if (!copy) return;
     chatThread.hidden = true;

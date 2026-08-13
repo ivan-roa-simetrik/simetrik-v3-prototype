@@ -193,11 +193,19 @@ a { color: inherit; text-decoration: none; }
 
 /* ---------- Icon micro-interactions: hover/click only, never looping ---------- */
 
-/* New Chat + the small "+" add-affordances: rotate 90°, "creating something new" */
-#newChatBtn .nav-icon svg { transition: transform calc(var(--dur-fast) * 2) var(--ease-out); }
-#newChatBtn:hover .nav-icon svg { transform: rotate(90deg); }
+/* The small "+" add-affordances: rotate 90°, "creating something new" */
 .nav-item-add svg { transition: transform calc(var(--dur-fast) * 2) var(--ease-out); }
 .nav-item-add:hover svg { transform: rotate(90deg); }
+
+/* New Chat: crossfades to message-circle-more on hover instead of rotating */
+#newChatBtn .nav-icon { position: relative; }
+#newChatBtn .nav-icon-default, #newChatBtn .nav-icon-hover {
+  position: absolute; top: 0; left: 0; width: 18px; height: 18px;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+#newChatBtn .nav-icon-hover { opacity: 0; }
+#newChatBtn:hover .nav-icon-default { opacity: 0; }
+#newChatBtn:hover .nav-icon-hover { opacity: 1; }
 
 /* Search: scale pop on hover, settles back to its initial size (same pattern as Projects/Apps/Close sidebar) */
 .icon-btn[aria-label="Search"]:hover svg,

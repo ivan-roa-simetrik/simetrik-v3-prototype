@@ -1,6 +1,6 @@
 # Search
 
-> Última actualización: 2026-08-12
+> Última actualización: 2026-08-13
 > Archivos relacionados: `flows/home/index.html` (markup + estilos inline del modal + script), sin dependencia de `shared/tokens.css` más allá de las variables de color/radio/sombra/duración que ya expone.
 
 ## Propósito
@@ -18,11 +18,12 @@ Search modal
     └── En una tab específica: lista plana de esa sola categoría, sin subtítulo repetido
 ```
 
-Cada resultado: ícono de categoría (Chats = `message-square`, Projects = `folder`, Apps = `layout-grid`, Agents = `bot`) + nombre. Algunos ítems de ejemplo llevan un atajo `⌘1`/`⌘2` a la derecha, replicando el detalle de la referencia visual.
+Cada resultado: ícono de categoría (Chats = `message-circle-more`, Projects = `folder`, Apps = `layout-grid`, Agents = `bot`) + nombre. Algunos ítems de ejemplo llevan un atajo `⌘1`/`⌘2` a la derecha, replicando el detalle de la referencia visual. El ícono de Chats coincide con el que ya usan "New Chat" en el sidebar y el header del hilo de chat — mismo lenguaje de íconos en todo el prototipo.
 
 ## Decisiones tomadas
 
 - **Es un modal centrado con backdrop, no un Sheet lateral.** Excepción deliberada al patrón Simetrik de "modal solo cuando la tarea exige atención modal" — un command-palette es justamente ese caso (overlay transitorio, se abre y cierra con teclado, no compite con contenido persistente). Mismo criterio que ya se usó para el login (excepción documentada, no generalizable al resto del producto).
+- **Altura fija de 500px, centrado en ambos ejes, y la posición no cambia al filtrar.** El modal usa `height: 500px` (no `max-height`) para que su caja nunca se redimensione según la cantidad de resultados — filtrar (por texto o por tab) solo cambia el contenido de `.search-modal-results` (que sí tiene `flex: 1; overflow-y: auto`), nunca la posición ni el tamaño del modal completo. Esto evita el "salto" visual de un modal que se encoge/agranda con cada tecla. El backdrop centra con `align-items: center; justify-content: center` (antes solo centraba horizontal, con un padding-top fijo desde arriba).
 - **Búsqueda en vivo, sin botón de submit.** Cada tecla filtra inmediatamente contra `SEARCH_DATA`, sin debounce (dataset chico, no hace falta).
 - **Tabs mutuamente excluyentes**, no multi-select — coherente con que "All" ya es la unión de las 4 categorías.
 - **Navegación por teclado completa**: ↑/↓ mueve el resaltado entre resultados visibles, Enter selecciona el resaltado, Escape cierra, click fuera del modal cierra.

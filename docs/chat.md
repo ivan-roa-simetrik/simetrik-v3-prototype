@@ -44,16 +44,29 @@ Solo existe en el **estado vacío**, antes de que arranque la conversación — 
 Aparece en la parte superior del estado activo (`.chat-thread-header`, franja de 44px con borde inferior), y se calcula una sola vez al arrancar la conversación (`updateChatThreadHeader`):
 
 - **Sin proyecto asociado**: ícono `message-circle-more` + nombre del chat.
-- **Con proyecto asociado** (si se había seleccionado uno en la barra gris antes de mandar el primer mensaje): folder + nombre del proyecto (tono más tenue, `--color-ink-faint`, como ancestro del breadcrumb) → separador `chevron-right` → ícono de chat + nombre del chat (tono pleno, `--color-ink`, como ítem activo).
+- **Con proyecto asociado** (si se había seleccionado uno en la barra gris antes de mandar el primer mensaje): folder + nombre del proyecto (tono más tenue, `--color-ink-faint`, como ancestro del breadcrumb) → separador literal "`/`" → ícono de chat + nombre del chat (tono pleno, `--color-ink`, como ítem activo).
 - **Nombre del chat**: se deriva del primer prompt del usuario (`deriveChatTitle`) — se usa tal cual si mide ≤48 caracteres, o se trunca a 48 + "…" si es más largo. No hay edición manual del nombre todavía.
 
 ### Mensajes y microinteracciones
 
 - **Suggestion chips como atajo, no como único camino.** 3 prompts precocinados para probar el prototipo sin escribir; el input siempre acepta texto libre.
 - **El primer mensaje del usuario siempre dispara una respuesta canned.** Simplificación deliberada: en producción no toda respuesta sería inmediata ni fija, pero para *validar la experiencia* del mecanismo de conversación conviene que sea predecible en la demo.
-- **Typing indicator de 3 puntos antes de cada respuesta** (900ms en el primer mensaje, 800ms en los siguientes) — microinteracción pedagógica que muestra que el agente está "trabajando" antes de que aparezca la respuesta.
-- **Avatares**: usuario = iniciales "IR" sobre fondo tinte primario; agente = `simetrik-agent-icon.png` (el pinwheel, no el isologo de marca) sin fondo (`background: none`), 16px. `align-items: center` en `.msg` y `.typing-indicator` evita que un mensaje de dos líneas deforme el avatar circular (bug real encontrado y corregido).
-- **Sin panel de artefacto.** Se prototipó un panel split-pane ("Reconciliation Summary") en una iteración anterior y se removió por completo (markup, CSS y JS) porque no correspondía al comportamiento real de la referencia — hoy el chat siempre ocupa el ancho completo del panel, en ambos estados.
+- **Typing indicator de 3 puntos antes de cada respuesta** (900ms en el primer mensaje, 800ms en los siguientes) — microinteracción pedagógica que muestra que el agente está "trabajando" antes de que aparezca la respuesta. Sigue teniendo su propio fondo de "burbuja" (`--color-surface-sunken`) porque es un estado de carga transitorio, no un mensaje — no se le aplicó el cambio de las respuestas de abajo.
+- **Respuestas de la IA: texto libre, no burbuja.** `.msg--ai .msg-bubble` no tiene fondo, radio ni padding — el texto del agente queda simplemente al lado de su avatar, sin contenedor visual. Decisión explícita: que el usuario sienta que le está "hablando" el agente, no que recibe una tarjeta.
+- **Burbuja del usuario, más liviana.** Fondo `--color-primary-tint` (el mismo azul clarito que el estado activo del sidebar) con texto `--color-ink` (negro), en vez del azul sólido con texto blanco que tenía antes — para que lo que envía el usuario no compita visualmente con la respuesta del agente.
+- **Avatares**: solo la IA tiene avatar — `simetrik-agent-icon.png` (el pinwheel, no el isologo de marca) sin fondo (`background: none`), 16px. Los mensajes del usuario no llevan avatar (se removieron las iniciales "IR" que tenían antes); la burbuja alineada a la derecha es suficiente para identificarlos. `align-items: center` en `.msg` y `.typing-indicator` evita que un mensaje de dos líneas deforme el avatar circular del agente (bug real encontrado y corregido).
+- **Sin panel de artefacto.** Se prototipó un panel split-pane ("Reconciliation Summary") en una iteración anterior y se removió por completo (markup, CSS y JS) porque no correspondía al comportamiento real de la referencia.
+
+### Panel lateral del chat (Project / Map / App — contenido pendiente de definir)
+
+Botón `panel-right` que colapsa la columna de conversación y abre un panel vacío al lado, para eventualmente elegir entre abrir un proyecto, una vista de mapa o una app ahí mismo. Solo se construyó el mecanismo de colapsar/expandir — el contenido de las 3 opciones todavía no se definió ni se implementó a propósito (instrucción explícita: no salirse de la definición inicial del comportamiento).
+
+- **El botón le pertenece a la vista, no al chat.** Vive como hijo directo de `.chat-pane` (no dentro de `.chat-thread-header`) y se posiciona con `position: absolute; top: 8px; right: 20px` respecto a todo el panel — se queda anclado en esa esquina sin importar si el chat está a ancho completo o colapsado. Solo es visible una vez el chat está en estado de hilo activo (oculto en el estado vacío y en las vistas de Apps/Agents).
+- **Comportamiento**: un clic colapsa `.chat-thread-main` a **370px fijos** y revela `.chat-side-panel` (vacío) ocupando el resto del ancho, a toda la altura. Otro clic revierte todo. Se resetea automáticamente al iniciar un chat nuevo.
+- **Animación fluida (420ms, ease-out)**: ambas columnas están siempre en el layout flex (nunca `display: none`), animando `flex-grow`/`flex-basis` y `opacity` en vez de aparecer/desaparecer de golpe — así el colapso y la revelación del panel se sienten como una sola transición coordinada, no un salto instantáneo.
+- **Estilo neutro, no de estado activo**: el ícono se mantiene siempre en el mismo gris tenue (`--color-ink-faint`), abierto o cerrado — no se pinta de azul primario al activarse, para no competir visualmente con el resto de la UI.
+- **Panel vacío**: fondo `--color-sidebar-bg` (el mismo gris del sidebar, no blanco) — sin contenido todavía.
+- **Tooltip**: "Show panel" / "Hide panel" según el estado, alineado al borde derecho del botón (`.tooltip-end`, nuevo modificador en `tokens.css`) en vez de centrado — evita que se salga de la pantalla al estar en la esquina superior derecha.
 
 ## Estado actual de implementación
 
@@ -61,7 +74,8 @@ Aparece en la parte superior del estado activo (`.chat-thread-header`, franja de
 - ✅ Composer completo: Add context (popover + file picker real), Model picker (con logos reales por vendor e ícono sincronizado en el trigger), Voice (dictado real con waveform reactivo), Send (ícono dinámico)
 - ✅ Selector de proyecto en el estado vacío: barra + popover con búsqueda, selección, limpieza vía "x", y "New project" (no-op)
 - ✅ Header del hilo con breadcrumb condicional (proyecto/chat o solo chat) y nombre de chat derivado del primer prompt
-- ✅ Typing indicator y respuestas canned
+- ✅ Typing indicator y respuestas canned (texto libre, sin burbuja; burbuja del usuario en azul clarito con texto negro)
+- ✅ Panel lateral: mecanismo de colapsar/expandir el chat (370px) con animación fluida — sin contenido todavía (Project/Map/App pendientes)
 - ⛔ Todo el contenido de la IA es canned (2-3 respuestas fijas), no hay generación real
 - ⛔ La respuesta del agente es siempre la misma (resumen de conciliación en texto), no varía según lo que escriba el usuario ni según el proyecto seleccionado
 - ⛔ **Generación de apps desde el chat: todavía no implementada.** El chat debe eventualmente permitir crear/configurar Apps (no artefactos sueltos) como una de sus salidas principales — hoy no existe ningún flujo, mock ni respuesta canned que lo represente.
@@ -71,6 +85,7 @@ Aparece en la parte superior del estado activo (`.chat-thread-header`, franja de
 
 ## Pendiente / abierto
 
+- **Contenido del panel lateral**: definir cómo se ve y funciona cada una de las 3 opciones (abrir un proyecto, vista de mapa, abrir una app) dentro de `.chat-side-panel` — hoy el panel abre y cierra pero está completamente vacío. Incluye definir si hay un selector inicial (tarjetas, tabs, dropdown) antes de elegir.
 - ¿Cómo se ve el chat cuando el pedido es "crear un agente" o "crear una app" en vez de "generar un artefacto"? Hoy todo pedido termina en la misma respuesta canned — falta explorar la bifurcación de intención (app vs. agente vs. proyecto nuevo).
 - **Generación de apps**: es una capacidad que el chat debe tener (definición de producto), todavía sin prototipar. Falta decidir cómo se ve el momento en que el agente propone o construye una app a partir de la conversación.
 - ¿El composer docked (una vez la conversación arrancó) debería poder cambiar de proyecto también, o el proyecto queda fijo una vez elegido al inicio? Hoy la barra desaparece por completo al pasar a hilo activo.
@@ -80,5 +95,5 @@ Aparece en la parte superior del estado activo (`.chat-thread-header`, franja de
 
 ## Archivos relacionados
 
-- `flows/home/index.html` — todo vive acá: markup del composer (`.chat-input-shell`, `.project-select-*`, `.composer-*`), header del hilo (`.chat-thread-header`), y el script con `startChat`, `continueChat`, `addMessage`, `showTyping`/`removeTyping`, `wireComposerVoice`, `startDictation`/`stopDictation`, `updateSendButtonIcon`, `deriveChatTitle`, `updateChatThreadHeader`.
-- `shared/tokens.css` — tokens de color/radio/sombra/duración que consume todo lo anterior (no tiene clases propias del chat, esas viven inline en `home/index.html`).
+- `flows/home/index.html` — todo vive acá: markup del composer (`.chat-input-shell`, `.project-select-*`, `.composer-*`), header del hilo (`.chat-thread-header`), panel lateral (`.chat-thread-main`, `.chat-side-panel`, `#chatPanelToggle`), y el script con `startChat`, `continueChat`, `addMessage`, `showTyping`/`removeTyping`, `wireComposerVoice`, `startDictation`/`stopDictation`, `updateSendButtonIcon`, `deriveChatTitle`, `updateChatThreadHeader`.
+- `shared/tokens.css` — tokens de color/radio/sombra/duración que consume todo lo anterior, más el sistema de tooltips (`.tooltip-bottom`, `.tooltip-end`) que usa el botón del panel lateral. No tiene clases propias del chat en sí, esas viven inline en `home/index.html`.

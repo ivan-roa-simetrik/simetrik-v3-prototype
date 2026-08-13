@@ -28,7 +28,7 @@ Un archivo por sección. Se actualiza en cada iteración, no se reescribe desde 
 
 - **Modo técnico:** HTML standalone multi-flujo (no hay `Prototype/components.json` en este repo)
 - **Journey cubierto hoy:** Login → Home (sidebar + chat) → primer artefacto generado
-- **No cubierto todavía:** contenido real de Apps y Agents, vista de "todos los proyectos", creación de proyecto/agente vía chat con lógica real, persistencia de estado
+- **No cubierto todavía:** contenido real de Apps y Agents, creación de proyecto/agente vía chat con lógica real, persistencia de estado, detalle de un proyecto individual (la vista de "todos los proyectos" ya existe — ver `home.md` → sección Projects)
 - **Login:** ver decisiones de propuesta de valor en el propio `index.html` (todavía no tiene `.md` dedicado porque es una sola pantalla sin mucha ambigüedad de estructura; si gana complejidad se documenta aparte)
 
 ## Historial de sesiones
@@ -49,6 +49,7 @@ Un archivo por sección. Se actualiza en cada iteración, no se reescribe desde 
 | 2026-08-12 | Panel derecho del login: `max-width: 700px` agregado — deja de estirarse a lo ancho de la columna del grid en pantallas anchas. |
 | 2026-08-12 | Revertido: se sacó el `max-width: 700px` del panel derecho, vuelve a ocupar toda su columna del grid. |
 | 2026-08-12 | Panel derecho: padding horizontal 64px → 224px (izq/der). Animación del mockup: se agregó avatar de persona (ícono `user`) junto a la burbuja del chat, para que se sienta como alguien chateando de verdad. |
+| 2026-08-13 | Projects: nav item "Projects" del sidebar ahora abre una vista propia (`#projectsView` en `flows/home/index.html`) en vez de no hacer nada — buscador + tag filters + toggle grid/list + cards/rows con status (Production/Draft) y avatar, adaptando el patrón visto en `mock-v3/flows2/home/index.html`. Reusa los 3 proyectos mock ya existentes en Pinned/composer/search. Cards sin acción real al click, por decisión explícita (mismo criterio que el resto de links sin destino del prototipo). Ver `home.md` → sección Projects. |
 
 ## Nota sobre assets pendientes (actualizada 2026-08-12)
 

@@ -143,7 +143,7 @@ a { color: inherit; text-decoration: none; }
 
 .sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 12px; flex-shrink: 0;
+  padding: 9px 12px; flex-shrink: 0;
 }
 .sidebar-header-actions { display: flex; align-items: center; gap: 2px; }
 
@@ -418,6 +418,19 @@ a { color: inherit; text-decoration: none; }
 [data-tooltip].tooltip-bottom:hover::after,
 [data-tooltip].tooltip-bottom:focus-visible::after {
   transform: translateX(-50%) translateY(0);
+}
+
+/* End-aligned bottom variant — tooltip's right edge lines up with the
+   trigger's right edge instead of centering under it. Useful for triggers
+   sitting at the far right of their container, where a centered tooltip
+   would otherwise run past the edge. */
+[data-tooltip].tooltip-bottom.tooltip-end::after {
+  left: auto; right: 0;
+  transform: translateY(-4px);
+}
+[data-tooltip].tooltip-bottom.tooltip-end:hover::after,
+[data-tooltip].tooltip-bottom.tooltip-end:focus-visible::after {
+  transform: translateY(0);
 }
 
 /* Suppress tooltips that would be redundant with an already-visible text label —

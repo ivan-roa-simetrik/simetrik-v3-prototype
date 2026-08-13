@@ -32,9 +32,32 @@ Es la pantalla a la que se llega después del login. Tipo Codex: layout de dos c
 
 ## Pendiente / abierto
 
-- ¿"Proyectos" como nav de primer nivel debería eventualmente abrir una vista propia (grid con últimos proyectos, metadata de actividad), o el listado del sidebar es suficiente para siempre? Hoy no tiene vista propia por decisión de scope, no por descarte definitivo.
 - Definir qué pasa en el chat cuando el usuario pide explícitamente "crear un agente" — ¿el artefacto pane se convierte en un formulario de configuración de agente, o es un flujo separado? Todavía no se ha explorado.
 - Responsive/mobile no se evaluó — el layout de dos columnas fijas asume desktop.
+- Projects: "New project" y el click en una card siguen siendo no-op — falta definir si el prototipo necesita simular la creación real de un proyecto o abrir un detalle al hacer click (ver sección Projects más abajo).
+
+## Projects (2026-08-13)
+
+`onNavSectionChange` ya no excluye `section === 'projects'` — el nav item abre una vista propia (`#projectsView`) en vez de no hacer nada, resolviendo el pendiente que existía acá arriba.
+
+- **Patrón adoptado, con referencia concreta.** Se tomó como base la sección Projects de `mock-v3/flows2/home/index.html` (buscador + toggle grid/list + tag filters + cards/rows con estado y avatar) y se adaptó a los tokens y datos de este prototipo — no es una reimplementación 1:1, no hay componentes desyk reales ni backend detrás.
+- **Reusa los 3 proyectos mock existentes** (`LATAM Bank Reconciliation`, `Q2 Journal Entry Audit`, `Q3 Treasury Forecast`) — mismos nombres que ya vivían en Pinned/composer/search, para no fragmentar el mock data del prototipo.
+- **Fidelidad completa en metadata**: cada proyecto tiene tags (`source:...`, `region:...`, `period:...`) y un badge de estado (`Production`/`Draft`, clases `.badge--success`/`.badge--neutral` ya existentes en `shared/tokens.css`) — decisión explícita del usuario de no simplificar a solo nombre + ícono.
+- **Buscador y tags filtran de verdad** (por nombre y por tag activo, combinables); grid/list es un toggle real, no decorativo.
+- **Las cards/rows no navegan a ningún lado — decisión explícita.** A diferencia de la referencia (que deshabilita visualmente las cards sin detalle real detrás con `opacity-50`), acá se optó por **no** aplicar ningún tratamiento deshabilitado: mismo criterio que los chats de Pinned/Recent en el sidebar y los resultados del Search modal, que tampoco navegan a nada y tampoco se ven "rotos". El click no dispara ninguna acción.
+- **"New project"** sigue siendo un botón visual sin acción, mismo no-op que el "+" de Projects en el sidebar y la opción "New project" del selector de proyecto en el composer.
+
+### Header consolidado a 1 fila (2026-08-13, misma sesión)
+
+Pasada de ajuste pedida por el usuario: el header original ocupaba 3 filas (título+botón, buscador+toggle, chips de tags). Se consolidó a **una sola fila** para no gastar tanto espacio vertical antes de mostrar un solo proyecto:
+
+- **Buscador colapsado a ícono, al lado de Filter.** El input de texto ya no está siempre visible ni vive junto al título — es un botón `search` con el mismo tratamiento outline que Filter (`.projects-search-btn`: borde + fondo `--color-surface`, 32×32), ubicado inmediatamente a la izquierda de Filter. Al clickearlo "despliega" un campo inline que **crece hacia la izquierda** (el input vive antes del botón en el DOM/flex, así que al crecer ocupa el espacio vacío entre el título y los controles de la derecha, en vez de empujar Filter/toggle/New project — el grupo derecho ya está anclado al borde por el `justify-content: space-between` del header).
+- **Botón e input nunca conviven — corrección 2026-08-13.** La primera versión mostraba el botón Y el input abierto al mismo tiempo; se corrigió a un solo control que "muta" entre dos estados: colapsado = solo el botón outline; abierto = el botón se oculta (`hidden`) y el input ocupa su lugar, con su propio ícono de lupa (leading, dentro del campo) y una X (trailing) que es la única forma de cerrarlo — cerrar limpia el término, vuelve a mostrar el botón, y re-filtra. Escape en el input también cierra.
+- **"Filter" sin ícono, formato label/value + chevron.** Ya no es un botón con ícono de embudo — ahora lee como un selector compacto: "Filter by tag" en gris tenue (`--color-ink-faint`) + " : " + el valor activo en negro (`--color-ink`, ej. "all" sin selección, el tag mismo si hay 1, "N tags" si hay varios) + un chevron que rota 180° al abrir (vía `:has()` sobre el `.composer-menu.is-open` hermano — sin JS extra para mantenerlo sincronizado si el popover se cierra por click afuera). El popover interno no cambió: multi-select reusando `.composer-dropdown`/`.composer-menu`, cada tag alterna independiente (no exclusivo), el menú no se cierra al seleccionar, "Clear filters" al final.
+- **Todo en una sola fila**: título a la izquierda; buscador + Filter + toggle grid/list + "New project" a la derecha (`.projects-header-left` / `.projects-header-right`, `justify-content: space-between`).
+- **Altura uniforme de 32px** en todos los controles del header (búsqueda, Filter, toggle grid/list, "New project") **y en los ítems internos del popover de Filter** (cada tag + "Clear filters", vía `min-height: 32px` en `#projectsFilterList .composer-menu-option`/`#projectsFilterClear`) — pedido explícito del usuario para que quede alineado con inputs y botones del resto del prototipo.
+- **Idioma: copy siempre en inglés.** "Filter by tag" / "all" / placeholder "Search projects" — el usuario aclaró explícitamente que da instrucciones en español pero el copy implementado debe ser siempre en inglés (corrige una pasada anterior de esta misma sesión que había dejado ese texto literal en español).
+- Explícitamente fuera de esta pasada: el panel lateral que se abre desde el header del chat (`#chatSidePanel`, agregado en una iteración previa) — quedó pausado sin tocar, su contenido sigue sin definirse.
 
 ## Archivos relacionados
 

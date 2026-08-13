@@ -222,7 +222,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chat-thread-header-item svg, .chat-thread-header-item i { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
-  .chat-thread-header-sep { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chat-thread-header-sep { font-size: 13px; color: var(--color-ink-faint); flex-shrink: 0; }
   /* Project crumb is the ancestor (fainter); chat name is the current item (full emphasis) */
   #chatThreadProjectItem span { color: var(--color-ink-faint); font-weight: 400; }
   #chatThreadChatLabel { color: var(--color-ink); }
@@ -593,7 +593,7 @@
             <i data-lucide="folder"></i>
             <span id="chatThreadProjectLabel"></span>
           </div>
-          <i data-lucide="chevron-right" class="chat-thread-header-sep" id="chatThreadHeaderSep" hidden></i>
+          <span class="chat-thread-header-sep" id="chatThreadHeaderSep" hidden>/</span>
           <div class="chat-thread-header-item">
             <i data-lucide="message-circle-more"></i>
             <span id="chatThreadChatLabel"></span>

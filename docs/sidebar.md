@@ -101,8 +101,20 @@ Sistema de dos capas:
 - **Nav item "Recent" duplicado**: existió brevemente entre Projects y Apps; se eliminó porque duplicaba la sección "Recent" de abajo (mismo ícono de reloj apareciendo dos veces).
 - **Ícono de "info"** en el footer: reemplazado por el botón de Log out.
 
+## Ellipsis de acciones por proyecto en Pinned (2026-08-13)
+
+Cada fila de `Pinned` tiene ahora un botón de elipsis (`more-vertical`), oculto hasta hover — mismo patrón visual que el ellipsis ya existente en las cards/filas de la vista Projects (`.project-card-actions-btn`), pero con clases propias (`.sidebar-project-actions-btn`/`.sidebar-project-actions-menu`) para no repetir el error ya documentado de compartir nombre de clase entre el sidebar y otro componente (ver `home.md` → colisión de `.project-row`, y la de `.search-tab`).
+
+- **Markup**: `.project-row` (el botón que expande/colapsa la fila) dejó de ocupar todo el ancho de la fila — ahora vive dentro de `.project-row-wrap` junto al nuevo `.sidebar-project-actions-wrap`, como hermanos, no anidados. Necesario porque `.project-row` ya es un `<button>` y un `<button>` no puede contener otro `<button>` (HTML inválido) — meter el ellipsis adentro habría roto el markup y además habría hecho bubble el click hacia el toggle de expandir/colapsar.
+- **4 acciones en el popover, todas no-op por ahora**: Unpin project, Invite members, Archive project, Edit info — mismo set que ya existe en el menú de acciones de las cards de Projects (`Pin/Unpin`, `Invite members`, `Archive`) más una nueva, **Edit info**, que no existe en ningún otro lado del prototipo todavía. Decisión explícita del usuario: agregar las 4 como ítems del menú (abren/cierran el popover, look completo) sin desarrollar qué hace cada una — eso queda para una iteración futura, una vez se defina explícitamente qué dispara cada acción (para "Edit info" en particular, ni siquiera está definido qué campos del proyecto editaría).
+- **`data-project-id` agregado a cada `<li class="project-item">`** (mismos ids que `PROJECTS_DATA` en `flows/home/index.html`: `latam-bank-reconciliation`, `q2-journal-entry-audit`, `q3-treasury-forecast`) — preparación para cuando se wireen las acciones de verdad (hoy el wiring de `initSidebarProjectActions()` en `shell.js` no lo usa, solo abre/cierra el popover vía `.closest()`; queda ahí para no tener que volver a tocar el markup en la próxima pasada).
+- **CSS vive en `shared/tokens.css`**, no inline en `flows/home/index.html`, porque el resto del sidebar (`.project-row`, `.project-item`, `.chat-sublist`, etc.) ya vive ahí — consistencia de dónde se define cada cosa. Sí depende de `.composer-menu-option` (el primitivo de fila-de-opción reusado por los popovers de Filter/acciones de Projects), que está definido en el `<style>` inline de `flows/home/index.html` — mismo tipo de dependencia implícita que ya tenía el popover de acciones de Projects, no es nueva.
+- **Wiring en `shared/shell.js`** (`initSidebarProjectActions()`), no en `flows/home/index.html`, porque el sidebar es shell compartido entre flujos — igual criterio que `initSidebarCollapse()`/`initProjectExpand()`/`initSectionCollapse()`. A diferencia del wiring de la vista Projects (que usa delegación de eventos porque sus cards se re-renderizan en cada filtro), acá el markup del sidebar es estático, así que `addEventListener` directo por elemento alcanza.
+- **Fix (mismo día, feedback directo sobre la primera pasada): hover unificado.** La primera versión ponía el fondo de hover en `.project-row` (que solo ocupa su propio ancho flex, sin llegar al ellipsis) — el usuario reportó que se veían como dos zonas separadas: un recuadro tintado alrededor del nombre y, más allá, un hueco sin tintar antes de que apareciera el ellipsis. Corregido moviendo el fondo de hover a `.project-row-wrap` (el contenedor completo, nombre + ellipsis), con `.project-row` y `.sidebar-project-actions-btn` sin fondo propio — así toda la fila lee como una sola superficie continua al pasar el mouse, el ellipsis queda "adentro" del mismo hover en vez de flotar aparte.
+
 ## Pendiente / abierto
 
+- **Qué hace cada acción del nuevo menú de Pinned.** Ahora mismo Unpin/Invite members/Archive/Edit info son placeholders puros (abren y cierran el popover, nada más). Falta definir: si Unpin/Archive deberían reusar `toggleProjectPinned()`/`archiveProject()` (ya existentes, hoy solo alcanzables desde la vista Projects) o tener su propia lógica; y qué campos del proyecto expondría "Edit info" (¿solo nombre? ¿status? ¿tags?) — sin definir todavía, ver `proyecto.md` para el trasfondo conceptual de qué es "información principal" de un Proyecto.
 - Responsive del sidebar en mobile/tablet: sin definir, sigue sin recibirse una referencia.
 - ¿Clickear un chat anidado (Pinned o Recent) debería cargar ese chat en el área central? Hoy son enlaces sin destino (`href="#"`).
 - El Search del header no tiene función real de búsqueda todavía (ni el de Cmd+K).
@@ -110,7 +122,7 @@ Sistema de dos capas:
 
 ## Archivos relacionados
 
-- `shared/tokens.css` — todas las clases `.sidebar*`, `.nav-item*`, `.project-*`, `.chat-row`, `.user-chip`, `.tooltip*`, keyframes de animación
-- `shared/shell.js` — `initSidebarCollapse()`, `initProjectExpand()`, `initSectionCollapse()`, `initNavActive()`
-- `flows/home/index.html` — markup concreto, mock data de proyectos/chats, `onNavSectionChange`
+- `shared/tokens.css` — todas las clases `.sidebar*`, `.nav-item*`, `.project-*`, `.sidebar-project-actions-*`, `.chat-row`, `.user-chip`, `.tooltip*`, keyframes de animación
+- `shared/shell.js` — `initSidebarCollapse()`, `initProjectExpand()`, `initSectionCollapse()`, `initNavActive()`, `initSidebarProjectActions()`
+- `flows/home/index.html` — markup concreto, mock data de proyectos/chats, `onNavSectionChange`, `.composer-menu-option` (reusado por el popover nuevo)
 - `assets/img/Simetrik_logo.svg`, `Simetrik_isologo.png`, `Cover.png` — assets de marca usados en el sidebar

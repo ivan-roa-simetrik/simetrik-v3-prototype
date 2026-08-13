@@ -51,6 +51,12 @@
   /* Layout */
   --sidebar-w: 260px;
   --sidebar-w-collapsed: 52px;
+
+  /* Scrollbar — thickness única para todo el sitio. Cualquier scrollbar
+     custom (ej. el de .panel-tabs-list en flows/home/index.html) debe
+     referenciar esta variable en vez de hardcodear un px propio, para que
+     nunca varíe entre componentes ni se desactualice si se ajusta acá. */
+  --scrollbar-size: 4px;
 }
 
 * { box-sizing: border-box; }
@@ -70,7 +76,12 @@ ul { list-style: none; }
 button { font-family: inherit; }
 a { color: inherit; text-decoration: none; }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* scrollbar-width: thin es el único valor de Firefox que se acerca a un
+   scrollbar delgado (no soporta px arbitrarios como --scrollbar-size) —
+   se declara acá, una sola vez, para que ningún componente nuevo tenga
+   que acordarse de repetirlo. */
+* { scrollbar-width: thin; }
+::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -120,6 +131,10 @@ a { color: inherit; text-decoration: none; }
 .badge--warning { background: var(--color-warning-tint); color: var(--color-warning); }
 .badge--danger { background: var(--color-danger-tint); color: var(--color-danger); }
 .badge--neutral { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
+/* Square corners instead of the default fully-rounded pill — used where a
+   status tag sits next to a squared avatar (e.g. Projects cards) and a
+   pill would read inconsistent against it. */
+.badge--square { border-radius: var(--radius-sm); }
 
 /* ---------- Shell: sidebar + nav (reusable cross-flujo) ---------- */
 
@@ -276,13 +291,64 @@ a { color: inherit; text-decoration: none; }
 .sidebar-section--collapsible:not(.is-expanded) .sidebar-section-body { grid-template-rows: 0fr; }
 
 .project-item { display: flex; flex-direction: column; }
+
+/* Row + actions button read as ONE hoverable surface, not two. The hover
+   background lives on the wrap (full width, name + ellipsis together) —
+   .project-row and the ellipsis button stay transparent themselves, so
+   there's no gap/seam where the tint stops before reaching the ellipsis.
+   (Previous version put the background on .project-row alone, which only
+   spans its own flex width — the ellipsis sat past its right edge, outside
+   the tinted area, reading as a separate floating control instead of part
+   of the same row.) */
+.project-row-wrap {
+  display: flex; align-items: center; position: relative;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.project-row-wrap:hover { background: var(--color-surface-sunken); }
+.project-row-wrap .project-row { flex: 1; min-width: 0; }
+
 .project-row {
   display: flex; align-items: center; gap: 6px; width: 100%;
   padding: 7px 8px; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer;
   color: var(--color-ink); font-size: 13.5px; font-weight: 500; text-align: left;
   white-space: nowrap; overflow: hidden;
 }
-.project-row:hover { background: var(--color-surface-sunken); }
+
+/* Per-project ellipsis in Pinned: same look/behavior as the ellipsis on the
+   Projects view cards (.project-card-actions-btn), but its own class names —
+   this codebase already got bitten once by sharing a class name between the
+   sidebar and Projects view (.project-row, see docs/home.md) and once between
+   unrelated tab components (.search-tab), so anything new here stays scoped
+   to the sidebar. Actions are no-ops for now (Unpin, Invite members, Archive,
+   Edit info) — only open/close the popover; what each one actually does is
+   still undefined, see docs/sidebar.md. */
+.sidebar-project-actions-wrap { position: relative; flex-shrink: 0; margin-right: 4px; }
+.sidebar-project-actions-btn {
+  width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent;
+  display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.project-row-wrap:hover .sidebar-project-actions-btn, .sidebar-project-actions-btn.is-open { opacity: 1; }
+/* No background of its own on hover — it already sits inside the wrap's
+   tinted surface, adding the same color again would be redundant. Only the
+   icon darkens, same affordance the row's other icons use. */
+.sidebar-project-actions-btn:hover { color: var(--color-ink); }
+.sidebar-project-actions-btn svg, .sidebar-project-actions-btn i { width: 15px; height: 15px; }
+
+/* Reuses .composer-menu-option (defined in flows/home/index.html, the option-row
+   primitive already shared by the Filter and Projects-card-actions popovers)
+   for visual consistency — same convention that popover already follows. */
+.sidebar-project-actions-menu {
+  display: none; position: absolute; top: calc(100% + 4px); right: 0; z-index: 60;
+  width: 170px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); overflow: hidden; padding: 6px;
+}
+.sidebar-project-actions-menu.is-open { display: block; }
+.sidebar-project-actions-menu .composer-menu-option { align-items: center; min-height: 32px; padding: 0 8px; }
+.sidebar-project-actions-menu .opt-icon { margin-top: 0; }
+
 .project-row .folder-icon {
   width: 16px; height: 16px; flex-shrink: 0; color: var(--color-ink-soft); position: relative; opacity: .75;
   transition: opacity var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out);

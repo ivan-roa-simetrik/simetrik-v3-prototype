@@ -31,6 +31,25 @@
   .chat-empty h1 { font-size: 26px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
   .chat-empty p { font-size: 14px; color: var(--color-ink-soft); max-width: 420px; }
 
+  /* Greeting shine: a wave of light sweeps letter-by-letter across the
+     headline, on a loop. No gradient-clip-text (banned) — each letter is
+     its own span that dips toward a lighter tone and back, staggered by a
+     small delay per character, which reads as a highlight passing through.
+     The lit peak stays narrow (only a couple letters lit at once, not a
+     wide pale patch) but wider/slower than the first pass and eased with
+     ease-in-out on both edges so it reads as a smooth glow, not a flicker
+     — then the sweep sits still (full --color-ink) for a ~3s pause before
+     it plays again. */
+  .chat-empty h1 .glow-letter {
+    display: inline-block;
+    animation: letterShine 5.2s ease-in-out infinite;
+  }
+  @keyframes letterShine {
+    0%, 100% { color: var(--color-ink); }
+    2.7% { color: var(--color-ink-faint); }
+    5.4% { color: var(--color-ink); }
+  }
+
   /* Agent icon above the greeting */
   .chat-agent-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
   .chat-agent-icon { width: 48px; height: 48px; object-fit: contain; }
@@ -50,9 +69,14 @@
   }
   .chat-input-shell textarea::placeholder { color: var(--color-ink-faint); }
 
-  /* Project selector: a gray "tab" that sits behind the composer, peeking
+  /* Context selector: a gray "tab" that sits behind the composer, peeking
      out above it (the input shell overlaps its bottom edge). Click opens a
-     popover with search + project list + "New project", above the bar. */
+     popover to attach a Project, App, or Agent as context for the chat
+     about to start — any of the three can be the thing a conversation is
+     "about", so the bar isn't project-only. While nothing is picked, the
+     trigger cycles through "Select a project" / "Select an app" / "Select
+     an agent" (icon + label crossfade, see .project-select-trigger-content
+     below) so the user discovers all three without opening the popover. */
   .project-select-wrap { position: relative; width: 100%; max-width: 620px; display: flex; flex-direction: column; }
   .project-select-dropdown { position: relative; z-index: 1; width: 550px; max-width: 100%; margin: 0 auto; }
   .project-select-bar {
@@ -60,20 +84,29 @@
     padding: 9px 14px 22px; margin-bottom: -14px;
     background: var(--color-surface-sunken); border-radius: var(--radius-lg);
   }
-  /* Once a project is picked, the bar keeps its original size (no shrink/
+  /* Once something is picked, the bar keeps its original size (no shrink/
      centering) — only the label changes and an "x" appears at the far
-     right to clear the selection, reverting the label back to default. */
+     right to clear the selection, reverting to the cycling default. */
   .project-select-bar.has-project .project-select-trigger { color: var(--color-ink-soft); }
   .project-select-trigger {
-    display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0;
+    display: flex; align-items: center; flex: 1; min-width: 0;
     background: none; border: none; padding: 0; font: inherit;
     font-size: 12.5px; font-weight: 500; color: var(--color-ink-faint);
     cursor: pointer; text-align: left;
     transition: color var(--dur-fast) var(--ease-out);
   }
   .project-select-trigger:hover { color: var(--color-ink-soft); }
-  .project-select-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .project-select-trigger svg, .project-select-trigger i { width: 18px; height: 18px; flex-shrink: 0; }
+  /* Icon + label live in their own wrapper so the cycling animation can
+     crossfade both together — a plain opacity fade, no gradient/clip
+     involved, just the two swapped mid-fade like the model picker's icon
+     already does on selection. */
+  .project-select-trigger-content {
+    display: flex; align-items: center; gap: 7px; min-width: 0;
+    transition: opacity 200ms var(--ease-out);
+  }
+  .project-select-trigger-content.is-fading { opacity: 0; }
+  .project-select-trigger-content span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-select-trigger-content svg, .project-select-trigger-content i { width: 18px; height: 18px; flex-shrink: 0; }
   .project-select-clear {
     display: none; align-items: center; justify-content: center; flex-shrink: 0;
     width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
@@ -86,12 +119,12 @@
   .project-select-wrap .chat-input-shell { position: relative; z-index: 2; }
   .project-select-wrap--docked { width: auto; margin: 0 24px 20px; flex-shrink: 0; max-width: none; }
   .project-select-wrap--docked .chat-input-shell--docked { margin: 0; width: 100%; }
-  /* The project selector only makes sense before the conversation starts —
+  /* The context selector only makes sense before the conversation starts —
      once the chat is running (docked composer), the gray bar disappears
      and the composer sits alone, same as before this feature existed. */
   .project-select-wrap--docked .project-select-dropdown { display: none; }
 
-  .composer-menu.project-select-menu { width: 260px; padding: 0; }
+  .composer-menu.project-select-menu { width: 300px; padding: 0; }
   .project-select-search {
     display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-border);
   }
@@ -100,11 +133,18 @@
     border: none; outline: none; background: transparent; font-size: 13px; color: var(--color-ink); width: 100%;
   }
   .project-select-search input::placeholder { color: var(--color-ink-faint); }
-  .project-select-menu .composer-menu-list { padding: 6px; }
-  .project-select-menu .composer-menu-option { padding: 4px 2px; }
-  .project-select-divider { height: 1px; background: var(--color-border); }
-  .project-select-empty-msg { display: none; padding: 14px 12px; font-size: 12.5px; color: var(--color-ink-faint); text-align: center; }
-  .project-select-empty-msg.is-shown { display: block; }
+  /* Category tabs (All/Projects/Apps/Agents): reuses .panel-filter-tab,
+     the same decoupled-from-.search-tab class the chat side panel's own
+     Project/App/Agent picker already uses — same look, independently
+     wired per popover, no shared click handler to collide with. */
+  .project-select-tabs {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    padding: 8px 10px; border-bottom: 1px solid var(--color-border);
+  }
+  /* Reuses .panel-open-results/.panel-open-item (same picker component the
+     side panel uses) — just resized to fit this narrower 260px popover. */
+  .project-select-menu .panel-open-results { height: 220px; padding: 6px; }
+  .project-select-menu .panel-open-item { padding: 6px 8px; }
 
   /* Composer toolbar: Add context · Mode | Model · Voice · Send */
   .composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; gap: 8px; }
@@ -229,14 +269,192 @@
     transition: flex-grow 420ms var(--ease-out), opacity 320ms var(--ease-out);
   }
   .chat-thread.has-panel .chat-side-panel { flex: 1 1 0%; opacity: 1; transition-delay: 0ms, 100ms; }
+  /* "Expand" focus mode — only meaningful once the panel is already open
+     (has-panel). Collapses the conversation column away entirely (reusing
+     the same flex-grow/opacity transition, just pushed further: 370px →
+     0) so .chat-side-panel, already flex:1 1 0% under .has-panel, grows
+     to fill the whole .chat-pane on its own — no separate rule needed for
+     the panel's own width. pointer-events:none keeps the invisible column
+     from swallowing stray clicks/focus while collapsed. */
+  .chat-thread.has-panel.is-panel-expanded .chat-thread-main {
+    flex: 0 0 0%; opacity: 0; border-right-color: transparent; pointer-events: none;
+  }
+
+  /* Side panel content: an "open picker" (nothing open yet — asks what to
+     open) and a tabbed view (>=1 tab open), mutually exclusive via
+     [hidden]. Map isn't a third pickable option here — opening a Project
+     is what renders that project's map view, there's no standalone "Map"
+     entity to list alongside Projects/Apps/Agents. */
+  .chat-side-panel { flex-direction: column; }
+  /* Centered on both axes (matches the title's own centering) — reads as a
+     single centered menu in the middle of the panel, not a form stretched
+     to its full width. Search + filter tabs exist because the underlying
+     lists aren't meant to be exhaustive (e.g. 100 real projects wouldn't
+     all get listed) — the user narrows by typing or by category instead. */
+  .panel-open-picker { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; padding: 32px 20px; overflow-y: auto; }
+  .panel-open-inner { width: 320px; max-width: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .panel-open-picker-title { font-size: 14px; font-weight: 600; color: var(--color-ink); text-align: center; }
+  .panel-open-search {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface);
+  }
+  .panel-open-search i, .panel-open-search svg { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .panel-open-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13px; color: var(--color-ink); font-family: inherit; }
+  .panel-open-search input::placeholder { color: var(--color-ink-faint); }
+  .panel-open-tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  /* Own class instead of reusing .search-tab: the Cmd+K search modal wires
+     a global `document.querySelectorAll('.search-tab')` click handler that
+     would otherwise fire on these too and stomp their active state (same
+     visual look, copied rule-for-rule, but fully decoupled behavior). */
+  .panel-filter-tab {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    font-size: 12.5px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .panel-filter-tab:hover { background: var(--color-surface-sunken); }
+  .panel-filter-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  /* Fixed height, not max-height: the results area needs to be the only
+     thing that visibly changes as you type or switch tabs. With
+     max-height, fewer matches shrink the box, which shrinks
+     .panel-open-inner's total height — and since the picker centers that
+     whole block with justify-content:center, the title/search/tabs above
+     would re-center and visibly shift every keystroke. A fixed height
+     keeps .panel-open-inner's height constant regardless of match count,
+     so only this box's internal scroll content changes, nothing above it
+     moves. */
+  .panel-open-results { width: 100%; height: 280px; overflow-y: auto; display: flex; flex-direction: column; }
+  .panel-open-results-group + .panel-open-results-group { margin-top: 8px; }
+  .panel-open-group-title { font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-ink-faint); padding: 6px 8px; }
+  .panel-open-empty { padding: 20px 8px; text-align: center; font-size: 12.5px; color: var(--color-ink-faint); }
+  /* Wider row than the old fixed-220px list — icon + name + generous
+     padding, matching the Cmd+K search modal's own result rows. */
+  .panel-open-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 8px; border-radius: var(--radius-sm);
+    background: transparent; border: none; cursor: pointer; text-align: left; font: inherit;
+    color: var(--color-ink); transition: background var(--dur-fast) var(--ease-out);
+  }
+  .panel-open-item:hover { background: var(--color-surface-sunken); }
+  .panel-open-item-icon { width: 16px; height: 16px; color: var(--color-ink-soft); flex-shrink: 0; display: flex; }
+  .panel-open-item-icon svg, .panel-open-item-icon i { width: 16px; height: 16px; }
+  .panel-open-item-name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* "+" popover: same search+tabs+results, narrower column since it's a
+     dropdown rather than the full panel. Alignment starts at the trigger's
+     left edge (align-start) — right early on, since the "+" sits near the
+     start of the tab bar with plenty of room to its right. As tabs pile up
+     the "+" travels toward the bar's end; once the popover would overflow
+     the panel's right edge if it kept opening rightward, JS toggles
+     `--end` (updatePanelOpenMenuAlign, called on every tab render) so it
+     opens leftward from the trigger's right edge instead — never pinned
+     to one side, and never clipped/overlapping past the panel's edge. */
+  .composer-menu.panel-open-menu { bottom: auto; top: calc(100% + 6px); left: 0; right: auto; width: 300px; padding: 10px; }
+  .composer-menu.panel-open-menu.panel-open-menu--end { left: auto; right: 0; }
+  /* `display` must only be set here once `.is-open` is also present.
+     `.composer-menu.panel-open-menu` and `.composer-menu.is-open` both have
+     two-class specificity, so whichever is later in the stylesheet always
+     wins outright — this rule sat after `.is-open` and unconditionally set
+     `display: flex`, permanently overriding the open/close toggle. The
+     popover never actually closed; it only looked closed earlier because
+     an unrelated overflow bug was clipping it out of view. Scoping the
+     flex layout to `.is-open` too (three-class specificity) makes it only
+     ever apply together with the real open state, falling back to the
+     base `.composer-menu { display: none }` otherwise. */
+  .composer-menu.panel-open-menu.is-open { display: flex; flex-direction: column; gap: 10px; }
+  .panel-open-menu .panel-open-results { height: 220px; }
+
+  /* Tabs view: bar of opened Project/App tabs + a "+" to reopen the same
+     picker (as a popover this time) and add another tab alongside it. */
+  .panel-tabs { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; }
+  /* Fixed 50px, same as .chat-thread-header/.sidebar-header — so this row
+     lines up horizontally with the chat thread header next door instead of
+     shrinking to its content height and throwing the two columns out of
+     alignment. */
+  /* padding-right: 92px reserves the same space .chat-thread-header
+     already reserves for .chat-panel-actions (two 28px buttons + 8px gap =
+     64px, offset right:20px from the panel edge, plus ~8px buffer — floats
+     `position: absolute` over .chat-pane, so it's never part of this bar's
+     own flex layout and nothing here shrinks to avoid it on its own).
+     Without this, panelTabsList had no reason to stop growing until it hit
+     the panel's true right edge, so with enough tabs the "+" would travel
+     all the way there and end up sitting underneath the toggle buttons.
+     With the reserve, panelTabsList (shrink-to-fit, overflow-x:auto) runs
+     out of room sooner and starts scrolling its tabs internally — "+"
+     settles at a fixed position just past the last visible tab and never
+     crosses into the toggle buttons' space. */
+  .panel-tabs-bar { display: flex; align-items: center; gap: 4px; height: 50px; padding: 0 92px 0 8px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+  /* flex: 1 would stretch this to fill the whole bar — since the tabs
+     inside pack to the left, that left the "+" stranded at the bar's far
+     right edge with a big empty gap instead of sitting right next to the
+     last tab. Shrink-to-fit (no flex-grow) keeps its width to just what
+     the tabs need, so "+" always lands immediately adjacent to whichever
+     tab is currently last, however many are open. max-width caps it so it
+     can still shrink and scroll internally if the tabs alone would
+     overflow the bar. */
+  /* align-self: stretch fills the bar's full 50px height (the bar itself
+     centers its children by default) so this element's own bottom edge
+     lands exactly on .panel-tabs-bar's border-bottom — its horizontal
+     scrollbar, which the browser draws at the bottom of the scrolling
+     element's own box, ends up flush against that line instead of
+     floating mid-bar. Tabs inside stay vertically centered via this
+     element's own align-items: center, independent of its stretched
+     height. */
+  .panel-tabs-list { display: flex; align-items: center; align-self: stretch; gap: 4px; min-width: 0; max-width: 100%; overflow-x: auto; }
+  /* Scrollbar hidden until hover — overrides the global thin-scrollbar
+     rule in tokens.css (always-visible thumb), which reads as clutter on
+     a bar that's mostly not scrolling. Track/thumb stay fully transparent
+     at rest; hovering the tab row reveals the same --color-border-strong
+     thumb used everywhere else, so it only appears when it's actually
+     relevant (about to scroll or mid-scroll). */
+  .panel-tabs-list { scrollbar-color: transparent transparent; }
+  .panel-tabs-list:hover { scrollbar-color: var(--color-border-strong) transparent; }
+  /* height explícito en var(--scrollbar-size) (tokens.css) en vez de
+     confiar en que se herede del `::-webkit-scrollbar` global — así este
+     scrollbar nunca puede quedar más grueso por accidente si algo más en
+     la cascada llega a pisar la regla universal más adelante. */
+  .panel-tabs-list::-webkit-scrollbar { height: var(--scrollbar-size); }
+  .panel-tabs-list::-webkit-scrollbar-thumb { background: transparent; }
+  .panel-tabs-list:hover::-webkit-scrollbar-thumb { background: var(--color-border-strong); }
+  .panel-tab-wrap {
+    display: flex; align-items: center; gap: 2px; flex-shrink: 0; max-width: 180px;
+    padding: 4px 4px 4px 8px; border-radius: var(--radius-sm); background: transparent;
+    color: var(--color-ink-soft); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .panel-tab-wrap:hover { background: var(--color-surface); }
+  /* Neutral gray active state, not primary blue — same criterion already
+     applied to the grid/list view toggle and the panel's own open/close
+     icon: a tab shouldn't carry the same visual weight as the sidebar nav's
+     active item, so it doesn't compete with real navigation. */
+  .panel-tab-wrap.is-active { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .panel-tab { display: flex; align-items: center; gap: 6px; min-width: 0; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+  .panel-tab svg, .panel-tab i { width: 14px; height: 14px; flex-shrink: 0; }
+  .panel-tab span { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .panel-tab-close {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: transparent; border: none;
+    color: inherit; opacity: .6; cursor: pointer; transition: background var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  }
+  .panel-tab-close:hover { background: var(--color-border); opacity: 1; }
+  .panel-tab-close svg, .panel-tab-close i { width: 11px; height: 11px; }
+  .panel-tab-add-wrap { position: relative; flex-shrink: 0; }
+  .panel-tab-add-btn {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .panel-tab-add-btn:hover { background: var(--color-surface); color: var(--color-ink); }
+  .panel-tab-add-btn svg, .panel-tab-add-btn i { width: 15px; height: 15px; }
+  .panel-tab-content { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; color: var(--color-ink-faint); }
 
   /* Chat thread header: chat icon + name, or (when a project was picked
      before starting) project icon + project name / chat icon + chat name. */
   /* Height matches .sidebar-header exactly (50px) so the action icons in
-     both headers — and the floating panel toggle, which shares this same
-     row — line up on the same horizontal line across the whole app. */
+     both headers — and the floating panel actions, which share this same
+     row — line up on the same horizontal line across the whole app.
+     padding-right: 92px clears .chat-panel-actions (two 28px buttons + 8px
+     gap, offset right:20px from the panel edge, plus buffer). */
   .chat-thread-header {
-    display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 56px 0 20px;
+    display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 92px 0 20px;
     border-bottom: 1px solid var(--color-border); flex-shrink: 0;
   }
   .chat-thread-header-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -249,9 +467,13 @@
   /* Belongs to the view (.chat-pane), not the chat column — stays fixed
      top-right of the whole panel regardless of has-panel/collapse state.
      top:11px centers it on the same 50px-tall header row as the sidebar
-     header and the chat thread header (icon center at y=25 in all three). */
+     header and the chat thread header (icon center at y=25 in all three).
+     Both actions (Expand, Hide panel) share this one absolutely-positioned
+     wrapper instead of each button positioning itself — adding a second
+     button here just means adding a flex child, no separate right-offset
+     math to keep in sync. */
+  .chat-panel-actions { position: absolute; top: 11px; right: 20px; z-index: 5; display: flex; align-items: center; gap: 8px; }
   .chat-panel-toggle {
-    position: absolute; top: 11px; right: 20px; z-index: 5;
     width: 28px; height: 28px; border-radius: var(--radius-sm); flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     background: transparent; border: none; color: var(--color-ink-faint); cursor: pointer;
@@ -330,6 +552,21 @@
   .projects-view-header .btn-primary { height: 32px; padding: 0 14px; }
   .projects-view-header .btn-primary svg, .projects-view-header .btn-primary i { width: 14px; height: 14px; }
 
+  .projects-ownership-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+  /* Own class instead of reusing .search-tab: the Cmd+K search modal wires
+     a global `document.querySelectorAll('.search-tab')` click handler that
+     would otherwise fire on these too and stomp their active state — same
+     bug shape .panel-filter-tab was already introduced to avoid, just not
+     applied here yet. Rules copied 1:1 from .search-tab, fully decoupled
+     behavior. */
+  .projects-ownership-tab {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .projects-ownership-tab:hover { background: var(--color-surface-sunken); }
+  .projects-ownership-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+
   /* Search: a single control that morphs between two states — never both
      visible at once. Collapsed = just the outline icon button. Open = the
      button is hidden and an input takes its exact spot, carrying its own
@@ -384,7 +621,10 @@
   }
   .project-view-toggle-btn svg, .project-view-toggle-btn i { width: 15px; height: 15px; }
   .project-view-toggle-btn:hover { color: var(--color-ink); }
-  .project-view-toggle-btn.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  /* Neutral gray active state, not the brand blue — switching between
+     grid/list is a low-stakes view preference, not a primary action, so it
+     shouldn't carry the same visual weight as e.g. an active nav item. */
+  .project-view-toggle-btn.is-active { background: var(--color-surface-sunken); color: var(--color-ink); }
 
   /* Filter: no icon — reads as a label/value pair ("Filter by tag: all")
      with a chevron, closer to a compact select than a button. Multi-select
@@ -417,32 +657,174 @@
   #projectsFilterClear .opt-icon { margin-top: 0; }
 
   .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  /* min-height: 124px is a deliberate, explicit match with
+     .project-skeleton-card's own min-height below — real cards vary a
+     little in height depending on how many tags they have (or whether tags
+     wrap to a second line), but pinning both to the same floor means the
+     skeleton→content swap never visibly shrinks or grows the grid. If this
+     value changes, .project-skeleton-card must change with it. */
   .project-card {
-    border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; background: var(--color-surface);
-    transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+    min-height: 124px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    padding: 16px 16px 4px; background: var(--color-surface);
+    transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
   }
+  /* Hover gives feedback via shadow/border only — background stays white/
+     --color-surface, never tints gray. The actions ellipsis (below)
+     appearing is the other half of the hover affordance. */
   .project-card:hover { box-shadow: var(--shadow-sm); border-color: var(--color-border-strong); }
+  .project-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .project-card-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .project-card-name i, .project-card-name svg { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
   .project-card-name span { font-size: 14px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .project-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
   .project-tag-pill { font-size: 10.5px; font-weight: 600; color: var(--color-ink-faint); background: var(--color-surface-sunken); border-radius: 999px; padding: 2px 8px; }
-  .project-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
-  .project-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+  /* Footer separated from the tags above by a horizontal rule, not just
+     spacing — reads as a distinct "meta" row (status + owner) rather than
+     part of the same content block as the tags.
+     The bulk that read as "wrong padding" across two earlier rounds turned
+     out to be .project-card's own bottom padding (16px) stacking below the
+     footer, not the divider itself — fixed at the source: .project-card is
+     now padding: 16px 16px 4px (bottom shrunk to 4px, top/left/right
+     untouched), per explicit instruction. That frees this footer up to
+     just handle the divider: content keeps the card's normal left/right
+     inset (lines up with the name/tags above, no margin tricks), and only
+     the line itself reaches the card's outer edges via ::before —
+     absolutely positioned, stretched -16px past the footer's own left/
+     right to land exactly on the card's border. */
+  .project-card-footer {
+    position: relative;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 40px; margin-top: 14px;
+  }
+  .project-card-footer::before {
+    content: ''; position: absolute; top: 0; left: -16px; right: -16px;
+    border-top: 1px solid var(--color-border);
+  }
+  /* Square, not circular — matches the sidebar footer avatar's own square
+     treatment (see sidebar.md), not the generic rounded-avatar default. */
+  .project-avatar { width: 24px; height: 24px; border-radius: var(--radius-sm); object-fit: cover; flex-shrink: 0; }
 
   .projects-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
-  .project-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface); transition: background var(--dur-fast) var(--ease-out); }
-  .project-row + .project-row { border-top: 1px solid var(--color-border); }
-  .project-row:hover { background: var(--color-surface-sunken); }
-  .project-row-icon { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
-  .project-row-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .project-row-tags { display: none; align-items: center; gap: 4px; flex-shrink: 0; }
-  @media (min-width: 720px) { .project-row-tags { display: flex; } }
+  /* No background tint on hover here either — same rule as the grid card.
+     The actions ellipsis fading in is the only hover feedback. */
+  .project-list-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface);
+    transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  }
+  .project-list-row + .project-list-row { border-top: 1px solid var(--color-border); }
+  .project-list-row-icon { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .project-list-row-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .project-list-row-tags { display: none; align-items: center; gap: 4px; flex-shrink: 0; }
+  @media (min-width: 720px) { .project-list-row-tags { display: flex; } }
+
+  /* Actions: ellipsis in the card's top-right corner (trailing end of the
+     row in list view), hidden until hover — reusing .composer-menu-option
+     for visual consistency with the Filter popover, but wired via its own
+     lightweight delegated-click system (below in the page script) instead of the
+     composer's data-menu-trigger mechanism, since cards/rows are
+     re-rendered on every filter change and that mechanism only wires
+     elements present at page load. */
+  .project-card-actions-wrap, .project-list-row-actions-wrap { position: relative; flex-shrink: 0; }
+  .project-card-actions-btn, .project-list-row-actions-btn {
+    width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+    opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .project-card:hover .project-card-actions-btn, .project-card-actions-btn.is-open,
+  .project-list-row:hover .project-list-row-actions-btn, .project-list-row-actions-btn.is-open { opacity: 1; }
+  .project-card-actions-btn:hover, .project-list-row-actions-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .project-card-actions-btn svg, .project-card-actions-btn i,
+  .project-list-row-actions-btn svg, .project-list-row-actions-btn i { width: 15px; height: 15px; }
+
+  .project-actions-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    width: 170px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden; padding: 6px;
+    transition: width var(--dur-fast) var(--ease-out);
+  }
+  .project-actions-menu.is-open { display: block; }
+  /* Invite is a second view inside the same popover, not a separate one —
+     avoids a second absolutely-positioned element to keep track of. Wider
+     while showing it (room for the email input), back to 170px otherwise. */
+  .project-actions-menu.is-inviting { width: 240px; }
+  /* Single-line rows, vertically centered and 32px tall — same rhythm as
+     the Filter popover's tag options. */
+  .project-actions-menu .composer-menu-option { align-items: center; min-height: 32px; padding: 0 8px; }
+  .project-actions-menu .opt-icon { margin-top: 0; }
+
+  .project-invite-view { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
+  .project-invite-header { display: flex; align-items: center; gap: 6px; }
+  .project-invite-back {
+    width: 22px; height: 22px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .project-invite-back:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .project-invite-back svg, .project-invite-back i { width: 14px; height: 14px; }
+  .project-invite-title { font-size: 12.5px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-invite-input {
+    width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 7px 9px; font-size: 12.5px; color: var(--color-ink); font-family: inherit; outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .project-invite-input:focus { border-color: var(--color-primary); }
+  .project-invite-input::placeholder { color: var(--color-ink-faint); }
+  /* Reinforces the scoped-access rule from docs/proyecto.md directly in the
+     UI: an invite here only grants access to this one project, not the
+     organization. No role picker yet — the role catalog isn't defined
+     (see proyecto.md → Pendiente/abierto), so this stays a plain email
+     invite rather than guessing at roles that might not match later. */
+  .project-invite-hint { font-size: 11px; color: var(--color-ink-faint); line-height: 1.4; }
+  .project-invite-confirm { font-size: 12.5px; font-weight: 600; color: var(--color-success); text-align: center; padding: 6px 0; }
+  /* Full-width, 32px like every other control in this session's popovers —
+     .btn-primary's own default (10px 16px padding, no explicit height) is
+     sized for a header button, not a compact popover. */
+  .project-invite-view .btn-primary { width: 100%; height: 32px; padding: 0 10px; font-size: 12.5px; }
+  .project-invite-view .btn-primary[disabled] { opacity: .5; cursor: not-allowed; }
 
   .projects-empty {
     border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 32px;
     text-align: center; color: var(--color-ink-faint); font-size: 13.5px;
   }
+
+  /* ---------- Projects loading skeleton ----------
+     Shown for a mock delay (see loadProjectsView/queryProjectsWithLoading
+     in the page script) every time the section is entered AND every time
+     search, tag filters, or the grid/list toggle change what's displayed —
+     simulates each of those re-fetching from a server, not just the
+     initial load. The card/row shells copy .project-card/.project-list-row
+     spacing so the swap-in doesn't jump. Shimmer duration (1.4s) is
+     intentionally outside the 120/200/320ms micro-interaction canon — this
+     is an ambient loading state, not a discrete interaction response. */
+  .projects-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  /* min-height must stay identical to .project-card's own (124px) — see
+     comment there. This is what actually fixes the "skeleton renders
+     smaller than the real card" jump: both are pinned to the same floor
+     instead of each sizing to its own (different) content. */
+  .project-skeleton-card { min-height: 124px; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px 16px 4px; background: var(--color-surface); }
+  .project-skeleton-top { display: flex; align-items: center; gap: 8px; }
+  .project-skeleton-tags { display: flex; gap: 4px; margin-top: 10px; }
+  .project-skeleton-footer { display: flex; align-items: center; justify-content: space-between; height: 40px; margin-top: 14px; border-top: 1px solid var(--color-border); }
+
+  .projects-skeleton-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .project-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface); }
+  .project-skeleton-row + .project-skeleton-row { border-top: 1px solid var(--color-border); }
+
+  .project-skeleton-icon, .project-skeleton-line, .project-skeleton-pill, .project-skeleton-badge, .project-skeleton-avatar {
+    display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes skeletonShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+  .project-skeleton-icon { width: 16px; height: 16px; }
+  .project-skeleton-line { height: 12px; border-radius: 4px; }
+  .project-skeleton-line--name { width: 60%; }
+  .project-skeleton-line--row { flex: 1; max-width: 220px; height: 12px; }
+  .project-skeleton-pill { width: 64px; height: 16px; border-radius: 999px; }
+  .project-skeleton-badge { width: 56px; height: 18px; }
+  .project-skeleton-avatar { width: 24px; height: 24px; }
 
   /* ---------- Search modal (Cmd+K / click the lupa) ---------- */
   .search-modal-backdrop {
@@ -579,39 +961,114 @@
       </button>
       <div class="sidebar-section-body"><div class="sidebar-section-body-inner">
       <ul class="project-list">
-        <li class="project-item is-expanded">
-          <button class="project-row">
-            <span class="folder-icon">
-              <i data-lucide="folder" class="folder-icon-closed"></i>
-              <i data-lucide="folder-open" class="folder-icon-open"></i>
-            </span>
-            <span class="project-name">LATAM Bank Reconciliation</span>
-          </button>
+        <li class="project-item is-expanded" data-project-id="latam-bank-reconciliation">
+          <div class="project-row-wrap">
+            <button class="project-row">
+              <span class="folder-icon">
+                <i data-lucide="folder" class="folder-icon-closed"></i>
+                <i data-lucide="folder-open" class="folder-icon-open"></i>
+              </span>
+              <span class="project-name">LATAM Bank Reconciliation</span>
+            </button>
+            <div class="sidebar-project-actions-wrap">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+                <i data-lucide="more-vertical"></i>
+              </button>
+              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
+                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+                  <span class="opt-icon"><i data-lucide="archive"></i></span>
+                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
+                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
             <a class="chat-row" href="#">July period close</a>
             <a class="chat-row" href="#">Nequi source differences</a>
           </div></div>
         </li>
-        <li class="project-item">
-          <button class="project-row">
-            <span class="folder-icon">
-              <i data-lucide="folder" class="folder-icon-closed"></i>
-              <i data-lucide="folder-open" class="folder-icon-open"></i>
-            </span>
-            <span class="project-name">Q2 Journal Entry Audit</span>
-          </button>
+        <li class="project-item" data-project-id="q2-journal-entry-audit">
+          <div class="project-row-wrap">
+            <button class="project-row">
+              <span class="folder-icon">
+                <i data-lucide="folder" class="folder-icon-closed"></i>
+                <i data-lucide="folder-open" class="folder-icon-open"></i>
+              </span>
+              <span class="project-name">Q2 Journal Entry Audit</span>
+            </button>
+            <div class="sidebar-project-actions-wrap">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+                <i data-lucide="more-vertical"></i>
+              </button>
+              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
+                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+                  <span class="opt-icon"><i data-lucide="archive"></i></span>
+                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
+                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
             <a class="chat-row" href="#">Manual entries review</a>
           </div></div>
         </li>
-        <li class="project-item">
-          <button class="project-row">
-            <span class="folder-icon">
-              <i data-lucide="folder" class="folder-icon-closed"></i>
-              <i data-lucide="folder-open" class="folder-icon-open"></i>
-            </span>
-            <span class="project-name">Q3 Treasury Forecast</span>
-          </button>
+        <li class="project-item" data-project-id="q3-treasury-forecast">
+          <div class="project-row-wrap">
+            <button class="project-row">
+              <span class="folder-icon">
+                <i data-lucide="folder" class="folder-icon-closed"></i>
+                <i data-lucide="folder-open" class="folder-icon-open"></i>
+              </span>
+              <span class="project-name">Q3 Treasury Forecast</span>
+            </button>
+            <div class="sidebar-project-actions-wrap">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+                <i data-lucide="more-vertical"></i>
+              </button>
+              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
+                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+                  <span class="opt-icon"><i data-lucide="archive"></i></span>
+                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
+                </button>
+                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
+                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
             <a class="chat-row" href="#">Base vs. optimistic scenario</a>
           </div></div>
@@ -656,42 +1113,49 @@
 
       <!-- Belongs to the view (chat-pane), not to the chat itself — stays
            anchored top-right regardless of the chat column's width, only
-           shown once the chat thread is active. -->
-      <button type="button" class="chat-panel-toggle tooltip-bottom tooltip-end" id="chatPanelToggle" aria-label="Show panel" data-tooltip="Show panel" hidden>
-        <i data-lucide="panel-right"></i>
-      </button>
+           shown once the chat thread is active. Expand/Restore width and
+           Show/Hide panel share one wrapper (.chat-panel-actions) so a
+           second action doesn't need its own right-offset math — see
+           .chat-panel-actions in <style>. -->
+      <div class="chat-panel-actions">
+        <button type="button" class="chat-panel-toggle tooltip-bottom tooltip-end" id="chatPanelExpandToggle" aria-label="Expand" data-tooltip="Expand" hidden>
+          <i data-lucide="maximize-2"></i>
+        </button>
+        <button type="button" class="chat-panel-toggle tooltip-bottom tooltip-end" id="chatPanelToggle" aria-label="Show panel" data-tooltip="Show panel" hidden>
+          <i data-lucide="panel-right"></i>
+        </button>
+      </div>
 
       <!-- Empty / greeting state -->
       <div class="chat-empty" id="chatEmpty">
         <div class="chat-agent-icon-wrap">
           <img src="../../assets/img/simetrik-agent-icon.png" alt="" class="chat-agent-icon" />
         </div>
-        <h1>What do you want to build today?</h1>
-        <p>Tell me the financial scenario and we'll build the project, the artifact, or the agent together.</p>
+        <h1 id="chatGreetingHeadline" aria-label="What do you want to build today?">What do you want to build today?</h1>
+        <p>Tell me the financial scenario and we'll build the project, the app, or the agent together.</p>
         <div class="project-select-wrap">
           <div class="composer-dropdown project-select-dropdown">
             <div class="project-select-bar" data-project-bar="empty">
               <button type="button" class="project-select-trigger" data-menu-trigger="project-empty">
-                <i data-lucide="folder"></i>
-                <span data-project-label>Select project</span>
+                <span class="project-select-trigger-content" data-context-content="empty">
+                  <i data-lucide="folder"></i>
+                  <span>Select a project</span>
+                </span>
               </button>
-              <button type="button" class="project-select-clear" data-project-clear="empty" aria-label="Remove project" data-tooltip="Remove project"><i data-lucide="x"></i></button>
+              <button type="button" class="project-select-clear" data-project-clear="empty" aria-label="Remove selection" data-tooltip="Remove selection"><i data-lucide="x"></i></button>
             </div>
             <div class="composer-menu project-select-menu" id="projectMenu-empty" data-menu="project-empty">
               <div class="project-select-search">
                 <i data-lucide="search"></i>
-                <input type="text" placeholder="Search projects" data-project-search="empty" />
+                <input type="text" placeholder="Search projects, apps, agents…" data-context-search="empty" />
               </div>
-              <div class="composer-menu-list" data-project-list="empty">
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="LATAM Bank Reconciliation"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">LATAM Bank Reconciliation</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q2 Journal Entry Audit"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q2 Journal Entry Audit</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q3 Treasury Forecast"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q3 Treasury Forecast</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+              <div class="project-select-tabs" data-context-tabs="empty">
+                <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+                <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+                <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+                <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
               </div>
-              <div class="project-select-empty-msg" data-project-empty="empty">No projects found</div>
-              <div class="project-select-divider"></div>
-              <div class="composer-menu-list">
-                <button type="button" class="composer-menu-option" data-project-new="empty"><span class="opt-icon"><i data-lucide="plus"></i></span><span class="opt-body"><span class="opt-title">New project</span></span></button>
-              </div>
+              <div class="panel-open-results" data-context-results="empty"></div>
             </div>
           </div>
 
@@ -762,7 +1226,7 @@
         </div>
         <div class="chat-suggestions">
           <button class="suggestion-chip" data-prompt="Build a July bank reconciliation summary for LATAM">Create a reconciliation project</button>
-          <button class="suggestion-chip" data-prompt="Show me a sample artifact with the status of my sources">Generate a sample artifact</button>
+          <button class="suggestion-chip" data-prompt="Show me a sample app with the status of my sources">Generate a sample app</button>
           <button class="suggestion-chip" data-prompt="I want to design an agent that checks differences every day">Design an agent</button>
         </div>
       </div>
@@ -786,26 +1250,25 @@
           <div class="composer-dropdown project-select-dropdown">
             <div class="project-select-bar" data-project-bar="docked">
               <button type="button" class="project-select-trigger" data-menu-trigger="project-docked">
-                <i data-lucide="folder"></i>
-                <span data-project-label>Select project</span>
+                <span class="project-select-trigger-content" data-context-content="docked">
+                  <i data-lucide="folder"></i>
+                  <span>Select a project</span>
+                </span>
               </button>
-              <button type="button" class="project-select-clear" data-project-clear="docked" aria-label="Remove project" data-tooltip="Remove project"><i data-lucide="x"></i></button>
+              <button type="button" class="project-select-clear" data-project-clear="docked" aria-label="Remove selection" data-tooltip="Remove selection"><i data-lucide="x"></i></button>
             </div>
             <div class="composer-menu project-select-menu" id="projectMenu-docked" data-menu="project-docked">
               <div class="project-select-search">
                 <i data-lucide="search"></i>
-                <input type="text" placeholder="Search projects" data-project-search="docked" />
+                <input type="text" placeholder="Search projects, apps, agents…" data-context-search="docked" />
               </div>
-              <div class="composer-menu-list" data-project-list="docked">
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="LATAM Bank Reconciliation"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">LATAM Bank Reconciliation</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q2 Journal Entry Audit"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q2 Journal Entry Audit</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
-                <button type="button" class="composer-menu-option composer-menu-option--model" data-project="Q3 Treasury Forecast"><span class="opt-left"><span class="opt-icon"><i data-lucide="folder"></i></span><span class="opt-body"><span class="opt-title">Q3 Treasury Forecast</span></span></span><span class="opt-check"><i data-lucide="check"></i></span></button>
+              <div class="project-select-tabs" data-context-tabs="docked">
+                <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+                <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+                <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+                <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
               </div>
-              <div class="project-select-empty-msg" data-project-empty="docked">No projects found</div>
-              <div class="project-select-divider"></div>
-              <div class="composer-menu-list">
-                <button type="button" class="composer-menu-option" data-project-new="docked"><span class="opt-icon"><i data-lucide="plus"></i></span><span class="opt-body"><span class="opt-title">New project</span></span></button>
-              </div>
+              <div class="panel-open-results" data-context-results="docked"></div>
             </div>
           </div>
 
@@ -874,10 +1337,57 @@
         </div>
       </div>
       </div>
-      <!-- Side panel: empty for now, opened via the panel-right toggle in
-           the chat header. Content (Project / Map / App) still to be
-           defined — intentionally left blank, no picker implemented yet. -->
-      <div class="chat-side-panel" id="chatSidePanel"></div>
+      <!-- Side panel: opened via the panel-right toggle in the chat header.
+           Two states, mutually exclusive via [hidden]: the open picker
+           (nothing open yet — "what do you want to open?", search + filter
+           tabs over Projects/Apps/Agents) and the tabs view (>=1 tab open).
+           Map isn't a separate pickable option — opening a Project is what
+           renders that project's map view internally, there's no
+           standalone "Map" entity. Tab content is a generic placeholder for
+           now — real Project/App/Agent views are a later iteration. -->
+      <div class="chat-side-panel" id="chatSidePanel">
+        <div class="panel-open-picker" id="panelOpenPicker">
+          <div class="panel-open-inner">
+            <p class="panel-open-picker-title">What do you want to open?</p>
+            <div class="panel-open-search">
+              <i data-lucide="search"></i>
+              <input type="text" id="panelOpenPickerSearch" placeholder="Search projects, apps, agents…" />
+            </div>
+            <div class="panel-open-tabs" id="panelOpenPickerTabs">
+              <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+              <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+              <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+              <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
+            </div>
+            <div class="panel-open-results" id="panelOpenPickerResults"></div>
+          </div>
+        </div>
+
+        <div class="panel-tabs" id="panelTabs" hidden>
+          <div class="panel-tabs-bar">
+            <div class="panel-tabs-list" id="panelTabsList"></div>
+            <div class="composer-dropdown panel-tab-add-wrap">
+              <button type="button" class="panel-tab-add-btn tooltip-bottom" data-menu-trigger="panel-open" aria-label="Open project, app, or agent" data-tooltip="Open project, app, or agent">
+                <i data-lucide="plus"></i>
+              </button>
+              <div class="composer-menu panel-open-menu" id="panelOpenMenu" data-menu="panel-open">
+                <div class="panel-open-search">
+                  <i data-lucide="search"></i>
+                  <input type="text" id="panelOpenMenuSearch" placeholder="Search projects, apps, agents…" />
+                </div>
+                <div class="panel-open-tabs" id="panelOpenMenuTabs">
+                  <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+                  <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+                  <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+                  <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
+                </div>
+                <div class="panel-open-results" id="panelOpenMenuResults"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-tab-content" id="panelTabContent"></div>
+        </div>
+      </div>
       </div>
 
       <!-- Projects view: sidebar nav "Projects" opens this instead of a
@@ -913,7 +1423,7 @@
                   <i data-lucide="x"></i>
                 </button>
               </div>
-              <button type="button" class="projects-search-btn" id="projectsSearchToggle" aria-label="Search projects" data-tooltip="Search">
+              <button type="button" class="projects-search-btn tooltip-bottom" id="projectsSearchToggle" aria-label="Search projects" data-tooltip="Search">
                 <i data-lucide="search"></i>
               </button>
               <div class="composer-dropdown">
@@ -934,13 +1444,65 @@
                 </div>
               </div>
               <div class="project-view-toggle">
-                <button type="button" class="project-view-toggle-btn" id="projectsGridBtn" aria-label="Grid view" data-tooltip="Grid view"><i data-lucide="layout-grid"></i></button>
-                <button type="button" class="project-view-toggle-btn" id="projectsListBtn" aria-label="List view" data-tooltip="List view"><i data-lucide="list"></i></button>
+                <button type="button" class="project-view-toggle-btn tooltip-bottom" id="projectsGridBtn" aria-label="Grid view" data-tooltip="Grid view"><i data-lucide="layout-grid"></i></button>
+                <button type="button" class="project-view-toggle-btn tooltip-bottom" id="projectsListBtn" aria-label="List view" data-tooltip="List view"><i data-lucide="list"></i></button>
               </div>
               <button type="button" class="btn-primary" id="newProjectViewBtn">
                 <i data-lucide="plus"></i> New project
               </button>
             </div>
+          </div>
+
+          <!-- Ownership filter: All / Created by you / Shared projects.
+               .projects-ownership-tab copies .search-tab's visual rules
+               (same pill/active-tint styling as the Cmd+K search modal's
+               category tabs — same kind of interaction, a real content
+               filter, so it keeps the primary-blue active state) but is a
+               fully separate class: the search modal's own global
+               `.search-tab` click wiring would otherwise also fire on
+               these and stomp their active state (bug found 2026-08-13 —
+               see CSS comment above .projects-ownership-tab). -->
+          <div class="projects-ownership-tabs" id="projectsOwnershipTabs">
+            <button type="button" class="projects-ownership-tab is-active" data-ownership="all">All</button>
+            <button type="button" class="projects-ownership-tab" data-ownership="you">Created by you</button>
+            <button type="button" class="projects-ownership-tab" data-ownership="shared">Shared projects</button>
+          </div>
+
+          <!-- Loading skeleton: shown briefly every time the Projects
+               section is entered (mock "under request" delay, see
+               loadProjectsView), never on re-filtering already-loaded
+               data. Matches whichever view mode (grid/list) is active so
+               the shapes it hints at are the ones about to render. -->
+          <div class="projects-skeleton-grid" id="projectsSkeletonGrid" hidden>
+            <div class="project-skeleton-card">
+              <div class="project-skeleton-top">
+                <span class="project-skeleton-icon"></span>
+                <span class="project-skeleton-line project-skeleton-line--name"></span>
+              </div>
+              <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            </div>
+            <div class="project-skeleton-card">
+              <div class="project-skeleton-top">
+                <span class="project-skeleton-icon"></span>
+                <span class="project-skeleton-line project-skeleton-line--name"></span>
+              </div>
+              <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            </div>
+            <div class="project-skeleton-card">
+              <div class="project-skeleton-top">
+                <span class="project-skeleton-icon"></span>
+                <span class="project-skeleton-line project-skeleton-line--name"></span>
+              </div>
+              <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            </div>
+          </div>
+          <div class="projects-skeleton-list" id="projectsSkeletonList" hidden>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
           </div>
 
           <div class="projects-grid" id="projectsGrid"></div>
@@ -979,6 +1541,22 @@
   const chatThread = document.getElementById('chatThread');
   const chatMessages = document.getElementById('chatMessages');
   const chatPane = document.getElementById('chatPane');
+
+  // Greeting shine: wrap each letter of the headline in its own span so the
+  // CSS animation (.glow-letter) can stagger a small delay per character —
+  // that stagger is what makes it read as a wave sweeping across the text
+  // instead of the whole line pulsing at once. Spaces are wrapped too (kept
+  // as a literal space) just to preserve layout/spacing exactly.
+  (function initGreetingShine() {
+    const headline = document.getElementById('chatGreetingHeadline');
+    if (!headline) return;
+    const text = headline.textContent;
+    const staggerMs = 60;
+    headline.innerHTML = text
+      .split('')
+      .map((char, i) => `<span class="glow-letter" style="animation-delay:${i * staggerMs}ms">${char === ' ' ? '&nbsp;' : char}</span>`)
+      .join('');
+  })();
 
   // ---------- Composer: mode/model dropdowns + voice dictation ----------
   // First version per the flows/build reference: full toolbar (Add context,
@@ -1045,60 +1623,12 @@
       if (iconSlot && sourceIcon) iconSlot.innerHTML = sourceIcon.innerHTML;
     }
 
-    menu.querySelectorAll('.composer-menu-option[data-project]').forEach((option) => {
-      option.addEventListener('click', () => {
-        menu.querySelectorAll('.composer-menu-option[data-project]').forEach((o) => o.classList.remove('is-selected'));
-        option.classList.add('is-selected');
-        const trigger = document.querySelector(`[data-menu-trigger="${menu.dataset.menu}"]`);
-        const label = trigger && trigger.querySelector('[data-project-label]');
-        if (label) label.textContent = option.dataset.project;
-        const bar = trigger && trigger.closest('.project-select-bar');
-        if (bar) bar.classList.add('has-project');
-        menu.classList.remove('is-open');
-      });
-    });
   });
 
-  // Project selector: live search filters the project list, "New project"
-  // just closes the popover for now (no real project-creation flow yet —
-  // matches the sidebar's own "+" New Project button, also a no-op today).
-  document.querySelectorAll('[data-project-search]').forEach((input) => {
-    const suffix = input.dataset.projectSearch;
-    const list = document.querySelector(`[data-project-list="${suffix}"]`);
-    const emptyMsg = document.querySelector(`[data-project-empty="${suffix}"]`);
-    if (!list) return;
-    input.addEventListener('click', (e) => e.stopPropagation());
-    input.addEventListener('input', () => {
-      const query = input.value.trim().toLowerCase();
-      let visibleCount = 0;
-      list.querySelectorAll('[data-project]').forEach((option) => {
-        const match = option.dataset.project.toLowerCase().includes(query);
-        option.style.display = match ? '' : 'none';
-        if (match) visibleCount++;
-      });
-      if (emptyMsg) emptyMsg.classList.toggle('is-shown', visibleCount === 0);
-    });
-  });
-
-  document.querySelectorAll('[data-project-new]').forEach((btn) => {
-    btn.addEventListener('click', () => closeAllComposerMenus(null));
-  });
-
-  // Clearing a selected project ("x" on the badge) reverts the bar back to
-  // its full-width "Select project" state and clears the menu's selection.
-  document.querySelectorAll('[data-project-clear]').forEach((clearBtn) => {
-    const suffix = clearBtn.dataset.projectClear;
-    clearBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const bar = clearBtn.closest('.project-select-bar');
-      const trigger = document.querySelector(`[data-menu-trigger="project-${suffix}"]`);
-      const label = trigger && trigger.querySelector('[data-project-label]');
-      if (label) label.textContent = 'Select project';
-      if (bar) bar.classList.remove('has-project');
-      const menu = document.querySelector(`.composer-menu[data-menu="project-${suffix}"]`);
-      if (menu) menu.querySelectorAll('.composer-menu-option[data-project]').forEach((o) => o.classList.remove('is-selected'));
-    });
-  });
+  // Composer context selector (cycling "Select a project/app/agent" bar,
+  // tabs + search popover, clear "x") is wired further down, once
+  // PROJECTS_DATA / PANEL_APPS_DATA / PANEL_AGENTS_DATA exist — see
+  // initContextSelector().
 
   // Voice dictation: real mic permission, live audio-reactive waveform, real
   // speech-to-text via the Web Speech API where the browser supports it.
@@ -1114,21 +1644,27 @@
     return ctx;
   }
 
+  // Matches the reference's drawVoiceWaveform exactly: thin vertical gray
+  // lines (not filled brand-colored bars), one per "slot" across the full
+  // canvas width, stroked from the vertical center outward on each frame.
   function drawVoiceWaveform(ctx, canvas, values) {
     const rect = canvas.getBoundingClientRect();
     const w = rect.width, h = rect.height;
+    const barCount = values.length;
+    const slot = w / barCount;
     ctx.clearRect(0, 0, w, h);
-    const gap = 3;
-    const barWidth = (w - gap * (values.length - 1)) / values.length;
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() || '#5B4FE9';
+    ctx.strokeStyle = '#9CA3AF';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     values.forEach((v, i) => {
-      const barH = Math.max(3, v * h);
-      const x = i * (barWidth + gap);
-      const y = (h - barH) / 2;
-      const r = Math.min(2, barWidth / 2);
+      const barHeight = Math.max(2, v * h);
+      const x = i * slot + slot / 2;
+      const yTop = (h - barHeight) / 2;
+      const yBottom = yTop + barHeight;
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(x, y, barWidth, barH, r); else ctx.rect(x, y, barWidth, barH);
-      ctx.fill();
+      ctx.moveTo(x, yTop);
+      ctx.lineTo(x, yBottom);
+      ctx.stroke();
     });
   }
 
@@ -1140,9 +1676,19 @@
 
     voiceRow.classList.add('is-active');
     if (micBtn) micBtn.classList.add('is-listening');
+    // While capturing, the voice row fully replaces the toolbar and the
+    // textarea (Add context / Model / mic / send all hide) — same as the
+    // reference's showVoiceRow(true): only the waveform + cancel/send stay.
+    const shell = textarea.closest('.chat-input-shell');
+    const toolbar = shell && shell.querySelector('.composer-toolbar');
+    if (toolbar) toolbar.hidden = true;
+    textarea.hidden = true;
     const ctx = initVoiceCanvas(canvas);
-    const barCount = 32;
-    let values = new Array(barCount).fill(0.08);
+    // 90 bars + fftSize 256 matches the reference's density exactly — the
+    // waveform reads as a continuous, granular line rather than a handful
+    // of chunky bars.
+    const barCount = 90;
+    let values = new Array(barCount).fill(0.02);
     drawVoiceWaveform(ctx, canvas, values);
 
     let stream, audioCtx, analyser, raf;
@@ -1150,12 +1696,13 @@
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
+      analyser.fftSize = 256;
       audioCtx.createMediaStreamSource(stream).connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
+      const step = Math.max(1, Math.floor(data.length / barCount));
       const tick = () => {
         analyser.getByteFrequencyData(data);
-        values = Array.from({ length: barCount }, (_, i) => data[i % data.length] / 255);
+        values = Array.from({ length: barCount }, (_, i) => data[i * step] / 255);
         drawVoiceWaveform(ctx, canvas, values);
         raf = requestAnimationFrame(tick);
       };
@@ -1191,6 +1738,13 @@
     const micBtn = document.querySelector(`[data-mic-trigger="${suffix}"]`);
     if (voiceRow) voiceRow.classList.remove('is-active');
     if (micBtn) micBtn.classList.remove('is-listening');
+
+    // Restore the toolbar + textarea that startDictation hid.
+    const textarea = document.getElementById(`${suffix}Input`);
+    const shell = textarea && textarea.closest('.chat-input-shell');
+    const toolbar = shell && shell.querySelector('.composer-toolbar');
+    if (toolbar) toolbar.hidden = false;
+    if (textarea) textarea.hidden = false;
 
     const state = voiceState[suffix];
     if (!state) return;
@@ -1310,11 +1864,19 @@
 
     chatLabel.textContent = deriveChatTitle(firstPrompt);
 
-    const emptyBar = document.querySelector('[data-project-bar="empty"]');
-    const hasProject = emptyBar && emptyBar.classList.contains('has-project');
-    if (hasProject) {
-      const label = emptyBar.querySelector('[data-project-label]');
-      projectLabel.textContent = label ? label.textContent : '';
+    // Whatever was attached in the empty-state composer (project, app, or
+    // agent — contextState is defined further down, alongside
+    // initContextSelector()) shows here with its matching icon.
+    const selected = contextState.empty && contextState.empty.selected;
+    if (selected) {
+      projectLabel.textContent = selected.name;
+      const iconEl = projectItem.querySelector('svg, i');
+      if (iconEl) {
+        const fresh = document.createElement('i');
+        fresh.setAttribute('data-lucide', PANEL_OPEN_ICONS[selected.type] || 'folder');
+        iconEl.replaceWith(fresh);
+        if (window.lucide) lucide.createIcons();
+      }
       projectItem.hidden = false;
       sep.hidden = false;
     } else {
@@ -1327,6 +1889,7 @@
     chatEmpty.hidden = true;
     chatThread.hidden = false;
     chatPanelToggle.hidden = false;
+    chatPanelExpandToggle.hidden = false;
     updateChatThreadHeader(firstPrompt);
     addMessage('user', firstPrompt);
     showTyping();
@@ -1383,22 +1946,66 @@
     chatThread.hidden = true;
     chatEmpty.hidden = false;
     chatPanelToggle.hidden = true;
+    chatPanelExpandToggle.hidden = true;
     chatMessages.innerHTML = '';
     emptyInput.value = '';
     updateSendButtonIcon(emptyInput, emptySendBtn);
     chatThread.classList.remove('has-panel');
+    setPanelExpanded(false);
+    resetPanelTabs();
+    clearContext('empty');
   });
 
   // Right side panel: collapses the conversation column to 370px and opens
-  // an empty panel next to it. What goes in that panel (Project / Map /
-  // App) is still to be defined — intentionally left blank for now. The
-  // toggle icon stays neutral gray in both states, open or closed.
+  // a panel next to it — either the open picker (nothing open yet) or the
+  // tabs view (see "Chat side panel" section below for the picker/tabs
+  // mechanism itself). The toggle icon stays neutral gray in both states,
+  // open or closed.
   const chatPanelToggle = document.getElementById('chatPanelToggle');
   chatPanelToggle.addEventListener('click', () => {
     const isOpen = chatThread.classList.toggle('has-panel');
     const label = isOpen ? 'Hide panel' : 'Show panel';
     chatPanelToggle.setAttribute('aria-label', label);
     chatPanelToggle.setAttribute('data-tooltip', label);
+    // Closing the panel entirely makes "expanded" meaningless (nothing
+    // left to expand) — fold it back and restore the sidebar rather than
+    // leaving it force-collapsed with no visible reason why.
+    if (!isOpen && chatThread.classList.contains('is-panel-expanded')) setPanelExpanded(false);
+  });
+
+  // "Expand" / "Restore width": focus mode for the side panel. Collapses
+  // the conversation column away (.is-panel-expanded, see <style>) so the
+  // panel takes the whole .chat-pane, and force-collapses the app's nav
+  // sidebar too (same .is-collapsed class/mechanism as its own toggle in
+  // shell.js) so nothing else competes for attention. Remembers whether
+  // the sidebar was already collapsed beforehand, so "Restore width" only
+  // re-expands it if Expand was the one that collapsed it — a user who'd
+  // deliberately collapsed the sidebar first doesn't get it reopened for
+  // them.
+  const chatPanelExpandToggle = document.getElementById('chatPanelExpandToggle');
+  let sidebarWasCollapsedBeforeExpand = false;
+
+  function setPanelExpanded(expanded) {
+    const sidebar = document.getElementById('sidebar');
+    if (expanded) {
+      sidebarWasCollapsedBeforeExpand = sidebar ? sidebar.classList.contains('is-collapsed') : false;
+      if (sidebar) sidebar.classList.add('is-collapsed');
+      chatThread.classList.add('is-panel-expanded');
+      chatPanelExpandToggle.innerHTML = '<i data-lucide="minimize-2"></i>';
+      chatPanelExpandToggle.setAttribute('aria-label', 'Restore width');
+      chatPanelExpandToggle.setAttribute('data-tooltip', 'Restore width');
+    } else {
+      if (sidebar && !sidebarWasCollapsedBeforeExpand) sidebar.classList.remove('is-collapsed');
+      chatThread.classList.remove('is-panel-expanded');
+      chatPanelExpandToggle.innerHTML = '<i data-lucide="maximize-2"></i>';
+      chatPanelExpandToggle.setAttribute('aria-label', 'Expand');
+      chatPanelExpandToggle.setAttribute('data-tooltip', 'Expand');
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+
+  chatPanelExpandToggle.addEventListener('click', () => {
+    setPanelExpanded(!chatThread.classList.contains('is-panel-expanded'));
   });
 
   // Apps / Agents: empty states for sections to be built in a later iteration
@@ -1419,19 +2026,422 @@
   // Reuses the 3 mock projects already seeded in Pinned/composer/search.
   // Tags and status (Production/Draft) are new mock metadata, invented for
   // this view only — no other part of the prototype reads them yet.
+  // `pinned` starts true for all 3 because that's literally their current
+  // state in the sidebar (every mock project is already listed under
+  // Pinned there — there's no separate "unpinned projects" bucket anywhere
+  // in this prototype yet).
+  // `owner: 'you'` = created by the current user, `'shared'` = shared to
+  // them by someone else — drives the "All / Created by you / Shared
+  // projects" tabs below the header. Mock split: 2 owned, 1 shared, purely
+  // to make both filters return something non-empty in the demo.
   const PROJECTS_DATA = [
-    { name: 'LATAM Bank Reconciliation', status: 'production', tags: ['source:bank-statement', 'region:LATAM'] },
-    { name: 'Q2 Journal Entry Audit', status: 'production', tags: ['journal-entry', 'period:Q2'] },
-    { name: 'Q3 Treasury Forecast', status: 'draft', tags: ['period:Q3'] },
+    { id: 'latam-bank-reconciliation', name: 'LATAM Bank Reconciliation', status: 'production', tags: ['source:bank-statement', 'region:LATAM'], pinned: true, archived: false, owner: 'you' },
+    { id: 'q2-journal-entry-audit', name: 'Q2 Journal Entry Audit', status: 'production', tags: ['journal-entry', 'period:Q2'], pinned: true, archived: false, owner: 'you' },
+    { id: 'q3-treasury-forecast', name: 'Q3 Treasury Forecast', status: 'draft', tags: ['period:Q3'], pinned: true, archived: false, owner: 'shared' },
   ];
   let projectsSearchTerm = '';
   let projectsViewMode = 'grid';
   let projectsActiveTags = new Set();
+  let projectsOwnershipFilter = 'all';
+
+  function findProjectById(id) {
+    return PROJECTS_DATA.find((p) => p.id === id);
+  }
+
+  // The sidebar's Pinned list is static markup (not data-driven), so
+  // syncing to it means finding the matching <li class="project-item"> by
+  // its visible name — the same names are shared across Pinned/composer/
+  // search/this view by convention, not by a shared data source.
+  function findSidebarPinnedItem(projectName) {
+    return Array.from(document.querySelectorAll('.project-item')).find((item) => {
+      const nameEl = item.querySelector('.project-name');
+      return nameEl && nameEl.textContent.trim() === projectName;
+    });
+  }
+
+  // ---------- Chat side panel: Project/App/Agent picker + tabs ----------
+  // Reuses PROJECTS_DATA (above) for the Projects list. Apps and Agents
+  // have their own small mock lists here, independent of the Search
+  // modal's SEARCH_DATA.apps/.agents (same names, kept in sync by
+  // convention — not a shared data source, same criterion already used for
+  // PROJECTS_DATA vs. the sidebar's Pinned markup). Map isn't listed:
+  // opening a Project is what renders that project's map view, there's no
+  // separate "Map" entity to pick.
+  const PANEL_APPS_DATA = [
+    { id: 'slack', name: 'Slack' },
+    { id: 'snowflake', name: 'Snowflake' },
+    { id: 'google-drive', name: 'Google Drive' },
+  ];
+  const PANEL_AGENTS_DATA = [
+    { id: 'reconciliation-agent', name: 'Reconciliation Agent' },
+    { id: 'anomaly-watcher', name: 'Anomaly Watcher' },
+    { id: 'period-close-assistant', name: 'Period Close Assistant' },
+  ];
+  const PANEL_OPEN_ICONS = { project: 'folder', app: 'layout-grid', agent: 'bot' };
+  const PANEL_OPEN_LABELS = { project: 'Projects', app: 'Apps', agent: 'Agents' };
+  function panelOpenDataFor(type) {
+    return type === 'project' ? PROJECTS_DATA : type === 'app' ? PANEL_APPS_DATA : PANEL_AGENTS_DATA;
+  }
+
+  let panelTabsState = []; // { key: 'project:id' | 'app:id' | 'agent:id', type, id, name }
+  let panelActiveKey = null;
+
+  const panelOpenPicker = document.getElementById('panelOpenPicker');
+  const panelTabsEl = document.getElementById('panelTabs');
+  const panelTabsList = document.getElementById('panelTabsList');
+  const panelTabContent = document.getElementById('panelTabContent');
+  const panelOpenMenu = document.getElementById('panelOpenMenu');
+
+  function findPanelItem(type, id) {
+    return panelOpenDataFor(type).find((it) => it.id === id);
+  }
+
+  // Search + category tabs over Projects/Apps/Agents, duplicated across two
+  // scopes — the full-panel picker (nothing open yet) and the "+" popover
+  // (adding another tab) — each with its own independent term/tab state,
+  // since a real list (e.g. 100 projects) shouldn't just be dumped flat;
+  // the user narrows it by typing or by category instead.
+  const panelOpenScopes = {
+    picker: { term: '', tab: 'all', search: document.getElementById('panelOpenPickerSearch'), tabsWrap: document.getElementById('panelOpenPickerTabs'), results: document.getElementById('panelOpenPickerResults') },
+    menu: { term: '', tab: 'all', search: document.getElementById('panelOpenMenuSearch'), tabsWrap: document.getElementById('panelOpenMenuTabs'), results: document.getElementById('panelOpenMenuResults') },
+  };
+
+  function renderPanelOpenResults(scopeKey) {
+    const scope = panelOpenScopes[scopeKey];
+    const term = scope.term.trim().toLowerCase();
+    const types = scope.tab === 'all' ? ['project', 'app', 'agent'] : [scope.tab];
+    let html = '';
+    let total = 0;
+    types.forEach((type) => {
+      const items = panelOpenDataFor(type).filter((it) => it.name.toLowerCase().includes(term));
+      if (!items.length) return;
+      total += items.length;
+      html += '<div class="panel-open-results-group">';
+      if (scope.tab === 'all') html += `<div class="panel-open-group-title">${PANEL_OPEN_LABELS[type]}</div>`;
+      items.forEach((item) => {
+        html += `
+          <button type="button" class="panel-open-item" data-panel-open="${type}:${item.id}">
+            <span class="panel-open-item-icon"><i data-lucide="${PANEL_OPEN_ICONS[type]}"></i></span>
+            <span class="panel-open-item-name">${item.name}</span>
+          </button>`;
+      });
+      html += '</div>';
+    });
+    scope.results.innerHTML = total ? html : `<div class="panel-open-empty">No results for "${term}"</div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function wirePanelOpenScope(scopeKey) {
+    const scope = panelOpenScopes[scopeKey];
+    scope.search.addEventListener('input', () => {
+      scope.term = scope.search.value;
+      renderPanelOpenResults(scopeKey);
+    });
+    scope.tabsWrap.querySelectorAll('.panel-filter-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        scope.tab = tab.dataset.filter;
+        scope.tabsWrap.querySelectorAll('.panel-filter-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
+        renderPanelOpenResults(scopeKey);
+      });
+    });
+  }
+
+  // Rebuilt fresh on every render (tabs never scroll horizontally in
+  // practice at this prototype's scale) — the "+" trigger is a plain
+  // sibling of panelTabsList in the tabs bar, not a member of the list
+  // itself, so it's always immediately after whichever tab is currently
+  // last: new tabs are pushed to the end of panelTabsState, and the "+"
+  // stays fixed right after the list, never inside its own scrollable row
+  // (nesting it there previously made its popover get clipped by the
+  // list's overflow-x:auto, which implicitly makes overflow-y auto too —
+  // that's what was hiding the popover).
+  function renderPanelTabsBar() {
+    panelTabsList.innerHTML = panelTabsState.map((tab) => `
+      <div class="panel-tab-wrap${tab.key === panelActiveKey ? ' is-active' : ''}">
+        <button type="button" class="panel-tab" data-panel-tab="${tab.key}">
+          <i data-lucide="${PANEL_OPEN_ICONS[tab.type]}"></i><span>${tab.name}</span>
+        </button>
+        <button type="button" class="panel-tab-close" data-panel-tab-close="${tab.key}" aria-label="Close ${tab.name}"><i data-lucide="x"></i></button>
+      </div>
+    `).join('');
+    if (window.lucide) lucide.createIcons();
+    updatePanelOpenMenuAlign();
+  }
+
+  // The "+" travels right as tabs pile up (it always trails the last one),
+  // so its popover can't stay pinned to a single alignment: opening it
+  // align-start (its own left edge under the button) reads naturally while
+  // there's room to its right, but once the button gets close enough to
+  // the panel's right edge that align-start would push the popover past
+  // it, flipping to align-end (its right edge under the button, opening
+  // leftward) keeps it fully on-panel instead of getting clipped by
+  // .chat-side-panel's own overflow:hidden.
+  function updatePanelOpenMenuAlign() {
+    const wrap = document.querySelector('.panel-tab-add-wrap');
+    const panelEl = document.getElementById('chatSidePanel');
+    if (!wrap || !panelEl) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const panelRect = panelEl.getBoundingClientRect();
+    const popoverWidth = 300;
+    const overflowsAtStart = wrapRect.left + popoverWidth > panelRect.right;
+    panelOpenMenu.classList.toggle('panel-open-menu--end', overflowsAtStart);
+  }
+
+  // Placeholder content only — real Project/App/Agent views inside a tab
+  // are a later iteration (same criterion already used for the empty
+  // Apps/Agents sections and the still-blank panel itself before this).
+  const PANEL_TAB_CONTENT_LABELS = { project: 'Project view', app: 'App view', agent: 'Agent view' };
+  function renderPanelTabContent() {
+    const tab = panelTabsState.find((t) => t.key === panelActiveKey);
+    if (!tab) { panelTabContent.textContent = ''; return; }
+    panelTabContent.textContent = `${PANEL_TAB_CONTENT_LABELS[tab.type]} — ${tab.name}`;
+  }
+
+  function updatePanelViewState() {
+    const hasTabs = panelTabsState.length > 0;
+    panelOpenPicker.hidden = hasTabs;
+    panelTabsEl.hidden = !hasTabs;
+    if (hasTabs) { renderPanelTabsBar(); renderPanelTabContent(); }
+  }
+
+  // Opening something also opens the panel itself if it wasn't already —
+  // covers picking straight from the picker before the toggle was ever
+  // clicked (shouldn't happen today since the picker only shows once the
+  // panel is open, but keeps the two pieces of state from drifting apart).
+  function openPanelInThread() {
+    if (chatThread.classList.contains('has-panel')) return;
+    chatThread.classList.add('has-panel');
+    chatPanelToggle.setAttribute('aria-label', 'Hide panel');
+    chatPanelToggle.setAttribute('data-tooltip', 'Hide panel');
+  }
+
+  function openPanelTab(type, id) {
+    const item = findPanelItem(type, id);
+    if (!item) return;
+    const key = `${type}:${id}`;
+    if (!panelTabsState.some((t) => t.key === key)) {
+      panelTabsState.push({ key, type, id, name: item.name });
+    }
+    panelActiveKey = key;
+    openPanelInThread();
+    updatePanelViewState();
+  }
+
+  function closePanelTab(key) {
+    const idx = panelTabsState.findIndex((t) => t.key === key);
+    if (idx === -1) return;
+    panelTabsState.splice(idx, 1);
+    if (panelActiveKey === key) {
+      const fallback = panelTabsState[idx] || panelTabsState[idx - 1];
+      panelActiveKey = fallback ? fallback.key : null;
+    }
+    updatePanelViewState();
+  }
+
+  // Called when a brand-new chat starts — tabs don't carry over, same
+  // reset criterion as the rest of the chat thread state. Also clears any
+  // leftover search term/category filter in both picker scopes, so the
+  // next time the panel opens it starts from "what do you want to open?"
+  // with nothing typed and "All" selected, not wherever the user left it.
+  function resetPanelTabs() {
+    panelTabsState = [];
+    panelActiveKey = null;
+    updatePanelViewState();
+    ['picker', 'menu'].forEach((scopeKey) => {
+      const scope = panelOpenScopes[scopeKey];
+      scope.term = '';
+      scope.tab = 'all';
+      scope.search.value = '';
+      scope.tabsWrap.querySelectorAll('.panel-filter-tab').forEach((t) => t.classList.toggle('is-active', t.dataset.filter === 'all'));
+      renderPanelOpenResults(scopeKey);
+    });
+  }
+
+  wirePanelOpenScope('picker');
+  wirePanelOpenScope('menu');
+  renderPanelOpenResults('picker');
+  renderPanelOpenResults('menu');
+
+  // Full-panel picker + tabs bar: not a .composer-menu, so clicks bubble
+  // here undisturbed.
+  document.getElementById('chatSidePanel').addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('[data-panel-tab-close]');
+    if (closeBtn) { closePanelTab(closeBtn.dataset.panelTabClose); return; }
+    const tabBtn = e.target.closest('[data-panel-tab]');
+    if (tabBtn) { panelActiveKey = tabBtn.dataset.panelTab; renderPanelTabsBar(); renderPanelTabContent(); return; }
+    const openBtn = e.target.closest('[data-panel-open]');
+    if (openBtn) {
+      const [type, id] = openBtn.dataset.panelOpen.split(':');
+      openPanelTab(type, id);
+    }
+  });
+
+  // The "+" popover IS a .composer-menu, whose own click handler (wired
+  // above, in the generic composer-menu setup) calls stopPropagation — so
+  // picks in here need their own listener instead of relying on the
+  // #chatSidePanel delegation above.
+  panelOpenMenu.addEventListener('click', (e) => {
+    const openBtn = e.target.closest('[data-panel-open]');
+    if (!openBtn) return;
+    const [type, id] = openBtn.dataset.panelOpen.split(':');
+    openPanelTab(type, id);
+    closeAllComposerMenus(null);
+  });
+
+  // ---------- Composer context selector: Project / App / Agent ----------
+  // The gray bar above the empty-state composer. Any of the three can be
+  // what a chat is "about", so it isn't project-only: while nothing is
+  // picked, the trigger cycles through the three ("Select a project" →
+  // "Select an app" → "Select an agent", icon crossfading with it) so the
+  // user discovers all three without opening the popover. Reuses the same
+  // PROJECTS_DATA/PANEL_APPS_DATA/PANEL_AGENTS_DATA + PANEL_OPEN_ICONS/
+  // PANEL_OPEN_LABELS + panelOpenDataFor() the side panel's own picker
+  // already defined above — one consistent set of mock entities, not a
+  // second copy invented for this bar.
+  const CONTEXT_CYCLE = [
+    { type: 'project', label: 'Select a project' },
+    { type: 'app', label: 'Select an app' },
+    { type: 'agent', label: 'Select an agent' },
+  ];
+  const contextState = {}; // per-suffix: { selected: {type,id,name}|null, cycleIndex, cycleTimer, tab, term }
+
+  function setContextTriggerContent(suffix, iconName, label, { fade = false } = {}) {
+    const content = document.querySelector(`[data-context-content="${suffix}"]`);
+    if (!content) return;
+    const apply = () => {
+      content.innerHTML = `<i data-lucide="${iconName}"></i><span>${label}</span>`;
+      if (window.lucide) lucide.createIcons();
+      if (fade) requestAnimationFrame(() => content.classList.remove('is-fading'));
+    };
+    if (fade) {
+      content.classList.add('is-fading');
+      setTimeout(apply, 200);
+    } else {
+      apply();
+    }
+  }
+
+  function startContextCycle(suffix) {
+    const state = contextState[suffix];
+    if (!state || state.selected || state.cycleTimer) return;
+    state.cycleIndex = 0;
+    setContextTriggerContent(suffix, PANEL_OPEN_ICONS[CONTEXT_CYCLE[0].type], CONTEXT_CYCLE[0].label);
+    state.cycleTimer = setInterval(() => {
+      state.cycleIndex = (state.cycleIndex + 1) % CONTEXT_CYCLE.length;
+      const step = CONTEXT_CYCLE[state.cycleIndex];
+      setContextTriggerContent(suffix, PANEL_OPEN_ICONS[step.type], step.label, { fade: true });
+    }, 2200);
+  }
+
+  function stopContextCycle(suffix) {
+    const state = contextState[suffix];
+    if (state && state.cycleTimer) { clearInterval(state.cycleTimer); state.cycleTimer = null; }
+  }
+
+  function renderContextResults(suffix) {
+    const state = contextState[suffix];
+    const results = document.querySelector(`[data-context-results="${suffix}"]`);
+    if (!state || !results) return;
+    const term = state.term.trim().toLowerCase();
+    const types = state.tab === 'all' ? ['project', 'app', 'agent'] : [state.tab];
+    let html = '';
+    let total = 0;
+    types.forEach((type) => {
+      const items = panelOpenDataFor(type).filter((it) => it.name.toLowerCase().includes(term));
+      if (!items.length) return;
+      total += items.length;
+      html += '<div class="panel-open-results-group">';
+      if (state.tab === 'all') html += `<div class="panel-open-group-title">${PANEL_OPEN_LABELS[type]}</div>`;
+      items.forEach((item) => {
+        html += `
+          <button type="button" class="panel-open-item" data-context-item="${type}:${item.id}">
+            <span class="panel-open-item-icon"><i data-lucide="${PANEL_OPEN_ICONS[type]}"></i></span>
+            <span class="panel-open-item-name">${item.name}</span>
+          </button>`;
+      });
+      html += '</div>';
+    });
+    results.innerHTML = total ? html : `<div class="panel-open-empty">No results for "${term}"</div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function selectContext(suffix, type, id) {
+    const item = panelOpenDataFor(type).find((it) => it.id === id);
+    if (!item) return;
+    const state = contextState[suffix];
+    state.selected = { type, id, name: item.name };
+    stopContextCycle(suffix);
+    setContextTriggerContent(suffix, PANEL_OPEN_ICONS[type], item.name);
+    const bar = document.querySelector(`[data-project-bar="${suffix}"]`);
+    if (bar) bar.classList.add('has-project');
+    const menu = document.querySelector(`.composer-menu[data-menu="project-${suffix}"]`);
+    if (menu) menu.classList.remove('is-open');
+  }
+
+  // Clearing a selection ("x" on the bar) reverts it back to the cycling
+  // "Select a project/app/agent" state and resumes the animation.
+  function clearContext(suffix) {
+    const state = contextState[suffix];
+    if (!state) return;
+    state.selected = null;
+    const bar = document.querySelector(`[data-project-bar="${suffix}"]`);
+    if (bar) bar.classList.remove('has-project');
+    startContextCycle(suffix);
+  }
+
+  function initContextSelector(suffix) {
+    contextState[suffix] = { selected: null, cycleIndex: 0, cycleTimer: null, tab: 'all', term: '' };
+
+    const search = document.querySelector(`[data-context-search="${suffix}"]`);
+    if (search) {
+      search.addEventListener('click', (e) => e.stopPropagation());
+      search.addEventListener('input', () => {
+        contextState[suffix].term = search.value;
+        renderContextResults(suffix);
+      });
+    }
+
+    const tabsWrap = document.querySelector(`[data-context-tabs="${suffix}"]`);
+    if (tabsWrap) {
+      tabsWrap.querySelectorAll('.panel-filter-tab').forEach((tab) => {
+        tab.addEventListener('click', (e) => {
+          e.stopPropagation();
+          contextState[suffix].tab = tab.dataset.filter;
+          tabsWrap.querySelectorAll('.panel-filter-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
+          renderContextResults(suffix);
+        });
+      });
+    }
+
+    const results = document.querySelector(`[data-context-results="${suffix}"]`);
+    if (results) {
+      results.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-context-item]');
+        if (!item) return;
+        const [type, id] = item.dataset.contextItem.split(':');
+        selectContext(suffix, type, id);
+      });
+    }
+
+    const clearBtn = document.querySelector(`[data-project-clear="${suffix}"]`);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearContext(suffix);
+      });
+    }
+
+    renderContextResults(suffix);
+    startContextCycle(suffix);
+  }
+
+  initContextSelector('empty');
+  initContextSelector('docked');
 
   function statusBadge(status) {
     return status === 'production'
-      ? '<span class="badge badge--success">Production</span>'
-      : '<span class="badge badge--neutral">Draft</span>';
+      ? '<span class="badge badge--success badge--square">Production</span>'
+      : '<span class="badge badge--neutral badge--square">Draft</span>';
   }
 
   // Filter: multi-select tag popover (Filter button → composer-menu),
@@ -1457,7 +2467,7 @@
         else projectsActiveTags.add(tag);
         option.classList.toggle('is-selected');
         updateProjectsFilterButton();
-        applyProjectsFilters();
+        queryProjectsWithLoading(400);
       });
     });
     if (window.lucide) lucide.createIcons();
@@ -1476,21 +2486,79 @@
 
   function getFilteredProjects() {
     const term = projectsSearchTerm.trim().toLowerCase();
-    return PROJECTS_DATA.filter((p) => {
-      const matchesTerm = !term || p.name.toLowerCase().includes(term);
-      const matchesTags = projectsActiveTags.size === 0 || p.tags.some((t) => projectsActiveTags.has(t));
-      return matchesTerm && matchesTags;
-    });
+    return PROJECTS_DATA.filter((p) => !p.archived)
+      .filter((p) => projectsOwnershipFilter === 'all' || p.owner === projectsOwnershipFilter)
+      .filter((p) => {
+        const matchesTerm = !term || p.name.toLowerCase().includes(term);
+        const matchesTags = projectsActiveTags.size === 0 || p.tags.some((t) => projectsActiveTags.has(t));
+        return matchesTerm && matchesTags;
+      });
   }
 
-  // Cards/rows are static tiles: no project has a real detail view behind
-  // it yet, so clicking one intentionally does nothing — no onclick wired,
-  // no disabled/opacity treatment either (same criterion already used for
-  // the non-navigating chat rows in Pinned/Recent and the Search results).
+  // Actions popover markup shared by grid/list: pin/unpin (label + icon
+  // reflect the project's current .pinned state), invite members, and
+  // archive. Reuses .composer-menu-option for visual consistency with the
+  // Filter popover, but click handling is delegated (see
+  // wireProjectActionsDelegation) instead of the composer's
+  // data-menu-trigger mechanism, since these rows get re-rendered on every
+  // filter change.
+  //
+  // Invite members: per docs/proyecto.md's conceptual model, access to a
+  // Project is granted by inviting someone directly to THAT project, not
+  // to the organization — the hint text under the input says exactly
+  // that. No role picker here yet: the role catalog is still an open
+  // question in proyecto.md, so this stays a plain email invite rather
+  // than guessing roles that might not match once that's defined. "Send
+  // invite" is a no-op like the rest of this view's actions (no real email
+  // goes out) — it shows a brief confirmation, then closes the popover,
+  // same spirit as the canned chat replies elsewhere in the prototype.
+  function projectActionsMenuMarkup(p) {
+    return `
+      <div class="project-actions-menu" data-actions-menu="${p.id}">
+        <div class="project-actions-menu-default">
+          <button type="button" class="composer-menu-option" data-pin-toggle="${p.id}">
+            <span class="opt-icon"><i data-lucide="${p.pinned ? 'pin-off' : 'pin'}"></i></span>
+            <span class="opt-body"><span class="opt-title">${p.pinned ? 'Unpin project' : 'Pin project'}</span></span>
+          </button>
+          <button type="button" class="composer-menu-option" data-invite-toggle="${p.id}">
+            <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+            <span class="opt-body"><span class="opt-title">Invite members</span></span>
+          </button>
+          <button type="button" class="composer-menu-option" data-archive="${p.id}">
+            <span class="opt-icon"><i data-lucide="archive"></i></span>
+            <span class="opt-body"><span class="opt-title">Archive project</span></span>
+          </button>
+        </div>
+        <div class="project-invite-view" hidden>
+          <div class="project-invite-header">
+            <button type="button" class="project-invite-back" data-invite-back="${p.id}" aria-label="Back"><i data-lucide="arrow-left"></i></button>
+            <span class="project-invite-title">Invite to ${p.name}</span>
+          </div>
+          <input type="email" class="project-invite-input" data-invite-input="${p.id}" placeholder="Add people by email" />
+          <p class="project-invite-hint">They'll only get access to this project, not the rest of the organization.</p>
+          <button type="button" class="btn-primary" data-invite-send="${p.id}" disabled>Send invite</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Cards/rows themselves are still static tiles — no project has a real
+  // detail view behind it yet, so clicking the card body intentionally
+  // does nothing, no disabled/opacity treatment either (same criterion
+  // already used for the non-navigating chat rows in Pinned/Recent and
+  // the Search results). Only the actions menu is interactive.
   function renderProjectsGrid(projects) {
     document.getElementById('projectsGrid').innerHTML = projects.map((p) => `
-      <div class="project-card">
-        <div class="project-card-name"><i data-lucide="folder"></i><span>${p.name}</span></div>
+      <div class="project-card" data-project-id="${p.id}">
+        <div class="project-card-top">
+          <div class="project-card-name"><i data-lucide="folder"></i><span>${p.name}</span></div>
+          <div class="project-card-actions-wrap">
+            <button type="button" class="project-card-actions-btn" data-actions-trigger="${p.id}" aria-label="Project actions">
+              <i data-lucide="more-vertical"></i>
+            </button>
+            ${projectActionsMenuMarkup(p)}
+          </div>
+        </div>
         <div class="project-card-tags">${p.tags.map((t) => `<span class="project-tag-pill">${t}</span>`).join('')}</div>
         <div class="project-card-footer">
           ${statusBadge(p.status)}
@@ -1502,12 +2570,18 @@
 
   function renderProjectsList(projects) {
     document.getElementById('projectsList').innerHTML = projects.map((p) => `
-      <div class="project-row">
-        <i data-lucide="folder" class="project-row-icon"></i>
-        <span class="project-row-name">${p.name}</span>
-        <div class="project-row-tags">${p.tags.map((t) => `<span class="project-tag-pill">${t}</span>`).join('')}</div>
+      <div class="project-list-row" data-project-id="${p.id}">
+        <i data-lucide="folder" class="project-list-row-icon"></i>
+        <span class="project-list-row-name">${p.name}</span>
+        <div class="project-list-row-tags">${p.tags.map((t) => `<span class="project-tag-pill">${t}</span>`).join('')}</div>
         ${statusBadge(p.status)}
         <img src="../../assets/img/user_profile.jpeg" alt="" class="project-avatar" />
+        <div class="project-list-row-actions-wrap">
+          <button type="button" class="project-list-row-actions-btn" data-actions-trigger="${p.id}" aria-label="Project actions">
+            <i data-lucide="more-vertical"></i>
+          </button>
+          ${projectActionsMenuMarkup(p)}
+        </div>
       </div>
     `).join('');
   }
@@ -1527,6 +2601,204 @@
     document.getElementById('projectsEmpty').hidden = filtered.length > 0;
     updateProjectsToggleButtons();
     if (window.lucide) lucide.createIcons();
+  }
+
+  // Loading skeleton: shown for a mock delay every time the section is
+  // entered, and every time search/tags/grid-list-toggle change what
+  // should render — each of those simulates its own re-fetch, not just
+  // the first load. Matches whichever view mode is current so the shapes
+  // it hints at (card grid vs. row list) are the ones about to appear.
+  function showProjectsSkeleton() {
+    const isGrid = projectsViewMode === 'grid';
+    document.getElementById('projectsSkeletonGrid').hidden = !isGrid;
+    document.getElementById('projectsSkeletonList').hidden = isGrid;
+    document.getElementById('projectsGrid').hidden = true;
+    document.getElementById('projectsList').hidden = true;
+    document.getElementById('projectsEmpty').hidden = true;
+  }
+  function hideProjectsSkeleton() {
+    document.getElementById('projectsSkeletonGrid').hidden = true;
+    document.getElementById('projectsSkeletonList').hidden = true;
+  }
+
+  // Single timer so a second query (e.g. typing again, or switching grid/
+  // list right after a tag click) cancels whichever mock fetch was still
+  // "in flight" instead of both landing and racing each other.
+  let projectsQueryTimer = null;
+  function queryProjectsWithLoading(delay) {
+    showProjectsSkeleton();
+    clearTimeout(projectsQueryTimer);
+    projectsQueryTimer = setTimeout(() => {
+      hideProjectsSkeleton();
+      applyProjectsFilters();
+    }, delay);
+  }
+
+  // Section entry gets a longer delay (700ms, "first load" feel); search/
+  // tags/view-toggle re-queries get a shorter one (400ms, "re-filtering"
+  // feel) — same distinction the reference this view was built from made
+  // with its own skeleton-only-until-first-fetch behavior, just applied
+  // here to every re-query instead of only the very first one.
+  function loadProjectsView() {
+    queryProjectsWithLoading(700);
+  }
+
+  // Reverts a popover to its default (Pin/Unpin, Invite members, Archive)
+  // view — never destroys the invite form's markup, just hides/clears it,
+  // so reopening "Invite members" later always starts from a clean slate.
+  function resetProjectInviteView(menu) {
+    const defaultView = menu.querySelector('.project-actions-menu-default');
+    const inviteView = menu.querySelector('.project-invite-view');
+    if (!defaultView || !inviteView) return;
+    defaultView.hidden = false;
+    inviteView.hidden = true;
+    menu.classList.remove('is-inviting');
+    const input = inviteView.querySelector('.project-invite-input');
+    const sendBtn = inviteView.querySelector('[data-invite-send]');
+    if (input) { input.value = ''; input.disabled = false; }
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Send invite'; }
+  }
+
+  function closeAllProjectActionMenus() {
+    document.querySelectorAll('.project-actions-menu.is-open').forEach((menu) => {
+      resetProjectInviteView(menu);
+      menu.classList.remove('is-open');
+    });
+    document.querySelectorAll('.project-card-actions-btn.is-open, .project-list-row-actions-btn.is-open')
+      .forEach((btn) => btn.classList.remove('is-open'));
+  }
+
+  // Pin/unpin: toggles the mock .pinned flag and mirrors it onto the
+  // sidebar's Pinned list by matching the project name (see
+  // findSidebarPinnedItem) — the one piece of this popover that's real
+  // cross-view state, since the user asked for it specifically. Everything
+  // else (New project, card clicks) stays the deliberate no-op pattern
+  // used throughout this view.
+  function toggleProjectPinned(id) {
+    const project = findProjectById(id);
+    if (!project) return;
+    project.pinned = !project.pinned;
+    const sidebarItem = findSidebarPinnedItem(project.name);
+    if (sidebarItem) sidebarItem.hidden = !project.pinned;
+    applyProjectsFilters();
+  }
+
+  // Archive: removes the project from this view (filtered out by
+  // getFilteredProjects) and, since archiving implies it's no longer an
+  // active pinned project either, also drops it from the sidebar's Pinned
+  // list. There's no "Archived" section to view it in afterwards — out of
+  // scope for this pass, flagged in docs/home.md.
+  function archiveProject(id, tileEl) {
+    const project = findProjectById(id);
+    if (!project) return;
+    const commit = () => {
+      project.archived = true;
+      const sidebarItem = findSidebarPinnedItem(project.name);
+      if (sidebarItem) sidebarItem.hidden = true;
+      applyProjectsFilters();
+    };
+    if (tileEl) {
+      tileEl.style.opacity = '0';
+      tileEl.style.transform = 'scale(0.97)';
+      setTimeout(commit, 160);
+    } else {
+      commit();
+    }
+  }
+
+  // Event delegation on the two static containers (#projectsGrid/#projectsList)
+  // instead of wiring each card's actions button directly — cards are
+  // re-rendered on every filter change, so per-element listeners would need
+  // re-attaching every time; delegation survives re-renders for free.
+  function wireProjectActionsDelegation() {
+    ['projectsGrid', 'projectsList'].forEach((containerId) => {
+      const container = document.getElementById(containerId);
+      container.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-actions-trigger]');
+        if (trigger) {
+          e.stopPropagation();
+          const id = trigger.dataset.actionsTrigger;
+          const menu = container.querySelector(`.project-actions-menu[data-actions-menu="${id}"]`);
+          if (!menu) return;
+          const willOpen = !menu.classList.contains('is-open');
+          closeAllProjectActionMenus();
+          menu.classList.toggle('is-open', willOpen);
+          trigger.classList.toggle('is-open', willOpen);
+          return;
+        }
+        // Any other click landing inside an open popover (the email input,
+        // the hint text, blank padding...) must not bubble to document's
+        // global closer below — otherwise clicking into the input to type
+        // would immediately close the whole thing. The specific actions
+        // below still run either way; this only stops the click from
+        // escaping the container.
+        if (e.target.closest('.project-actions-menu')) e.stopPropagation();
+        const pinBtn = e.target.closest('[data-pin-toggle]');
+        if (pinBtn) {
+          e.stopPropagation();
+          closeAllProjectActionMenus();
+          toggleProjectPinned(pinBtn.dataset.pinToggle);
+          return;
+        }
+        const archiveBtn = e.target.closest('[data-archive]');
+        if (archiveBtn) {
+          e.stopPropagation();
+          closeAllProjectActionMenus();
+          const tileEl = archiveBtn.closest('.project-card, .project-list-row');
+          archiveProject(archiveBtn.dataset.archive, tileEl);
+          return;
+        }
+        // Invite members: switches the popover from its default view to
+        // the invite form in place (see resetProjectInviteView for the
+        // reverse) — doesn't close the popover, same "stay open, drill
+        // into a sub-view" pattern the Filter popover doesn't need but the
+        // panel-open picker's "+" does.
+        const inviteToggle = e.target.closest('[data-invite-toggle]');
+        if (inviteToggle) {
+          e.stopPropagation();
+          const menu = inviteToggle.closest('.project-actions-menu');
+          const defaultView = menu.querySelector('.project-actions-menu-default');
+          const inviteView = menu.querySelector('.project-invite-view');
+          defaultView.hidden = true;
+          inviteView.hidden = false;
+          menu.classList.add('is-inviting');
+          const input = inviteView.querySelector('.project-invite-input');
+          if (input) input.focus();
+          return;
+        }
+        const inviteBack = e.target.closest('[data-invite-back]');
+        if (inviteBack) {
+          e.stopPropagation();
+          resetProjectInviteView(inviteBack.closest('.project-actions-menu'));
+          return;
+        }
+        // "Send invite" is a no-op like every other action in this view —
+        // no real email goes out. Disables input + button and swaps the
+        // label to "Invite sent" as a brief confirmation (doesn't touch
+        // the DOM structure, just state, so resetProjectInviteView can
+        // cleanly restore it), then closes the whole popover — same
+        // canned-response spirit as the chat's typing indicator + reply.
+        const inviteSend = e.target.closest('[data-invite-send]');
+        if (inviteSend) {
+          e.stopPropagation();
+          if (inviteSend.disabled) return;
+          const menu = inviteSend.closest('.project-actions-menu');
+          const input = menu.querySelector('.project-invite-input');
+          if (input) input.disabled = true;
+          inviteSend.disabled = true;
+          inviteSend.textContent = 'Invite sent';
+          setTimeout(() => closeAllProjectActionMenus(), 900);
+          return;
+        }
+      });
+      container.addEventListener('input', (e) => {
+        const input = e.target.closest('[data-invite-input]');
+        if (!input) return;
+        const sendBtn = input.closest('.project-actions-menu').querySelector('[data-invite-send]');
+        if (sendBtn) sendBtn.disabled = !input.value.trim();
+      });
+    });
+    document.addEventListener('click', () => closeAllProjectActionMenus());
   }
 
   function initProjectsView() {
@@ -1549,39 +2821,61 @@
       searchToggle.hidden = false;
       searchInput.value = '';
       projectsSearchTerm = '';
-      applyProjectsFilters();
+      queryProjectsWithLoading(400);
     }
     searchToggle.addEventListener('click', openProjectsSearch);
     searchClear.addEventListener('click', closeProjectsSearch);
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeProjectsSearch();
     });
+    // Debounced: the term itself updates on every keystroke (so typed text
+    // never lags), but the skeleton + re-query only fire once typing
+    // pauses for 300ms — a flash-per-keystroke would look broken, not
+    // "loading". Same projectsQueryTimer as every other re-query, so a
+    // fresh keystroke cancels whichever mock fetch was still in flight.
+    let projectsSearchDebounce = null;
     searchInput.addEventListener('input', (e) => {
       projectsSearchTerm = e.target.value;
-      applyProjectsFilters();
+      clearTimeout(projectsSearchDebounce);
+      projectsSearchDebounce = setTimeout(() => queryProjectsWithLoading(400), 300);
     });
 
     document.getElementById('projectsGridBtn').addEventListener('click', () => {
       if (projectsViewMode === 'grid') return;
       projectsViewMode = 'grid';
-      applyProjectsFilters();
+      queryProjectsWithLoading(400);
     });
     document.getElementById('projectsListBtn').addEventListener('click', () => {
       if (projectsViewMode === 'list') return;
       projectsViewMode = 'list';
-      applyProjectsFilters();
+      queryProjectsWithLoading(400);
     });
 
     document.getElementById('projectsFilterClear').addEventListener('click', () => {
       projectsActiveTags.clear();
       renderProjectsFilterMenu();
       updateProjectsFilterButton();
-      applyProjectsFilters();
+      queryProjectsWithLoading(400);
+    });
+
+    // Ownership tabs: All / Created by you / Shared projects — a second,
+    // independent filter dimension alongside search + tags (all three
+    // combine in getFilteredProjects). Same loading treatment as the
+    // other filter controls, for consistency.
+    document.querySelectorAll('.projects-ownership-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        if (tab.classList.contains('is-active')) return;
+        document.querySelectorAll('.projects-ownership-tab').forEach((t) => t.classList.remove('is-active'));
+        tab.classList.add('is-active');
+        projectsOwnershipFilter = tab.dataset.ownership;
+        queryProjectsWithLoading(400);
+      });
     });
 
     // "New project": no-op placeholder — same convention as the composer's
     // own "New project" option and the sidebar's "+" on Projects: no real
     // creation flow exists yet in this prototype.
+    wireProjectActionsDelegation();
     renderProjectsFilterMenu();
     updateProjectsFilterButton();
     applyProjectsFilters();
@@ -1597,8 +2891,11 @@
       chatThread.hidden = true;
       chatEmpty.hidden = true;
       chatPanelToggle.hidden = true;
+      chatPanelExpandToggle.hidden = true;
+      setPanelExpanded(false);
       if (sectionEmptyEl) sectionEmptyEl.hidden = true;
       projectsView.hidden = false;
+      loadProjectsView();
       return;
     }
     const copy = sectionCopy[section];
@@ -1606,6 +2903,8 @@
     chatThread.hidden = true;
     chatEmpty.hidden = true;
     chatPanelToggle.hidden = true;
+    chatPanelExpandToggle.hidden = true;
+    setPanelExpanded(false);
     projectsView.hidden = true;
     let empty = sectionEmptyEl;
     if (!empty) {

@@ -95,8 +95,8 @@
   /* ---------- Right: value prop panel (dark, deliberate Ley 6 exception) ---------- */
   .login-value {
     position: relative;
-    background: #08080B url('assets/img/Cover.png') center / cover no-repeat;
-    padding: 56px 224px;
+    background: #000000;
+    padding: 56px 140px;
     margin: 24px 24px 24px 0; /* inset from the viewport edge so the radius reads as a floating card; flush against the left panel */
     border-radius: 24px;
     display: flex;
@@ -134,9 +134,35 @@
 
   /* Floating workflow mockup */
   .mockup-wrap { position: relative; margin-top: 28px; width: 560px; max-width: 100%; }
+
+  /* Registers the angle as an animatable <angle> (not just a string) so the
+     conic-gradient below can be smoothly rotated via keyframes instead of
+     snapping. Same 3-stop "agent" gradient as before (blue → violet → pink),
+     now traveling around the card's perimeter instead of sitting still. */
+  @property --mockup-border-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+  }
   .mockup-border {
-    padding: 1.5px; border-radius: 18px;
-    background: linear-gradient(135deg, #4B5CF5 0%, #7B4CF5 45%, #E24CC9 100%);
+    padding: 3px; border-radius: 18px;
+    background: conic-gradient(from var(--mockup-border-angle), #4B5CF5, #7B4CF5, #E24CC9, #4B5CF5);
+    animation: mockupBorderTravel 4s linear infinite;
+    /* Colored glow (same agent gradient: blue → violet → pink) so the card
+       lifts off the flat black panel instead of reading as a flat cutout
+       against it. Opacities pushed much higher than a typical shadow —
+       against true #000000 (not the old Cover.png dark-navy image), a
+       low-alpha color blended over pure black is still nearly black, so
+       subtlety here reads as "not there at all" instead of "soft". Three
+       stacked layers (tight+bright → mid → wide+soft) so it reads as a
+       real halo instead of a flat single-blur smudge. */
+    box-shadow:
+      0 0 24px 2px rgba(75, 92, 245, .65),
+      0 0 56px 6px rgba(123, 76, 245, .45),
+      0 0 100px 10px rgba(226, 76, 201, .35);
+  }
+  @keyframes mockupBorderTravel {
+    to { --mockup-border-angle: 360deg; }
   }
   .mockup-card {
     background: #FBFBFE; border-radius: 16.5px; padding: 18px 20px 22px;
@@ -145,19 +171,34 @@
   .mockup-dot { width: 8px; height: 8px; border-radius: 50%; background: #D8D8E0; }
   .mockup-title { font-size: 12.5px; color: var(--color-ink-soft); font-weight: 600; margin-left: 4px; }
 
-  .mockup-msg-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+  /* Message + typing indicator styling mirrors the real chat (docs/chat.md):
+     user bubble = --color-primary-tint bg / --color-ink text, no avatar,
+     sharp top-right corner as the only "tail". Agent never gets a bubble —
+     it only gets the pulsing icon + 3-dot typing indicator below. */
+  .mockup-msg-row { display: flex; justify-content: flex-end; margin-bottom: 16px; }
   .mockup-msg {
     max-width: 78%;
-    background: var(--color-primary-tint); color: var(--color-primary-ink);
-    padding: 8px 12px; border-radius: 10px 10px 2px 10px; font-size: 12.5px; font-weight: 500;
+    background: var(--color-primary-tint); color: var(--color-ink);
+    padding: 8px 12px; border-radius: var(--radius-md); border-top-right-radius: 4px;
+    font-size: 12.5px; font-weight: 500;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .mockup-msg-avatar {
-    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-    background: var(--color-ink); color: #fff;
-    display: flex; align-items: center; justify-content: center;
+
+  .mockup-typing-row { display: none; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .mockup-typing-row.is-shown { display: flex; }
+  .mockup-typing-avatar { width: 16px; height: 16px; flex-shrink: 0; animation: mockupTypingPulse 1.2s var(--ease-out) infinite; }
+  @keyframes mockupTypingPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+  .mockup-typing-dots {
+    display: flex; align-items: center; gap: 4px; padding: 9px 12px;
+    background: var(--color-surface-sunken); border-radius: var(--radius-md); border-top-left-radius: 4px;
   }
-  .mockup-msg-avatar svg { width: 12px; height: 12px; }
+  .mockup-typing-dots span {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--color-ink-faint);
+    animation: mockupTypingBounce 1s var(--ease-out) infinite;
+  }
+  .mockup-typing-dots span:nth-child(2) { animation-delay: .15s; }
+  .mockup-typing-dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes mockupTypingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
 
   .mockup-steps { display: flex; align-items: flex-start; justify-content: space-between; position: relative; padding: 0 4px; }
   .mockup-steps::before {
@@ -188,8 +229,11 @@
     position: absolute; display: flex; align-items: center; gap: 6px;
     background: #fff; border-radius: 999px; padding: 8px 14px;
     box-shadow: var(--shadow-lg); font-size: 12px; font-weight: 600; color: var(--color-ink);
-    opacity: 0; transform: translateY(6px) scale(.96);
-    transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+    opacity: 0; transform: translateY(10px) scale(.94);
+    /* Slower than the canonical --dur-slow (320ms) on purpose — this is a
+       "the result is revealing itself" beat, not a UI-state toggle, so it
+       reads better as a gradual fade than the snappier default. */
+    transition: opacity 650ms var(--ease-out), transform 650ms var(--ease-out);
   }
   .mockup-badge.is-shown { opacity: 1; transform: translateY(0) scale(1); }
   .mockup-badge--top { top: -16px; right: -8px; color: var(--color-primary-ink); }
@@ -293,7 +337,10 @@
           </div>
           <div class="mockup-msg-row">
             <div class="mockup-msg"><span id="mockupTypedText"></span><span class="mockup-cursor" id="mockupCursor"></span></div>
-            <span class="mockup-msg-avatar" title="Person chatting"><i data-lucide="user"></i></span>
+          </div>
+          <div class="mockup-typing-row" id="mockupTyping">
+            <img src="assets/img/simetrik-agent-icon.png" alt="" class="mockup-typing-avatar" />
+            <span class="mockup-typing-dots"><span></span><span></span><span></span></span>
           </div>
           <div class="mockup-steps">
             <div class="mockup-step">
@@ -357,6 +404,7 @@
   (function () {
     const typedEl = document.getElementById('mockupTypedText');
     const cursorEl = document.getElementById('mockupCursor');
+    const typingEl = document.getElementById('mockupTyping');
     const steps = document.querySelectorAll('.mockup-step');
     const badgeTop = document.querySelector('.mockup-badge--top');
     const badgeBottom = document.querySelector('.mockup-badge--bottom');
@@ -375,6 +423,7 @@
     function resetDemo() {
       badgeTop.classList.remove('is-shown');
       badgeBottom.classList.remove('is-shown');
+      typingEl.classList.remove('is-shown');
       steps.forEach((step) => step.classList.remove('is-active'));
       typedEl.textContent = '';
       cursorEl.style.opacity = '1';
@@ -387,14 +436,20 @@
         await wait(500);
         await typeMessage();
         cursorEl.style.opacity = '0';
-        await wait(300);
+        // Agent "thinking" before it acts — same typing-indicator beat as the
+        // real chat's first response (showTyping() held for 900ms, see chat.md).
+        await wait(250);
+        typingEl.classList.add('is-shown');
+        await wait(900);
+        typingEl.classList.remove('is-shown');
+        await wait(150);
         for (const step of steps) {
           step.classList.add('is-active');
           await wait(380);
         }
         await wait(250);
         badgeTop.classList.add('is-shown');
-        await wait(180);
+        await wait(400);
         badgeBottom.classList.add('is-shown');
         await wait(2600);
       }

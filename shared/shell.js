@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initProjectExpand();
   initNavActive();
   initSectionCollapse();
+  initSidebarProjectActions();
 });
 
 function initSidebarCollapse() {
@@ -42,6 +43,52 @@ function initSectionCollapse() {
       if (section) section.classList.toggle('is-expanded');
     });
   });
+}
+
+// Per-project ellipsis in the sidebar's Pinned section: opens a popover with
+// Unpin/Invite members/Archive/Edit info. Scoped to each .project-item via
+// .closest() (not by project id) because none of these actions are wired to
+// real behavior yet — they're placeholders added ahead of defining what each
+// one actually triggers (see docs/sidebar.md → Pendiente/abierto). Static
+// markup (not re-rendered like the Projects view's cards), so plain
+// addEventListener per element is enough — no delegation needed.
+function initSidebarProjectActions() {
+  const menus = Array.from(document.querySelectorAll('.sidebar-project-actions-menu'));
+  if (!menus.length) return;
+
+  function closeAllSidebarActionMenus() {
+    document.querySelectorAll('.sidebar-project-actions-menu.is-open').forEach((menu) => menu.classList.remove('is-open'));
+    document.querySelectorAll('.sidebar-project-actions-btn.is-open').forEach((btn) => btn.classList.remove('is-open'));
+  }
+
+  menus.forEach((menu) => {
+    const wrap = menu.closest('.sidebar-project-actions-wrap');
+    const trigger = wrap && wrap.querySelector('.sidebar-project-actions-btn');
+    if (!trigger) return;
+
+    trigger.addEventListener('click', (e) => {
+      // .project-row lives next to this button (not around it, to keep
+      // markup valid — no nested <button>s), so this isn't strictly needed
+      // for the expand toggle, but it stops the click from immediately
+      // re-closing the menu via the document listener below.
+      e.stopPropagation();
+      const isOpen = menu.classList.contains('is-open');
+      closeAllSidebarActionMenus();
+      if (!isOpen) {
+        menu.classList.add('is-open');
+        trigger.classList.add('is-open');
+      }
+    });
+
+    // Clicking an option doesn't do anything real yet — just closes the
+    // popover, same as every other not-yet-wired action in this prototype.
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.closest('[data-sidebar-action]')) closeAllSidebarActionMenus();
+    });
+  });
+
+  document.addEventListener('click', closeAllSidebarActionMenus);
 }
 
 function initNavActive() {

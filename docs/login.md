@@ -69,6 +69,48 @@ Follow-up to "panel derecho también centrado en ambos ejes": the user clarified
 ## Right panel horizontal padding + chat avatar (2026-08-12)
 
 - `.login-value` padding changed from `56px 64px` to `56px 224px` (left/right only, per explicit request — vertical padding untouched). This makes the content column noticeably narrower/more inset than before, independent of the panel's own outer width (no `max-width` — that was reverted).
+
+## Right panel horizontal padding reduced (2026-08-13)
+
+- `.login-value` padding changed from `56px 224px` to `56px 140px` (left/right only, vertical 56px untouched). Content column reads wider than the 224px pass above, less inset from the panel edges.
+
+## Mockup animation reconciled with real chat conventions (2026-08-13)
+
+The "Workflow · Period close" demo simulates a chat exchange, but it had drifted from the actual behaviors defined in `docs/chat.md` for the real chat (`flows/home/index.html`). Brought back in line:
+
+- **Removed the person avatar next to the user's message.** The real chat gives the human sender no avatar at all — right-alignment of the bubble is the only identifier (see chat.md → "Mensajes y microinteracciones": "Los mensajes del usuario no llevan avatar"). The mockup had added a dark-circle `user` icon avatar (2026-08-12 pass); that was the inverse of the real rule and is gone now.
+- **User bubble color fixed.** Text was `--color-primary-ink` (blue); real chat uses `--color-ink` (black) on a `--color-primary-tint` background precisely so the user's own message doesn't compete visually with the agent's. Matched.
+- **Bubble corner fixed.** Was `border-radius: 10px 10px 2px 10px` (bottom-right cut). Real chat's user bubble is `var(--radius-md)` with only `border-top-right-radius: 4px` overridden — the "tail" reads on the top-right, not the bottom-right. Matched (`var(--radius-md)` + `border-top-right-radius: 4px`).
+- **Added the missing typing indicator.** The real chat always shows a pulsing agent icon + 3-dot bubble (`.typing-indicator`) between the user's message and the agent's response — the pedagogical "agent is thinking" beat. The mockup jumped straight from the typed message to the pipeline lighting up, skipping this. Added `#mockupTyping` (same visual language: pulsing `simetrik-agent-icon.png`, sunken 3-dot bubble with `border-top-left-radius: 4px`), shown for 900ms after the message finishes typing — same duration as the real chat's first-response `showTyping()` (see chat.md → "Typing indicator de 3 puntos... 900ms en el primer mensaje"), then it disappears and the pipeline (Dataset → Rule → Reconciliation → Output) begins.
+- **Scope note, unchanged from before:** the agent's actual "reply" in this mockup is still represented by the pipeline lighting up + the two badges, not a literal AI text bubble — that abstraction was a deliberate choice (see the pre-existing scope note above under "Right panel horizontal padding + chat avatar") and stays as-is. Only the surrounding mechanics (avatar rules, bubble styling, typing beat) were reconciled with chat.md.
+
+## Right panel: flat black background + animated perimeter border (2026-08-13)
+
+Two changes, both explicit user requests:
+
+- **`.login-value` background simplified to flat `#000000`.** Was `#08080B url('assets/img/Cover.png') center / cover no-repeat`. `Cover.png`'s usage here had been flagged since 2026-08-12 as "inferred, flag if wrong" — the user resolved that by dropping the image outright in favor of pure black. `Cover.png` stays in use elsewhere (the sidebar avatar background in `shared/tokens.css`), this only affects the login's right panel.
+- **`.mockup-border` (the gradient frame around the "Workflow · Period close" card) now animates around the perimeter**, instead of sitting static. Technique: `@property --mockup-border-angle` registers the custom property as an interpolable `<angle>`, so `conic-gradient(from var(--mockup-border-angle), ...)` can be smoothly rotated via a `@keyframes` animation (`0deg → 360deg`, `4s linear infinite`) rather than snapping. Same 3-stop gradient as before (`#4B5CF5 → #7B4CF5 → #E24CC9`, repeating the first stop at the end for a seamless loop) — this is the existing "agent gradient" already used for this card's border, just set in motion instead of introducing a new palette.
+- **Runs independently of the typed-message/pipeline/badge loop.** It's a plain CSS animation (`infinite`), not gated by the JS state machine — reads as an ambient "the agent is active" signal rather than a one-shot tied to the demo's discrete beats.
+- **Browser note:** `@property` needs a reasonably modern engine (Chromium, Safari 16.4+, Firefox 128+). No fallback was added — if the custom property isn't registered, the conic-gradient still renders, it just won't animate smoothly (acceptable for a prototype, not a production concern per `simetrik-ui prototype`'s relaxed hardening rule).
+
+## Border thickness doubled + badge reveal made more fluid (2026-08-13)
+
+Direct feedback after seeing the animated border in motion — it read as barely visible, and the two result badges felt like they popped rather than revealed themselves:
+
+- **`.mockup-border` padding doubled**: `1.5px → 3px`. This is the ring thickness (the padding-as-border technique), so the animated conic-gradient now reads as a clearly visible band instead of a hairline.
+- **Badge fade-in slowed down and softened**, on both `.mockup-badge--top` ("Deterministic · Auditable") and `.mockup-badge--bottom` (the 92% match score): transition duration went from `var(--dur-slow)` (320ms, Simetrik's canonical slowest duration) to **650ms**, and the entrance transform grew slightly (`translateY(6px) scale(.96) → translateY(10px) scale(.94)`) so there's more distance to travel during that longer fade instead of just holding at the same subtle offset for longer. This is a deliberate, scoped exception to the canonical 120/200/320ms durations (see Ley 4 in the skill's root laws) — these two badges represent the payoff moment of the whole demo ("the agent finished and here's proof"), not a routine UI-state toggle, so they get their own slower pacing on purpose.
+- **Stagger between the two badges increased**: `180ms → 400ms` in the JS loop, so the bottom badge now starts fading in only after the top one is most of the way through its own fade, instead of the two overlapping almost immediately. Reads as "first this, then that" rather than both surfacing at once.
+
+## Colored glow added around the mockup card (2026-08-13)
+
+Against the new flat `#000000` panel, the card read as a flat cutout with no depth. Added a `box-shadow` to `.mockup-border` using the same "agent gradient" colors already driving the rotating border (blue `#4B5CF5` + pink `#E24CC9`, at low opacity, two stacked blur radii for a soft layered halo) instead of introducing a new color. It's currently a static glow (not synced to the border's rotation) — if it should breathe/pulse or shift hue in step with `mockupBorderTravel`, that's a further pass, flagging here in case it comes up.
+
+**Fix (same day, follow-up): glow was invisible in practice.** User reported not seeing it at all. Root cause: the original opacities (`.35`/`.22`) were sized for a shadow sitting on a lighter dark surface — against **true `#000000`** (not the old `Cover.png`, which had visible dark-navy/blue tones lifting the black), a low-alpha color composited over pure black is still almost black. `rgba(75,92,245,.35)` over `#000` resolves to roughly `rgb(26,32,86)`, barely distinguishable from the background once blurred/diffused further. Fixed by:
+- Raising opacities substantially (`.35/.22 → .65/.45/.35`)
+- Adding a third, tighter+brighter inner layer (`24px` blur, violet-blue) so there's a clearly visible rim right at the border, not just a diffuse outer haze
+- Adding spread (`2px`/`6px`/`10px`) to each layer so the color has some solid presence before it starts dissipating via blur
+
+**Takeaway for future passes on this dark panel**: any translucent color effect (glows, tints, overlays) needs meaningfully higher alpha than it would on a lighter or colored dark background — `#000000` gives zero lift, so subtlety reads as absence.
 - Added a person avatar (`lucide: user`, dark circle) next to the chat bubble in the mockup animation, wrapped in a new `.mockup-msg-row` (flex, right-aligned) so it reads as an actual person chatting rather than a floating bubble with no sender. `.mockup-msg` itself lost its own `margin-left: auto`/`align-self` (now handled by the row's `justify-content: flex-end`).
 - Scope note: only added an avatar to the human's message. Didn't add a distinct agent reply bubble — the "response" is still represented by the two badges appearing at the end of the loop. Flag if a literal agent chat-bubble reply (separate from the badges) is what's wanted instead.
 

@@ -155,6 +155,72 @@
   .section-empty-icon svg, .section-empty-icon i { width: 24px; height: 24px; }
   .section-empty h2 { font-size: 18px; font-weight: 700; color: var(--color-ink); }
   .section-empty p { font-size: 13.5px; color: var(--color-ink-soft); max-width: 380px; }
+
+  /* ---------- Search modal (Cmd+K / click the lupa) ---------- */
+  .search-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 12vh; z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .search-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+  .search-modal {
+    width: 100%; max-width: 560px; max-height: 70vh; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+    overflow: hidden;
+  }
+  .search-modal-backdrop.is-open .search-modal { transform: translateY(0) scale(1); opacity: 1; }
+
+  .search-modal-input-row {
+    display: flex; align-items: center; gap: 10px; padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+  }
+  .search-modal-input-row i, .search-modal-input-row svg { width: 18px; height: 18px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .search-modal-input-row input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 15px; color: var(--color-ink); font-family: inherit;
+  }
+  .search-modal-input-row input::placeholder { color: var(--color-ink-faint); }
+
+  .search-modal-tabs {
+    display: flex; gap: 4px; padding: 10px 20px; border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0; overflow-x: auto;
+  }
+  .search-tab {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .search-tab:hover { background: var(--color-surface-sunken); }
+  .search-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+
+  .search-modal-results { overflow-y: auto; overflow-x: hidden; padding: 8px 12px 16px; flex: 1; }
+  .search-results-group { margin-top: 10px; }
+  .search-results-group:first-child { margin-top: 4px; }
+  .search-group-title {
+    font-size: 11px; font-weight: 700; letter-spacing: .02em;
+    color: var(--color-ink-faint); padding: 6px 8px;
+  }
+  .search-result-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 8px; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer;
+    text-align: left; font-size: 14px; color: var(--color-ink);
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .search-result-item:hover, .search-result-item.is-highlighted { background: var(--color-surface-sunken); }
+  .search-result-icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--color-ink-soft); display: flex; }
+  .search-result-icon svg, .search-result-icon i { width: 16px; height: 16px; }
+  .search-result-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-result-kbd {
+    font-size: 11px; font-weight: 600; color: var(--color-ink-soft);
+    background: var(--color-surface-sunken); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+  }
+  .search-empty { padding: 32px 16px; text-align: center; color: var(--color-ink-faint); font-size: 13.5px; }
 </style>
 </head>
 <body>
@@ -172,7 +238,7 @@
         <i data-lucide="panel-right" class="sidebar-logo-icon-expand"></i>
       </button>
       <div class="sidebar-header-actions">
-        <button class="icon-btn" aria-label="Search">
+        <button class="icon-btn search-trigger" aria-label="Search">
           <i data-lucide="search"></i>
           <span class="tooltip-bubble">Search <kbd>⌘K</kbd></span>
         </button>
@@ -184,7 +250,7 @@
     <nav class="sidebar-nav">
       <!-- Search: only visible when the sidebar is collapsed, sits above New Chat. The header's own
            Search button (with the ⌘K tooltip) stays as-is and handles the expanded state. -->
-      <button class="nav-item sidebar-search-collapsed" aria-label="Search">
+      <button class="nav-item sidebar-search-collapsed search-trigger" aria-label="Search">
         <span class="nav-icon"><i data-lucide="search"></i></span>
         <span class="tooltip-bubble tooltip-bubble--right">Search <kbd>⌘K</kbd></span>
       </button>
@@ -411,6 +477,24 @@
 
 </div>
 
+<!-- Search modal: Cmd+K or click the lupa (header or collapsed rail) -->
+<div class="search-modal-backdrop" id="searchModalBackdrop" hidden>
+  <div class="search-modal" role="dialog" aria-modal="true" aria-label="Search everything">
+    <div class="search-modal-input-row">
+      <i data-lucide="search"></i>
+      <input type="text" id="searchModalInput" placeholder="Search chats, projects, apps, agents…" />
+    </div>
+    <div class="search-modal-tabs">
+      <button class="search-tab is-active" data-tab="all">All</button>
+      <button class="search-tab" data-tab="chats">Chats</button>
+      <button class="search-tab" data-tab="projects">Projects</button>
+      <button class="search-tab" data-tab="apps">Apps</button>
+      <button class="search-tab" data-tab="agents">Agents</button>
+    </div>
+    <div class="search-modal-results" id="searchModalResults"></div>
+  </div>
+</div>
+
 <script src="../../shared/shell.js"></script>
 <script>
   const chatEmpty = document.getElementById('chatEmpty');
@@ -579,6 +663,143 @@
   // Log out: exits the prototype back to the login screen
   document.getElementById('logoutBtn').addEventListener('click', () => {
     window.location.href = '../../index.html';
+  });
+
+  // ---------- Search modal ----------
+  const SEARCH_DATA = {
+    chats: [
+      { name: 'July period close', kbd: '⌘1' },
+      { name: 'Nequi source differences', kbd: '⌘2' },
+      { name: 'Manual entries review' },
+      { name: 'Base vs. optimistic scenario' },
+      { name: 'How do I build a reconciliation rule?' },
+      { name: "This week's anomaly summary" },
+    ],
+    projects: [
+      { name: 'LATAM Bank Reconciliation' },
+      { name: 'Q2 Journal Entry Audit' },
+      { name: 'Q3 Treasury Forecast' },
+    ],
+    apps: [
+      { name: 'Slack' },
+      { name: 'Snowflake' },
+      { name: 'Google Drive' },
+    ],
+    agents: [
+      { name: 'Reconciliation Agent' },
+      { name: 'Anomaly Watcher' },
+      { name: 'Period Close Assistant' },
+    ],
+  };
+  const SEARCH_ICONS = { chats: 'message-square', projects: 'folder', apps: 'layout-grid', agents: 'bot' };
+  const SEARCH_LABELS = { chats: 'Chats', projects: 'Projects', apps: 'Apps', agents: 'Agents' };
+
+  const searchModalBackdrop = document.getElementById('searchModalBackdrop');
+  const searchModalInput = document.getElementById('searchModalInput');
+  const searchModalResults = document.getElementById('searchModalResults');
+  let searchActiveTab = 'all';
+  let searchHighlightIndex = 0;
+
+  function updateSearchTabs() {
+    document.querySelectorAll('.search-tab').forEach((tab) => {
+      tab.classList.toggle('is-active', tab.dataset.tab === searchActiveTab);
+    });
+  }
+
+  function updateSearchHighlight() {
+    const items = searchModalResults.querySelectorAll('.search-result-item');
+    items.forEach((el, i) => el.classList.toggle('is-highlighted', i === searchHighlightIndex));
+  }
+
+  function renderSearchResults() {
+    const query = searchModalInput.value.trim().toLowerCase();
+    const categories = searchActiveTab === 'all' ? ['chats', 'projects', 'apps', 'agents'] : [searchActiveTab];
+    let html = '';
+    let total = 0;
+
+    categories.forEach((cat) => {
+      const items = SEARCH_DATA[cat].filter((item) => item.name.toLowerCase().includes(query));
+      if (!items.length) return;
+      total += items.length;
+      html += '<div class="search-results-group">';
+      if (searchActiveTab === 'all') {
+        html += `<div class="search-group-title">${SEARCH_LABELS[cat]}</div>`;
+      }
+      items.forEach((item) => {
+        html += `
+          <button class="search-result-item" data-cat="${cat}">
+            <span class="search-result-icon"><i data-lucide="${SEARCH_ICONS[cat]}"></i></span>
+            <span class="search-result-name">${item.name}</span>
+            ${item.kbd ? `<span class="search-result-kbd">${item.kbd}</span>` : ''}
+          </button>`;
+      });
+      html += '</div>';
+    });
+
+    searchModalResults.innerHTML = total
+      ? html
+      : `<div class="search-empty">No results for "${query}"</div>`;
+
+    if (window.lucide) lucide.createIcons();
+    searchHighlightIndex = 0;
+    updateSearchHighlight();
+  }
+
+  function openSearchModal() {
+    searchModalBackdrop.hidden = false;
+    requestAnimationFrame(() => searchModalBackdrop.classList.add('is-open'));
+    searchModalInput.value = '';
+    searchActiveTab = 'all';
+    updateSearchTabs();
+    renderSearchResults();
+    setTimeout(() => searchModalInput.focus(), 50);
+  }
+
+  function closeSearchModal() {
+    searchModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { searchModalBackdrop.hidden = true; }, 200);
+  }
+
+  document.querySelectorAll('.search-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      searchActiveTab = tab.dataset.tab;
+      updateSearchTabs();
+      renderSearchResults();
+    });
+  });
+
+  searchModalInput.addEventListener('input', renderSearchResults);
+
+  searchModalResults.addEventListener('click', (e) => {
+    if (e.target.closest('.search-result-item')) closeSearchModal();
+  });
+
+  searchModalBackdrop.addEventListener('click', (e) => {
+    if (e.target === searchModalBackdrop) closeSearchModal();
+  });
+
+  // Both lupa buttons (header, expanded) and (nav rail, collapsed) open the same modal
+  document.querySelectorAll('.search-trigger').forEach((btn) => {
+    btn.addEventListener('click', openSearchModal);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+    if (isCmdK) { e.preventDefault(); openSearchModal(); return; }
+    if (searchModalBackdrop.hidden) return;
+    if (e.key === 'Escape') { closeSearchModal(); return; }
+    const items = searchModalResults.querySelectorAll('.search-result-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      searchHighlightIndex = Math.min(searchHighlightIndex + 1, items.length - 1);
+      updateSearchHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      searchHighlightIndex = Math.max(searchHighlightIndex - 1, 0);
+      updateSearchHighlight();
+    } else if (e.key === 'Enter' && items[searchHighlightIndex]) {
+      closeSearchModal();
+    }
   });
 </script>
 

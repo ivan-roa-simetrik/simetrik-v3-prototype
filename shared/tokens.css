@@ -201,6 +201,7 @@ a { color: inherit; text-decoration: none; }
   background: transparent; border: none; cursor: pointer;
   color: var(--color-ink); font-size: 13.5px; font-weight: 500;
   transition: background var(--dur-fast) var(--ease-out);
+  position: relative; /* anchors any .tooltip-bubble child (New Chat, Search's collapsed rail button) — without this the bubble's position:absolute falls back to the viewport as its containing block instead of this button, rendering it off-screen. [data-tooltip] used to supply this for free; .tooltip-bubble doesn't, so anything using it needs its own anchor (see .icon-btn, which already had this). */
   white-space: nowrap; /* overflow: hidden removed — it clipped tooltips; .nav-label already truncates its own text */
 }
 .nav-item:hover { background: var(--color-surface-sunken); }
@@ -220,6 +221,21 @@ a { color: inherit; text-decoration: none; }
 .nav-item-add svg, .nav-item-add i { width: 14px; height: 14px; }
 .nav-item:hover .nav-item-add { opacity: 1; }
 .nav-item-add:hover { background: var(--color-surface); color: var(--color-ink); }
+
+/* New Chat's keyboard shortcut hint (2026-08-14) — a persistent chip, not a
+   hover tooltip: New Chat already shows its label when expanded, so a
+   hover tooltip would be redundant (same rule the plain [data-tooltip]
+   system already follows for every other nav item) — an always-visible
+   inline hint is how this codebase already shows a shortcut next to
+   visible text (see .search-result-kbd in flows/home/index.html's Search
+   modal), just its own class since that one lives in a different file.
+   Hidden when collapsed (with .nav-label, no room at 36px) — the
+   collapsed-only tooltip on the button already mentions the shortcut in
+   its data-tooltip text instead. */
+.nav-item-kbd {
+  font-family: inherit; font-size: 11px; font-weight: 600; color: var(--color-ink-soft);
+  background: var(--color-surface-sunken); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+}
 
 /* ---------- Icon micro-interactions: hover/click only, never looping ---------- */
 
@@ -379,13 +395,17 @@ a { color: inherit; text-decoration: none; }
    Pinned header's icon when the sidebar is at 52px — same portal + fixed-
    position pattern as .sidebar-project-actions-menu above, for the same
    overflow-clipping reason (.sidebar-section clips for its own scroll).
-   Fixed height (not max-height), flex column with the results pane as the
-   only scrolling child — same "don't let the box resize while filtering"
-   rationale already used by the Search modal (see docs/search.md) and the
-   chat side panel's open picker (see docs/chat-side-panel.md). */
+   Height tracks content (min 200px / max 300px, explicit user request) —
+   different from the Search modal / chat side panel's own popovers, which
+   use a truly fixed height because their content is centered and a resize
+   would visibly re-center everything on each keystroke (see docs/search.md).
+   This popover is top-anchored, not centered, so a height that grows/shrinks
+   with content doesn't cause that same jank — shell.js only nudges `top`
+   back onscreen if growing content would push the bottom off the viewport
+   (see repositionPinnedPopover in initSidebarCollapsedPinnedPopover). */
 .sidebar-pinned-popover {
   display: none; position: fixed; z-index: 200;
-  width: 260px; height: 340px; flex-direction: column;
+  width: 260px; min-height: 200px; max-height: 300px; flex-direction: column;
   background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg); overflow: hidden;
 }
@@ -402,7 +422,11 @@ a { color: inherit; text-decoration: none; }
 }
 .sidebar-pinned-popover-search input::placeholder { color: var(--color-ink-faint); }
 
-.sidebar-pinned-popover-results { flex: 1; overflow-y: auto; padding: 6px; }
+/* min-height: 0 overrides the flex default (min-height: auto), which would
+   otherwise refuse to shrink below its content size and silently defeat
+   overflow-y/the parent's max-height cap — content past 300px total needs
+   this to actually scroll instead of just pushing the popover taller. */
+.sidebar-pinned-popover-results { flex: 1; min-height: 0; overflow-y: auto; padding: 6px; }
 .sidebar-pinned-popover-empty { padding: 24px 12px; text-align: center; color: var(--color-ink-faint); font-size: 13px; }
 
 /* Rows inside the results (2026-08-14, revised): NOT their own classes.
@@ -530,6 +554,7 @@ a { color: inherit; text-decoration: none; }
 .sidebar.is-collapsed .user-meta,
 .sidebar.is-collapsed .info-icon,
 .sidebar.is-collapsed .nav-item-add,
+.sidebar.is-collapsed .nav-item-kbd,
 .sidebar.is-collapsed .project-name {
   display: none;
 }
@@ -626,6 +651,17 @@ a { color: inherit; text-decoration: none; }
 .sidebar:not(.is-collapsed) .avatar[data-tooltip]::after {
   display: none;
 }
+/* Same suppression, but for New Chat's rich .tooltip-bubble (2026-08-14) —
+   it's a separate rule because New Chat is the only nav-item using the
+   .tooltip-bubble system (for the real <kbd>⌥⌘N</kbd>) while also being the
+   same single button in both expanded/collapsed states. Search's own
+   .tooltip-bubble never needs this: its expanded/collapsed versions are two
+   separate elements (header button vs. rail button), and the collapsed one
+   is the only one ever visible via `display:none` on the other, so there's
+   no "redundant while expanded" case to suppress there. */
+.sidebar:not(.is-collapsed) #newChatBtn .tooltip-bubble {
+  display: none;
+}
 
 /* Rich tooltip (real markup, not attr()) — used where a tooltip needs more than plain text, e.g. a <kbd> shortcut */
 .tooltip-bubble {
@@ -638,7 +674,8 @@ a { color: inherit; text-decoration: none; }
   transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .icon-btn:hover .tooltip-bubble, .icon-btn:focus-visible .tooltip-bubble,
-.nav-item:hover .tooltip-bubble, .nav-item:focus-visible .tooltip-bubble {
+.nav-item:hover .tooltip-bubble, .nav-item:focus-visible .tooltip-bubble,
+.logo-mark.sidebar-logo-icon:hover .tooltip-bubble, .logo-mark.sidebar-logo-icon:focus-visible .tooltip-bubble {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
 /* Right-side variant — for the collapsed rail, consistent with its sibling icons' tooltip position */
@@ -646,7 +683,8 @@ a { color: inherit; text-decoration: none; }
   left: calc(100% + 10px); top: 50%; right: auto;
   transform: translateY(-50%) translateX(-4px);
 }
-.nav-item:hover .tooltip-bubble--right, .nav-item:focus-visible .tooltip-bubble--right {
+.nav-item:hover .tooltip-bubble--right, .nav-item:focus-visible .tooltip-bubble--right,
+.logo-mark.sidebar-logo-icon:hover .tooltip-bubble--right, .logo-mark.sidebar-logo-icon:focus-visible .tooltip-bubble--right {
   transform: translateY(-50%) translateX(0);
 }
 .tooltip-bubble kbd {
@@ -657,7 +695,10 @@ a { color: inherit; text-decoration: none; }
 
 /* Collapsed-state logo button: shows the icon by default, swaps to a
    "panel-right" expand affordance on hover. Click toggles the sidebar. */
-.logo-mark.sidebar-logo-icon { border: none; padding: 0; cursor: pointer; }
+.logo-mark.sidebar-logo-icon {
+  border: none; padding: 0; cursor: pointer;
+  position: relative; /* anchors its .tooltip-bubble child — same fix/reason as .nav-item above; .logo-mark itself has no position set, so without this the bubble positioned against the viewport instead of the button, off-screen. */
+}
 .sidebar-logo-icon-expand { display: none; width: 18px; height: 18px; }
 .logo-mark.sidebar-logo-icon:hover .sidebar-logo-icon-img { display: none; }
 .logo-mark.sidebar-logo-icon:hover .sidebar-logo-icon-expand { display: block; }

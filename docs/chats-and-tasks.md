@@ -1,14 +1,16 @@
 # Chats and Tasks
 
-> Última actualización: 2026-08-13
+> Última actualización: 2026-08-14
 > Archivo relacionado: `flows/home/index.html` (markup + `<style>` + script, todo inline al final del archivo)
 > Ver también: [`sidebar.md`](./sidebar.md) → nav item "Chats and Tasks" (dispara esta vista), [`home.md`](./home.md) → vista Projects (el patrón visual que esta vista replica)
 
 ## Propósito
 
-Vista global de todos los chats de la cuenta, sin el recorte que ya aplican **Pinned** (chats anidados dentro de sus proyectos) y **Recent** (chats sueltos sin proyecto) en el sidebar — a diferencia de esas dos, acá se listan *todos*, con o sin contexto. Se abre desde el nav item "Chats and Tasks" del sidebar, que hasta esta pasada solo mostraba el empty state genérico compartido con Apps/Agents.
+Vista global de todos los chats de la cuenta, sin el recorte que ya aplican **Pinned** (chats anidados dentro de sus proyectos) y **Recent** (chats sueltos sin proyecto) en el sidebar — a diferencia de esas dos, acá se listan *todos*, con o sin contexto. Se abre desde el nav item del sidebar, que hasta la primera pasada solo mostraba el empty state genérico compartido con Apps/Agents.
 
-**Nota de alcance (2026-08-13):** el nombre del nav item quedó igual ("Chats and Tasks"), pero el concepto de "Task" no está definido todavía — por instrucción explícita del usuario, esta vista solo modela **Chats**. No hay ningún tratamiento visual de "Task" en la UI. Cuando ese concepto se defina, esta vista es donde debería aparecer.
+**Nota de alcance (2026-08-13):** el concepto de "Task" no está definido todavía — por instrucción explícita del usuario, esta vista solo modela **Chats**. No hay ningún tratamiento visual de "Task" en la UI. Cuando ese concepto se defina, esta vista es donde debería aparecer.
+
+**Rebautizado a "Chats" (2026-08-13, quinta pasada).** El label del nav item, su tooltip y el `<h1>` de esta vista pasaron de "Chats and Tasks" a **"Chats"** — pedido explícito del usuario para sacar la palabra "task" del copy visible mientras el concepto siga sin definir. El nombre interno (`data-nav="chats-tasks"`, este archivo `chats-and-tasks.md`, nombres de función/variable en el código) se mantiene sin cambios — es el identificador de la sección, no copy que el usuario vea.
 
 ## Modelo de datos: qué es un chat acá
 
@@ -20,7 +22,7 @@ Un chat nunca "es" de naturaleza project/app/agent — el contexto es un atribut
 
 `CHATS_DATA` consolida en un solo array los 6 nombres de chat que ya existían repartidos en dos lugares sin relación entre sí (markup estático de Pinned/Recent en el sidebar, y `SEARCH_DATA.chats` del modal Cmd+K — ninguno de los dos tenía un campo de contexto real). Se agregaron 2 chats nuevos (`Google Drive sync check`, `Period close agent review`) únicamente para que las filas de contexto App y Agent tuvieran al menos un ejemplo real — el resto de los nombres ya existía en el prototipo. `createdAt` es texto fijo por ítem ("2 days ago", "1 week ago"...), no una fecha real calculada — mismo criterio de mock data estática que el resto del prototipo.
 
-**No conectado a otras fuentes de datos.** Igual que `PROJECTS_DATA` vs. el markup estático de Pinned, o `SEARCH_DATA` vs. `PROJECTS_DATA`: `CHATS_DATA` es su propia lista, no deriva ni sincroniza con Pinned/Recent/Search. Archivar un chat acá no lo saca de esos otros lugares (a diferencia de Pin/Unpin y Archive en Projects, que sí tocan el sidebar).
+**No conectado a otras fuentes de datos — con una excepción nueva (2026-08-14).** Igual que `PROJECTS_DATA` vs. el markup estático de Pinned, o `SEARCH_DATA` vs. `PROJECTS_DATA`: los 6 nombres mock originales de `CHATS_DATA` no derivan ni sincronizan con Pinned/Recent/Search, y archivar/renombrar un chat acá tampoco toca esos otros lugares. La excepción es hacia adelante, no hacia atrás: **arrancar un chat nuevo** (`registerNewChat`, ver `docs/chat.md`) sí hace `CHATS_DATA.unshift(...)` **y** agrega la fila equivalente al Recent del sidebar en el mismo momento — así que, de acá en más, un chat recién creado existe consistentemente en ambos lugares desde el arranque. Lo que sigue sin sincronizarse son los cambios *posteriores* (archivar, renombrar, pinear) y los 6 chats mock que ya existían antes de este mecanismo.
 
 ## Decisiones tomadas
 
@@ -56,6 +58,19 @@ Nueva primera opción en la ellipsis de cada fila: **Pin chat / Unpin chat** (í
 - **Verificado end-to-end con Chrome headless**: pinear un chat → abrir su ellipsis → "Rename chat" → modal abre pre-rellenado con foco automático → cambiar el texto → "Save changes" → el modal cierra, la fila de esta vista muestra el nombre nuevo, y la fila correspondiente en el sidebar Pinned también.
 - **Fuera de alcance**: no valida nombres duplicados, no hay confirmación de "cambios sin guardar" al cerrar sin guardar (Cancel/X/Escape/click afuera descartan directamente, mismo criterio que el resto de los modales del prototipo).
 
+## Tabs All / Archived (2026-08-13, quinta pasada)
+
+Nuevas tabs debajo del header, arriba de la lista: **All** / **Archived** — pedido explícito del usuario, en anticipación a que se archiven chats desde acá (bulk Archive ya existía, pero no había ningún lugar para volver a verlos). Mismo patrón que las tabs de ownership de Projects (`.projects-ownership-tab`), simplificado a solo 2 (acá no hay concepto de "owner").
+
+- **Clase propia** (`.chats-view-tab`), copiada 1:1 de `.projects-ownership-tab` en vez de reusada — mismo motivo de siempre: el modal Search tiene un wiring global sobre `.search-tab` que stompearía el estado activo de cualquier tab que comparta ese nombre.
+- **`chatsTab` ('all' | 'archived')** es la segunda dimensión de filtro, combinada con la búsqueda en `getFilteredChats()`: `CHATS_DATA.filter(c => c.archived === showArchived)`. El buscador sigue funcionando dentro de cada tab (buscar en Archived busca solo entre los archivados).
+- **Mensaje de empty state dedicado**: "No archived chats." en vez del genérico "No chats match your search." cuando la tab activa es Archived y no hay nada — mismo criterio que ya usa Projects para su propia tab Archived.
+- **"Select" se oculta en la tab Archived** — no tiene sentido archivar en bulk algo que ya está archivado (la única acción masiva que existe hoy es Archive). Si el usuario estaba en modo selección y cambia de tab, `setChatsSelectMode(false)` lo saca automáticamente — evita dejar ids seleccionados de una lista que ya no se ve.
+- **Ellipsis de un chat archivado: solo "Rename chat", sin Pin/Unpin.** Mismo criterio que Projects ya aplica a sus propias cards archivadas (ver comentario en `projectActionsMenuMarkup`): pinear algo en estado terminal "archivado" podría resucitar en silencio una fila del sidebar para un chat que ya no aparece en la tab All. `chatActionsMenuMarkup(c)` ahora ramifica por `c.archived`.
+- **La tab seleccionada persiste entre visitas a la sección** (no se resetea a "All" al re-entrar) — mismo criterio que Projects, que tampoco resetea su filtro de ownership ni el término de búsqueda al volver a la vista. Solo el modo de selección masiva se resetea siempre (`setChatsSelectMode(false)` en `onNavSectionChange`).
+- **Verificado end-to-end con Chrome headless**: archivar un chat vía Select → desaparece de All → aparece en Archived → su ellipsis ahí solo tiene Rename (no Pin) → "Select" está oculto en Archived → volver a All lo sigue mostrando correctamente excluido.
+- **Fuera de alcance / pendiente**: no hay acción de "Unarchive"/restaurar todavía — un chat archivado se queda ahí permanentemente en este prototipo, mismo gap que Projects tiene hoy para sus propios archivados (solo tienen Delete, no restore).
+
 ## Estado actual de implementación
 
 - ✅ Vista real reemplaza el empty state genérico para `data-nav="chats-tasks"` — `sectionCopy['chats-tasks']` se eliminó, ya no hace falta.
@@ -70,6 +85,8 @@ Nueva primera opción en la ellipsis de cada fila: **Pin chat / Unpin chat** (í
 - ⛔ Sin persistencia — recargar la página vuelve `CHATS_DATA` a su estado inicial (chats archivados/pineados vuelven a su estado inicial)
 - ⛔ El concepto de "Task" sigue sin definir — nada en esta vista lo representa todavía
 - ✅ Archivar un chat pineado (bulk Archive) también oculta su fila del sidebar Pinned, mismo criterio que el Archive de Projects
+- ✅ Tabs All / Archived con su propio filtro, empty state dedicado y ellipsis recortada para archivados (ver sección arriba)
+- ✅ Nav item, tooltip y título de la vista dicen "Chats" (ya no "Chats and Tasks")
 
 ## Bug encontrado y corregido: el margin-top de la vista no se aplicaba
 
@@ -78,10 +95,9 @@ Al construir la vista, `.chats-view { flex: 1; overflow-y: auto; padding: 32px 4
 ## Pendiente / abierto
 
 - **Definir qué es una Task** y cómo convive con los Chats en esta misma vista (¿tipo de ítem distinto con su propio ícono/status, o una etiqueta sobre un chat existente?).
-- **"Rename chat"**: definir si es edición inline (como el nombre de un archivo) o un modal, y si el nombre editado debería propagarse a donde sea que ese chat aparezca (Pinned/Recent del sidebar, Search) — hoy esos son mocks independientes, sin fuente de datos compartida con `CHATS_DATA`.
-- **¿Archivar un chat acá debería reflejarse en Pinned/Recent/Search?** Hoy no — mismo tipo de brecha ya documentada entre `PROJECTS_DATA` y el markup estático de Pinned.
-- **¿Vale la pena una vista de "Archived"** para los chats archivados, o queda igual que Projects (se van y no vuelven a aparecer en ningún lado)?
-- **Loading skeleton**: si se quiere el mismo tratamiento de carga simulada que Projects, es una pasada aparte.
+- **"Rename chat" propagado a Recent/Search**: el nombre editado se propaga a `CHATS_DATA` y al sidebar Pinned si el chat está ahí, pero no a `SEARCH_DATA.chats` (Cmd+K) ni al markup estático de Recent — esos siguen siendo mocks independientes.
+- **¿Archivar un chat acá debería reflejarse en Recent/Search?** Hoy no toca esos dos — solo el sidebar Pinned (si estaba ahí). Mismo tipo de brecha ya documentada entre `PROJECTS_DATA` y el markup estático de Pinned.
+- **Sin "Unarchive"/restaurar** — un chat archivado se queda ahí permanentemente en este prototipo (ver sección de tabs arriba), mismo gap que tiene Projects hoy (solo Delete, no restore).
 
 ## Archivos relacionados
 

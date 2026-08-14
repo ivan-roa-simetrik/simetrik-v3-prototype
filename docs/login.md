@@ -1,6 +1,6 @@
 # Login
 
-> Last updated: 2026-08-12
+> Last updated: 2026-08-13
 > Related file: `index.html`
 
 ## Purpose
@@ -15,20 +15,20 @@ Entry point of the journey. Communicates what Simetrik V3 is ("everything goes t
 
 - **Full English copy, financial glossary translated.** The skill's mandatory glossary (Conciliación, Fuente, Asiento contable…) is normally never translated. The user explicitly instructed the whole prototype to move to English going forward, so glossary terms are now translated too (Reconciliation, Source, Journal entry, Accounting period). Recorded here as an explicit product decision, not an oversight.
 
-- **`Cover.png` used as the dark panel's background image.** This asset was shared earlier without a stated purpose; it's a dark blue/black gradient that fits naturally behind the value-prop content. Inferred usage — flag if wrong.
+- **`Cover.png` used as the dark panel's background image.** This asset was shared earlier without a stated purpose; it's a dark blue/black gradient that fits naturally behind the value-prop content. Inferred usage — flag if wrong. **Superseded 2026-08-13**: the panel background is now flat `#000000`, no image — see "Right panel: flat black background + animated perimeter border" below.
 
 - **Product naming shifted to match the reference**: "Simetrik Agéntico" (the working title from earlier sessions) is replaced by **"Simetrik V3"** / eyebrow "Simetrik as Code", with tagline "Everything goes through the agent." This now needs to be reconciled with Home/Sidebar/Chat copy, which still uses generic "Simetrik" branding (no direct conflict yet, but worth aligning in the next pass).
 
 - **"Continue with Google" uses Google's real multi-color G mark.** This is a standard, expected pattern for OAuth buttons (Google publishes this asset for exactly this use) — different from the earlier concern about using Claude's logo out of context.
 
-- **Floating "Workflow · Period close" mockup** is a static illustration (not interactive) representing the product's core loop: Dataset → Rule → Reconciliation → Output, with two floating badges ("Deterministic · Auditable" and a 92%-match ring). It exists purely to make the value proposition tangible on the dark panel, same spirit as the earlier chat→artifact mini-preview it replaces.
+- **Floating "Workflow · Period close" mockup** represents the product's core loop: Dataset → Rule → Reconciliation → Output, with two floating badges ("Deterministic · Auditable" and a 92%-match ring). It exists purely to make the value proposition tangible on the dark panel, same spirit as the earlier chat→artifact mini-preview it replaces. **Note:** described as "static" here originally, but it has run as a self-playing looping demo since "Demo animation loop on the mockup card (2026-08-12)" below — this line was stale even before today's changes, corrected now.
 
 ## Current implementation state
 
 - ✅ Light/dark split matching the reference structure
 - ✅ Google button (visual only — triggers the same simulated auth as email/password)
 - ✅ Email/password fields, show/hide password toggle, loading state on submit
-- ✅ Floating workflow mockup with gradient border + two floating badges
+- ✅ Right panel: flat black background, floating workflow mockup with an animated rotating gradient border + colored ambient glow, self-playing demo loop (typed prompt → typing indicator → pipeline steps → two floating badges)
 - ⛔ No real OAuth, no real validation — any input signs in
 - ⛔ Pills in the dark panel ("Card reconciliation", "Accounting close"...) are static, non-interactive
 
@@ -69,6 +69,9 @@ Follow-up to "panel derecho también centrado en ambos ejes": the user clarified
 ## Right panel horizontal padding + chat avatar (2026-08-12)
 
 - `.login-value` padding changed from `56px 64px` to `56px 224px` (left/right only, per explicit request — vertical padding untouched). This makes the content column noticeably narrower/more inset than before, independent of the panel's own outer width (no `max-width` — that was reverted).
+- Added a person avatar (`lucide: user`, dark circle) next to the chat bubble in the mockup animation, wrapped in a new `.mockup-msg-row` (flex, right-aligned) so it reads as an actual person chatting rather than a floating bubble with no sender. `.mockup-msg` itself lost its own `margin-left: auto`/`align-self` (now handled by the row's `justify-content: flex-end`).
+- Scope note: only added an avatar to the human's message. Didn't add a distinct agent reply bubble — the "response" is still represented by the two badges appearing at the end of the loop. Flag if a literal agent chat-bubble reply (separate from the badges) is what's wanted instead.
+- **Superseded 2026-08-13**: this avatar was removed — see "Mockup animation reconciled with real chat conventions" below. The real chat never gives the human sender an avatar, only the agent does; this was the inverse of that rule.
 
 ## Right panel horizontal padding reduced (2026-08-13)
 
@@ -106,13 +109,12 @@ Direct feedback after seeing the animated border in motion — it read as barely
 Against the new flat `#000000` panel, the card read as a flat cutout with no depth. Added a `box-shadow` to `.mockup-border` using the same "agent gradient" colors already driving the rotating border (blue `#4B5CF5` + pink `#E24CC9`, at low opacity, two stacked blur radii for a soft layered halo) instead of introducing a new color. It's currently a static glow (not synced to the border's rotation) — if it should breathe/pulse or shift hue in step with `mockupBorderTravel`, that's a further pass, flagging here in case it comes up.
 
 **Fix (same day, follow-up): glow was invisible in practice.** User reported not seeing it at all. Root cause: the original opacities (`.35`/`.22`) were sized for a shadow sitting on a lighter dark surface — against **true `#000000`** (not the old `Cover.png`, which had visible dark-navy/blue tones lifting the black), a low-alpha color composited over pure black is still almost black. `rgba(75,92,245,.35)` over `#000` resolves to roughly `rgb(26,32,86)`, barely distinguishable from the background once blurred/diffused further. Fixed by:
-- Raising opacities substantially (`.35/.22 → .65/.45/.35`)
-- Adding a third, tighter+brighter inner layer (`24px` blur, violet-blue) so there's a clearly visible rim right at the border, not just a diffuse outer haze
-- Adding spread (`2px`/`6px`/`10px`) to each layer so the color has some solid presence before it starts dissipating via blur
+- Raising the existing blue layer's opacity (`.35 → .65`) and tightening its blur (`32px → 24px`) so it reads as a crisp rim right at the border, not a diffuse haze
+- Adding a **new middle layer** in violet (`#7B4CF5`, the border gradient's own middle stop), `56px` blur, `.45` opacity, so the transition from blue to pink doesn't have a flat gap between them
+- Widening the existing pink layer's blur (`64px → 100px`) and raising its opacity (`.22 → .35`) for a softer, farther-reaching outer glow
+- Adding spread (`2px`/`6px`/`10px`) to all three layers so each has solid presence before it starts dissipating via blur
 
 **Takeaway for future passes on this dark panel**: any translucent color effect (glows, tints, overlays) needs meaningfully higher alpha than it would on a lighter or colored dark background — `#000000` gives zero lift, so subtlety reads as absence.
-- Added a person avatar (`lucide: user`, dark circle) next to the chat bubble in the mockup animation, wrapped in a new `.mockup-msg-row` (flex, right-aligned) so it reads as an actual person chatting rather than a floating bubble with no sender. `.mockup-msg` itself lost its own `margin-left: auto`/`align-self` (now handled by the row's `justify-content: flex-end`).
-- Scope note: only added an avatar to the human's message. Didn't add a distinct agent reply bubble — the "response" is still represented by the two badges appearing at the end of the loop. Flag if a literal agent chat-bubble reply (separate from the badges) is what's wanted instead.
 
 ## Right panel width capped, then reverted (2026-08-12)
 
@@ -155,4 +157,7 @@ Adding `align-items: center` to `.login-value` changed how `.mockup-wrap` sizes 
 - `index.html` — full markup + styles + script
 - `assets/img/Simetrik_logo.svg` — wordmark, left panel
 - `assets/img/Simetrik_isologo.png` — icon mark, inline in the headline
-- `assets/img/Cover.png` — dark panel background
+- `assets/img/simetrik-agent-icon.png` — agent mark, headline icon + mockup typing indicator avatar
+- `docs/chat.md` — source of truth for the real chat conventions the mockup animation now mirrors (avatar rules, bubble styling, typing indicator)
+
+`assets/img/Cover.png` is no longer used by this screen (superseded 2026-08-13 by a flat `#000000` background) — it's still referenced from `shared/tokens.css` for the sidebar avatar in the Home flow.

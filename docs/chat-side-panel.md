@@ -1,6 +1,6 @@
 # Panel lateral del chat
 
-> Última actualización: 2026-08-13
+> Última actualización: 2026-08-14
 > Archivo relacionado: `flows/home/index.html` (markup + `<style>` + script, todo inline al final del archivo)
 > Ver también: [`chat.md`](./chat.md) — el chat en general (composer, mensajes, header del hilo). Este archivo es la extensión del panel lateral que ese documento solo resumía; se separó a un archivo propio por la cantidad de comportamiento/bugs acumulados en esta sola pieza.
 
@@ -34,6 +34,8 @@ No es un sidebar de navegación (ese es `docs/sidebar.md`, un componente complet
 
 `[hidden]` sobre `#panelOpenPicker`/`#panelTabs` hace que los dos estados sean mutuamente excluyentes — nunca se muestran ambos a la vez, y el picker vuelve a aparecer automáticamente en cuanto se cierra el último tab.
 
+Dos elementos más viven como hermanos de `.chat-side-panel` (fuera de su propio árbol, pero parte del mismo mecanismo): `#chatResizeHandle` (tira de arrastre entre `.chat-thread-main` y `.chat-side-panel`) y `.chat-panel-actions` (wrapper flotante con los botones Expand/Restore width y Show/Hide panel, hijo directo de `.chat-pane`) — ver sus propias secciones más abajo.
+
 ## Comportamiento
 
 ### Toggle: abrir/cerrar el panel
@@ -47,6 +49,7 @@ No es un sidebar de navegación (ese es `docs/sidebar.md`, un componente complet
 - Tooltip: "Show panel" / "Hide panel" según el estado, alineado al borde derecho del botón (`.tooltip-end`) para no salirse de la pantalla estando en la esquina.
 - Fondo del panel: `--color-sidebar-bg` (el mismo gris del sidebar de navegación, no blanco).
 - **Segunda forma de abrirse, programática (2026-08-14).** Hasta ahora el panel solo se abría por interacción directa del usuario (botón, o elegir algo del picker). `openProjectChat()` (ver `home.md`) lo abre automáticamente al clickear una card/fila en la vista Projects — llama a `resetPanelTabs()` + `openPanelTab('project', id)` directamente, el mismo camino interno que ya usa el picker manual, no una ruta nueva. El tab de tipo Project que se abre así gana además una textura de fondo tipo mapa (`.panel-tab-content--map`) que los tabs de App/Agent no tienen.
+- **Tercera forma, también programática (2026-08-14): mandar el primer mensaje de un chat con un Project asociado en la barra gris del composer.** `startChat()` llama al mismo `resetPanelTabs()` + `openPanelTab('project', id)` que `openProjectChat()` — pero el primer intento no replicaba el resto del comportamiento (colapsar el sidebar de navegación, marcar el nav activo), lo que dejaba el layout con el sidebar expandido en vez de colapsado. Corregido para que ambos caminos programáticos dejen exactamente el mismo estado — ver `chat.md` → "Arrancar un chat con un Project asociado..." para el detalle completo del bug (íconos del header apretados contra `.chat-panel-actions`) y su verificación.
 
 ### Expand / Restore width: modo foco
 
@@ -58,8 +61,21 @@ Segunda acción, al lado de `#chatPanelToggle`, dentro del mismo wrapper (`.chat
   - El **sidebar de navegación de la app** (`#sidebar`) se fuerza a colapsado (`classList.add('is-collapsed')`, la misma clase/mecanismo que usa su propio botón en `shell.js`) — el objetivo es un modo foco real, sin el nav ni la conversación compitiendo por atención, solo el contenido del panel.
   - Se recuerda si el sidebar **ya estaba colapsado antes** de activar Expand (`sidebarWasCollapsedBeforeExpand`). Si el usuario lo había colapsado a propósito de antemano, "Restore width" no se lo vuelve a expandir — solo revierte lo que Expand mismo cambió.
 - **Al activar "Restore width"**: revierte `.is-panel-expanded` (la conversación vuelve a 370px) y restaura el sidebar a como estaba antes de Expand (expandido, salvo que ya estuviera colapsado).
-- **Cierres en cascada**: cerrar el panel entero con `#chatPanelToggle` mientras está expandido también sale del modo foco (`setPanelExpanded(false)`) — "expandido" no tiene sentido sin panel abierto. Lo mismo al iniciar un chat nuevo o navegar a Projects/Apps/Agents del nav: se llama `setPanelExpanded(false)` junto con el reset de tabs, así el sidebar nunca queda colapsado "huérfano" sin que el usuario entienda por qué.
-- **Reserva de espacio actualizada**: con dos botones (28px cada uno + 8px de separación = 64px) en vez de uno, `.chat-thread-header` y `.panel-tabs-bar` pasaron su `padding-right` de 56px a **92px** para seguir despejando el wrapper completo.
+- **Cierres en cascada**: cerrar el panel entero con `#chatPanelToggle` mientras está expandido también sale del modo foco (`setPanelExpanded(false)`) — "expandido" no tiene sentido sin panel abierto. Lo mismo al iniciar un chat nuevo o navegar a Projects/Apps/Agents/Chats and Tasks del nav: se llama `setPanelExpanded(false)` junto con el reset de tabs, así el sidebar nunca queda colapsado "huérfano" sin que el usuario entienda por qué.
+- **Reserva de espacio actualizada**: con dos botones (28px cada uno + 8px de separación = 64px) en vez de uno, `.chat-thread-header` y `.panel-tabs-bar` pasaron su `padding-right` de 56px a **92px** para seguir despejando el wrapper completo. Los íconos de historial/new-chat del header (`.chat-thread-header-icon-btn--history`/`--new-chat`, agregados después) reutilizan esta misma reserva de 92px cuando el header no está en su ancho docked de 370px, para no terminar debajo de estos dos botones tampoco.
+- **Bug encontrado y corregido (2026-08-14): `setPanelExpanded(false)` re-expandía el sidebar aunque nunca se hubiera activado Expand.** Los cierres en cascada de arriba llaman `setPanelExpanded(false)` defensivamente en cada cambio de sección (Projects, Chats and Tasks, Apps, Agents), incluso si el panel nunca estuvo expandido. Como `sidebarWasCollapsedBeforeExpand` arranca en `false` y solo se actualiza cuando "Expand" se clickea de verdad, ese `false` por defecto hacía que la rama `else` de `setPanelExpanded` interpretara "el sidebar no estaba colapsado antes" y lo forzara a expandirse — es decir, navegar a Projects con el sidebar colapsado manualmente lo reabría solo. **Fix**: guard de salida temprana al principio de la función (`if (expanded === chatThread.classList.contains('is-panel-expanded')) return;`) — una llamada que no cambia nada respecto al estado actual ya no toca el sidebar ni el ícono del botón.
+
+### Resize handle: ancho de la conversación ajustable a mano
+
+Tira invisible de 10px (`#chatResizeHandle`, entre `.chat-thread-main` y `.chat-side-panel`) que deja arrastrar el límite entre conversación y panel, en vez de que la columna de chat quede fija a 370px siempre que el panel está abierto.
+
+- **Solo visible/activo con el panel abierto y no expandido**: `.chat-thread.has-panel:not(.is-panel-expanded) .chat-resize-handle { display: block; }` — no tiene sentido redimensionar la conversación si está colapsada a 0 (modo foco) o si el panel ni siquiera está abierto.
+- **Cero huella de layout en reposo**: `width: 10px; margin: 0 -5px` se cancela a 0 (10 - 5 - 5), así que no empuja a ninguno de los dos vecinos ni deja una línea divisoria visible — el margen negativo lo "mete" 5px dentro de cada columna, dándole al cursor un área real de 10px para engancharse sin ocupar espacio ni verse.
+- **Grip visual (`.chat-resize-handle-grip`)**: una marca de 4×50px, elemento propio (no un `::before` del handle) para poder darle su propio `:hover` acotado a esa franja — es donde vive el tooltip ("Arrastra para redimensionar"), para que solo aparezca con el cursor exactamente sobre la marca, no en cualquier punto de la tira invisible de 10px. La marca en sí, en cambio, se ve al pasar el mouse por toda la tira ancha (no solo sobre sus propios 50px), para que el affordance de "acá se puede arrastrar" no quede limitado a una porción angosta.
+- **Color de la marca, pedido explícito del usuario a suavizar**: `rgba(85, 85, 95, 0.78)` — el mismo gris de `--color-ink-soft` pero un poco más claro (opacidad reducida en vez del token sólido), después de que el primer intento (`--color-ink-soft` a opacidad completa) se viera "muy cargado".
+- **Límites del arrastre**: mínimo `CHAT_MIN_WIDTH = 370px` (el mismo ancho fijo que ya usaba el toggle normal); máximo `paneWidth - 280px`, para que `.chat-side-panel` nunca quede aplastado a casi nada.
+- **Mientras se arrastra**: `body.is-resizing-chat-column` fuerza `cursor: col-resize` + `user-select: none` en todo el documento (no solo en el handle) — así un mouse rápido no "pierde" el handle a mitad del drag y termina seleccionando texto del chat en su lugar. La transición CSS de `.chat-thread-main` se apaga temporalmente (`style.transition = 'none'`) durante el drag para que el ancho siga al cursor 1:1 sin el delay de la animación, y se restaura al soltar.
+- **Reset**: `resetChatColumnWidth()` limpia el `flex-basis` inline puesto por el drag (`chatThreadMain.style.flexBasis = ''`), devolviéndole el control a la regla CSS de 370px (con su transición suave) — se llama al iniciar un chat nuevo y al cerrar el panel con `#chatPanelToggle`, para que la próxima vez que se abra arranque siempre desde el ancho por defecto, no desde donde quedó el último arrastre.
 
 ### Open picker: "What do you want to open?"
 
@@ -115,20 +131,21 @@ Documentados acá porque las causas son específicas de este componente y vale l
 - ✅ "+" para agregar otro tab: popover con el mismo buscador/filtro, posición fija respetando el botón de Hide panel, alineación dinámica start/end
 - ✅ Reset completo (tabs + búsqueda + filtro) al iniciar un chat nuevo
 - ✅ Expand / Restore width: modo foco que colapsa la conversación a 0 y fuerza el sidebar de navegación a colapsado, recordando su estado previo para restaurarlo correctamente
-- ⛔ **Contenido real de cada tab**: hoy es un placeholder de texto — falta diseñar qué se ve adentro de un tab de Project (¿resumen? ¿vista de mapa?), de App (¿detalle de la conexión?) y de Agent (¿configuración? ¿logs?)
+- ✅ Resize handle: arrastrar el límite entre conversación y panel (370px–`paneWidth - 280px`), con reset automático a 370px al cerrar el panel o iniciar un chat nuevo
+- ✅ **Contenido real del tab de Project — Fase 0 del Project View Map (2026-08-14)**: dejó de ser el placeholder de texto genérico. `renderProjectMapTab()` (llamada desde `renderPanelTabContent()` cuando `tab.type === 'project'`) reemplaza `panelTabContent.innerHTML` por el **empty state del mapa** — reusa el lenguaje visual de `.section-empty` (ícono en círculo + título + body) que ya usan las secciones vacías de Apps/Agents, en vez de inventar uno nuevo, envuelto en el modificador `.panel-map-empty` (cancela el `flex:1` que `.section-empty` espera de un ancestro column-flex, ya que `.panel-tab-content` es row-flex). Copy: "This project doesn't have nodes yet" + "Describe what you want to reconcile in the chat and I'll build the map for you." — resuelve a favor de "Map vive **dentro** de un tab de Project" la pregunta que este doc tenía abierta más abajo. El fondo de retícula de puntos (`.panel-tab-content--map`) no cambió, sigue siendo el mismo toggle de antes. App/Agent siguen con el placeholder de texto plano (`PANEL_TAB_CONTENT_LABELS`, ahora sin la entrada `project`). El canvas real (nodos, edges, pan/zoom) es la Fase 1, todavía sin construir — ver `docs/home.md` y la nota de planeación del Project View Map.
 - ⛔ Sin persistencia entre sesiones/recargas — los tabs y el picker viven solo en memoria de la página
 - ⛔ Sin límite explícito de tabs simultáneos — depende del scroll horizontal de la barra, no probado con muchos tabs reales
 
 ## Pendiente / abierto
 
-- **Contenido de cada tab** (el pendiente más grande): definir la vista real de Project/App/Agent dentro de un tab — incluye decidir si "Map" es una sub-vista/tab interno de un Project o algo más.
+- **Contenido real de los tabs de App y Agent**: sigue sin definir (¿detalle de la conexión para App? ¿configuración/logs para Agent?) — el tab de Project ya salió de este pendiente, ver arriba.
 - ¿Los tabs abiertos deberían persistir entre sesiones/recargas, o alcanza con que se reseteen (como hoy) al iniciar un chat nuevo?
 - ¿Hay un límite razonable de tabs abiertos simultáneamente, o el scroll horizontal de la barra alcanza para el prototipo?
 - ¿Se puede reordenar tabs (drag) o cerrarlos todos de una (como "Close all tabs" de un navegador)?
 
 ## Archivos relacionados
 
-- `flows/home/index.html` — todo vive acá: markup (`#chatSidePanel`, `#panelOpenPicker`, `#panelTabs`, `#panelOpenMenu`, `.chat-panel-actions`), CSS inline (`.panel-*`, `.chat-side-panel`, `.chat-panel-toggle`, `.is-panel-expanded`), y el script: `PANEL_APPS_DATA`/`PANEL_AGENTS_DATA`, `panelOpenDataFor`, `findPanelItem`, `panelOpenScopes`/`renderPanelOpenResults`/`wirePanelOpenScope`, `renderPanelTabsBar`, `renderPanelTabContent`, `updatePanelViewState`, `openPanelInThread`, `openPanelTab`, `closePanelTab`, `resetPanelTabs`, `updatePanelOpenMenuAlign`, `setPanelExpanded`.
+- `flows/home/index.html` — todo vive acá: markup (`#chatSidePanel`, `#panelOpenPicker`, `#panelTabs`, `#panelOpenMenu`, `.chat-panel-actions`, `#chatResizeHandle`/`.chat-resize-handle-grip`), CSS inline (`.panel-*`, `.chat-side-panel`, `.chat-panel-toggle`, `.is-panel-expanded`, `.panel-map-empty`, `.chat-resize-handle*`), y el script: `PANEL_APPS_DATA`/`PANEL_AGENTS_DATA`, `panelOpenDataFor`, `findPanelItem`, `panelOpenScopes`/`renderPanelOpenResults`/`wirePanelOpenScope`, `renderPanelTabsBar`, `renderPanelTabContent`, `renderProjectMapTab`, `updatePanelViewState`, `openPanelInThread`, `openPanelTab`, `closePanelTab`, `resetPanelTabs`, `updatePanelOpenMenuAlign`, `setPanelExpanded`, `CHAT_MIN_WIDTH`/`chatColumnWidth`/`resetChatColumnWidth` (resize handle).
 - `shared/shell.js` — `initSidebarCollapse()` define el `#sidebar`/`.is-collapsed` que `setPanelExpanded()` reutiliza para forzar/restaurar el colapso del nav durante el modo foco.
 - `shared/tokens.css` — tokens de color/radio/sombra/duración que consume todo lo anterior, más el sistema de tooltips (`.tooltip-bottom`, `.tooltip-end`). No tiene clases propias del panel, esas viven inline en `home/index.html`.
 - [`chat.md`](./chat.md) — el resto del chat (composer, mensajes, header del hilo); su propia sección de panel lateral quedó reducida a un resumen que apunta acá.

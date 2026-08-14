@@ -17,7 +17,7 @@ Es la pantalla a la que se llega después del login. Tipo Codex: layout de dos c
 
 - **El artefacto se muestra en split-pane, nunca reemplaza ni convive en tabs con el chat.** Cuando el chat genera un artefacto, el chat se achica a ~42% del ancho y el artefacto ocupa el resto. Se puede seguir escribiendo mientras se ve el artefacto. Alternativas descartadas: fullscreen (cortaba el eje conversacional) y tabs (menos fiel a "construir algo en paralelo a la charla"). Ver detalle de trade-offs en `chat.md`.
 
-- **"Proyectos", "Apps" y "Agents" son navegación de primer nivel, con contenido específico diferido.** El usuario pidió que estas 3 entradas existan en el sidebar con comportamiento propio ("secciones específicas que desarrollamos más adelante"). Para no dejar clicks muertos, "Apps" y "Agents" muestran un empty state genérico explicando qué van a hacer; "Proyectos" no tiene vista propia todavía porque ya está representado en la lista del sidebar (ver `sidebar.md`).
+- **"Proyectos", "Apps" y "Agents" son navegación de primer nivel, con contenido específico diferido.** El usuario pidió que estas 3 entradas existan en el sidebar con comportamiento propio ("secciones específicas que desarrollamos más adelante"). Decisión original: para no dejar clicks muertos, mostraban un empty state genérico explicando qué van a hacer. **Actualizado (2026-08-13/14): Proyectos y Apps ya graduaron a vistas reales** (`#projectsView`/`#appsView`, ver secciones "Projects" y "Apps" más abajo) — solo Agents sigue con el empty state genérico de esta decisión original.
 
 ## Estado actual de implementación
 
@@ -25,7 +25,7 @@ Es la pantalla a la que se llega después del login. Tipo Codex: layout de dos c
 - ✅ Estado vacío del chat con suggestion chips funcionando
 - ✅ Transición a hilo de chat + generación de artefacto mock (canned, no real)
 - ✅ Split-pane funcional con animación de entrada (320ms ease-out)
-- ✅ Empty states de Apps/Agents al clickear el nav correspondiente
+- ✅ Empty state de Agents al clickear el nav correspondiente; Apps y Projects ya tienen vista real (ver secciones dedicadas más abajo)
 - ⛔ Sin persistencia: recargar la página vuelve todo al estado inicial
 - ⛔ Sin vista de "todos los proyectos" (grid/lista completa)
 - ⛔ Sin lógica real de creación de proyecto — es simulación conversacional
@@ -137,13 +137,15 @@ El sidebar (trabajado por otra persona en paralelo) había agregado su propio el
 - Nueva función `wireSidebarProjectActionsBehavior()` (vive acá, junto a `toggleProjectPinned`/`archiveProject`/`openProjectEditModal`, no en `shell.js`) escucha clicks directamente sobre cada `.sidebar-project-actions-menu` del sidebar y despacha a las mismas funciones que ya usan las cards de esta vista: Unpin → `toggleProjectPinned(id)`, Archive → `archiveProject(id)`, Edit detail → `openProjectEditModal(findProjectById(id))`. `shell.js` sigue sin tocar — su único trabajo sigue siendo abrir/cerrar/posicionar el popover.
 - "Invite members" del sidebar queda **sin wiring todavía** — ese popover no tiene la vista de formulario inline que sí tiene el de esta vista; ver `sidebar.md` → Pendiente.
 
-## Create project (2026-08-13)
+## Create project (2026-08-13) — flujo original, ver superseding note abajo
 
-Flujo real de creación de proyectos — a diferencia de "Edit detail", este ya impacta datos: agrega una entrada real a `PROJECTS_DATA`. Administrado íntegramente desde esta vista (mismo criterio que "Edit detail"), con **3 entry points** que abren el mismo modal:
+> **2026-08-14: este modal quedó retirado del flujo real de creación** — reemplazado por un flujo conversacional (ver "Create project → flujo conversacional" más abajo). Se deja esta sección tal cual quedó documentada en su momento porque el código del modal (incluido el icon picker) **sigue en el archivo, sin borrar**, solo desconectado de los entry points — ver la nota al final de la sección nueva para el porqué.
+
+Flujo real de creación de proyectos — a diferencia de "Edit detail", este ya impacta datos: agrega una entrada real a `PROJECTS_DATA`. Administrado íntegramente desde esta vista (mismo criterio que "Edit detail"), con **3 entry points** que abrían el mismo modal:
 
 1. **Botón "New project" de la vista Projects** (`#newProjectViewBtn`) — ya existía, solo estaba sin wiring.
 2. **El "+" del sidebar sobre el nav item "Projects"** (hover-reveal, `.nav-item-add`, ver `sidebar.md`) — `shell.js` ya ignoraba explícitamente estos clicks (`initNavActive()` los excluye de disparar cambio de sección) en anticipación a esto; se agregó el wiring real acá, no en `shell.js`.
-3. **"New project" dentro del grupo Projects del selector de contexto del chat** (la barra gris, ver `chat.md` → "Selector de contexto") — único entry point con un comportamiento adicional: al crear, el proyecto nuevo queda **seleccionado por defecto** en esa misma barra (vía el callback `onCreate` de `openCreateProjectModal`).
+3. ~~**"New project" dentro del grupo Projects del selector de contexto del chat**~~ — este 3er entry point se probó y se revirtió explícitamente ese mismo par de días (ver `chat.md` → "Selector de contexto"), antes incluso de que llegara este cambio más grande. Los 2 reales, hoy, son los primeros dos de esta lista.
 
 ### El modal
 
@@ -221,6 +223,21 @@ Pedido explícito del usuario: reemplazar la foto de perfil (`user_profile.jpeg`
 - **`SEARCH_DATA.projects`** (Cmd+K): lista hardcodeada, ya documentada como intencionalmente desacoplada de `PROJECTS_DATA` desde antes de esta pasada — un proyecto nuevo (ni su ícono) no aparece en el buscador global. No se tocó para no romper esa decisión previa sin que se pida explícitamente.
 - **Sin validación de nombre duplicado a nivel de UX** (el slug sí se desambigua internamente, pero dos proyectos podrían mostrarse con el mismo `name` visible sin ningún aviso).
 
+## Create project → flujo conversacional (2026-08-14)
+
+Pedido explícito del usuario: "crear un proyecto" deja de ser un formulario. La experiencia pasa a ser **idéntica a abrir un proyecto ya existente** (clic en su card, ver "Clic en una card/fila: abre el chat del proyecto" arriba) — sidebar colapsado, saludo angosto a 370px, panel lateral abierto solo en el tab de mapa del proyecto. La diferencia es que el proyecto todavía no tiene identidad: arranca llamándose **"New Project"**, y es el **primer mensaje que el usuario escribe en ese chat** el que lo define — nombre y descripción incluidos. Se confirmaron 3 decisiones antes de construir (todas la opción recomendada): el modal se retira por completo, el primer mensaje define nombre **y** descripción (no solo nombre), y el ícono default queda en folder (sin picker en este flujo).
+
+- **`startNewProjectFlow()`** (nueva) es lo que ahora disparan los 2 entry points reales — `createProject({ name: 'New Project', description: '', pendingNameFromChat: true })` seguido de `openProjectChat(project)`. Mismos defaults de siempre en lo demás (`draft`, `1 member`, sin tags, ícono folder).
+- **`pendingNameFromChat`** (nuevo campo en el objeto de proyecto) marca "este proyecto todavía no tiene nombre real" — se eligió un flag explícito en vez de comparar `project.name === 'New Project'` como string, para no arriesgar un falso positivo si alguna vez un proyecto real terminara con ese nombre literal por coincidencia (ej. alguien lo renombra a eso a mano desde "Edit detail"). Los 3 proyectos mock originales no lo tienen seteado — `undefined` es falsy, se comportan como "ya nombrados" sin necesidad de agregarles el campo explícitamente.
+- **El saludo angosto tiene copy propio mientras está pendiente**: en vez de "Ask me to dig into a specific part of New Project" (que no significa nada — no hay nada todavía que "profundizar"), `showProjectChatGreeting()` muestra *"Tell me what you're building, and I'll set up this project around it."* cuando `project.pendingNameFromChat` es `true`. Una vez nombrado, un "New chat" posterior dentro del mismo proyecto ya cae en el subtítulo normal.
+- **`renameProjectFromFirstMessage(project, text)`** (nueva, junto a `deriveChatTitle`) es donde ocurre la definición real — llamada desde `startChat()` **antes** de `updateChatThreadHeader()`, para que el breadcrumb ya muestre el nombre real en vez de parpadear "New Project" primero:
+  - **Nombre**: `deriveChatTitle(text)` — la misma derivación mockeada que ya nombra los chats (trunca a 48 caracteres). No existe un resumen de IA real en este prototipo, así que reusar el único mecanismo ya establecido es más honesto que inventar uno nuevo que aparente ser más inteligente de lo que es.
+  - **Descripción**: el mensaje completo, tal cual — "todo surge de la explicación del usuario", pedido explícito.
+  - Sincroniza la fila del sidebar si el proyecto ya estuviera pineado (mismo patrón que `saveProjectEdit()`), limpia el flag, y llama `applyProjectsFilters()` para que la vista Projects ya muestre el nombre nuevo si se navega para atrás.
+  - `contextState.empty.selected.name` también se actualiza en el mismo momento — si no, la selección en memoria seguiría diciendo "New Project" aunque el dato real ya haya cambiado.
+- **Mismo nombre para el proyecto y para el chat.** Como ambos se derivan del mismo `firstPrompt` con la misma función, el chat recién registrado (`registerNewChat`) y el proyecto que lo contiene terminan con el mismo texto — no se inventó una segunda heurística para diferenciarlos.
+- **El modal viejo queda en el archivo, sin borrar.** `openCreateProjectModal`/`closeCreateProjectModal`/`submitCreateProjectModal` y todo el icon picker (`CREATE_PROJECT_ICON_DEFAULTS`, `getAllLucideIconNames`, `renderCreateProjectIconGrid`, etc.) ya no tienen ningún caller — quedaron desconectados, no eliminados, a la espera de que se confirme si se borran del todo o se reservan por si "Edit detail" gana edición de ícono más adelante (ver sección original arriba para el detalle completo de lo que hace ese código).
+
 ## Project detail — construido y luego revertido (2026-08-14)
 
 Se construyó una vista de detalle propia por proyecto (clic en el cuerpo de una card/fila → `#projectDetailView`, breadcrumb "Projects / {nombre}", título con ícono + conteo de miembros, botón Share placeholder, elipsis con Pin/Unpin, Edit detail, Archive y Delete siempre juntas). El mismo día, el usuario pidió revertirlo por completo — "esa vista ya no existe". Revertido en su totalidad: markup (`#projectDetailView` y su contenido), CSS (`.project-detail-*`), JS (`openProjectDetail`, `renderProjectDetail`, `projectDetailActionsMenuMarkup`, `membersLabelText`, toda la wiring asociada), el `cursor: pointer` que se le había agregado a `.project-card`/`.project-list-row`, y las referencias añadidas en `onNavSectionChange`/`closeAllProjectActionMenus`/`saveProjectEdit`/el modal de Delete. Las cards/filas volvieron a ser tiles estáticos sin destino, como antes de esta pasada — ver la sección "Create project" de arriba para el estado actual real de las cards.
@@ -256,15 +273,96 @@ Pedido explícito, con una segunda ronda de precisión sobre qué mantener y qu�
 
 ### El tab del proyecto en el panel: textura de mapa
 
-`renderPanelTabContent()` agrega `.panel-tab-content--map` cuando el tab activo es de tipo `project` — fondo con grid de puntos (`radial-gradient` repetido, técnica típica de canvas/whiteboard) para leerse como una vista de mapa/flow, no como el texto plano placeholder que sigue usando Apps/Agents. **El contenido real de qué va dentro de esa vista sigue sin definir** — el usuario aclaró explícitamente que esto es solo la textura de fondo, el contenido viene en una pasada posterior.
+`renderPanelTabContent()` agrega `.panel-tab-content--map` cuando el tab activo es de tipo `project` — fondo con grid de puntos (`radial-gradient` repetido, técnica típica de canvas/whiteboard) para leerse como una vista de mapa/flow, no como el texto plano placeholder que sigue usando Apps/Agents.
+
+### Project View Map — Fase 0 (2026-08-14, pasada siguiente)
+
+El contenido real de ese tab arrancó a construirse en fases, siguiendo un análisis previo de referentes (`mock-v3/flows/build`, `mock-v3/flows2/home`) cruzado con la arquitectura real de Simetrik V3 — documento completo en el artifact "Planos del Mapa" de esa sesión. Tres decisiones de producto ya tomadas antes de tocar código: (1) el modelo de nodos del mapa — **ver `project-map.md`**, documento propio dado que la definición pasó por varias correcciones y no cabía bien acá, (2) el detalle de un nodo vive en un drawer inferior no-modal (no en un panel lateral), (3) el mapa arranca vacío y es el primer mensaje del chat del proyecto el que lo construye — nada de mock data sembrada.
+
+**Fase 0 = el empty state real**, reemplazando el placeholder de texto (`"Project view — {nombre}"`) que esta sección describía hasta ahora. `renderProjectMapTab()` (nueva, llamada desde `renderPanelTabContent()` solo para `tab.type === 'project'`) escribe el mismo lenguaje visual que ya usan las secciones vacías de Apps/Agents (`.section-empty`: ícono en círculo + título + body), sobre la retícula de puntos que este mismo tab ya tenía. Copy: *"This project doesn't have nodes yet"* / *"Describe what you want to reconcile in the chat and I'll build the map for you."* — ancla el "cómo se construye" (hablándole al agente) desde el primer texto que alguien ve acá, coherente con que el chat de ese mismo proyecto queda visible al lado (370px) en todo momento.
+
+No se tocó nada del mecanismo de tabs (abrir/cerrar/dedupe, `openProjectChat`, el toggle de `.panel-tab-content--map`) — Fase 0 es puramente el contenido de ese contenedor.
+
+### Project View Map — Fase 1: navegación del canvas (2026-08-14, misma sesión)
+
+Primer recorte de Fase 1 (el listado completo de funcionalidades del mapa vive en el artifact "Planos del Mapa"): solo la categoría "Navegación del canvas", todavía sin nodos — eso es la siguiente pasada.
+
+- **La retícula de puntos se mudó de contenedor.** Hasta Fase 0, el fondo de puntos (`background-image` del `radial-gradient`) vivía directo en `.panel-tab-content--map`, fijo. Ahora vive en `.project-map-zoom-content`, la capa que sí se panea/zoomea — decisión deliberada y distinta de cómo lo hace el mock de referencia (ahí el fondo queda fijo y solo el contenido de los nodos se mueve): acá, sin nodos todavía, la retícula **es** el único contenido visible, así que tiene que ser lo que se mueve para que pan/zoom se sientan reales en vez de invisibles.
+- **`.project-map-zoom-content` es deliberadamente enorme** (`inset: -2000px`, ~4000px de lado, simétrico) — así un arrastre nunca se queda sin grilla que revelar, y el `transform-origin` por defecto (centro) alcanza para que el zoom quede anclado al centro del panel sin matemática extra.
+- **Pan**: arrastre con el botón izquierdo sobre el canvas (`initProjectMapCanvas`), traduce `.project-map-zoom-content` en píxeles crudos de pantalla — funciona igual a cualquier nivel de zoom porque `translate()` va *antes* que `scale()` en el mismo `transform` (se compone después del escalado, en el espacio del padre).
+- **Zoom**: botones +/− y rueda/trackpad, rango 0.6×–1.2× en pasos de 0.1 (mismos valores que el mock de referencia). Sin anclaje al cursor todavía — el zoom siempre ancla al centro del panel; anclarlo al puntero es una mejora de una pasada futura, no crítica mientras no haya nodos que "apuntar".
+- **Fit to view**: hoy es sinónimo de "volver a la vista de reposo" (`pan 0,0, zoom 1×`) porque no hay nodos contra los cuales calcular un encuadre real — mismo botón que la Fase 2 va a reescribir con lógica real de bounding-box.
+- **El empty state de Fase 0 no desapareció** — se movió a `.project-map-empty`, un overlay `position:absolute` con `pointer-events:none` que flota sobre el canvas real en vez de reemplazarlo. Ese `pointer-events:none` es funcional, no cosmético: sin él, el overlay se comería el drag del pan y el click de los botones de zoom que quedan debajo.
+- **No se implementó**: anclaje del zoom al cursor, encuadre inicial contra nodos reales (no hay nodos), ni el "salto a nodo" que usaría un futuro modo Audit — los tres dependen de que existan nodos o de una fase que todavía no toca (ver Fase 3/backlog del artifact).
+- Verificado por trazado de código + chequeo de sintaxis del `<script>`; sin confirmación visual en navegador (la extensión de Chrome no estaba conectada en la sesión).
+
+#### Ajuste: controles de navegación solo visibles con nodos (2026-08-14, pasada siguiente)
+
+Pedido explícito del usuario: los botones de zoom in/out/fit no debían verse mientras el mapa está vacío, solo una vez que hay nodos creados. `renderProjectMapTab()` ahora computa `tieneNodos = projectMapNodeCount(tab.id) > 0` y solo incluye el bloque `.project-map-controls` en el `innerHTML` cuando es `true` — no es un `hidden`/`display:none` sobre los botones ya renderizados, directamente no se emiten. `projectMapNodeCount()` es un stub que hoy siempre devuelve `0` (no existe modelo de nodos real todavía, eso es Fase 2) — vive como función propia, no como un `0` inline, para que Fase 2 solo tenga que cambiar qué lee esta función y no cada lugar que pregunte "¿este proyecto tiene nodos?". `initProjectMapCanvas()` ya tenía sus tres botones detrás de `if (zoomInBtn)`/`if (zoomOutBtn)`/`if (fitBtn)` desde Fase 1 (defensa contra que el DOM no los tenga), así que no hizo falta tocar esa función para que siga funcionando con los botones ausentes. **Pan (arrastre) y zoom con rueda siguen funcionando igual, con o sin nodos** — son gestos sobre el canvas mismo, no elementos de UI, y el pedido fue específicamente sobre visibilidad de los controles, no sobre deshabilitar la navegación en sí.
 
 ### Pendiente / abierto
 
-- **Contenido real del tab de proyecto**: por ahora solo tiene la textura de mapa + el texto placeholder de siempre ("Project view — {nombre}") encima. Qué va efectivamente dentro (¿un builder visual? ¿un dashboard?) queda para la próxima instrucción del usuario.
+- **Resto de Fase 1**: los nodos y edges reales (ver `project-map.md` para el modelo — Integración/Dataset/Function), el drawer inferior de detalle, y que el primer mensaje del chat del proyecto dispare el reveal animado — hoy el canvas se puede navegar pero sigue vacío, y con eso los controles de zoom se quedan sin mostrarse hasta que exista al menos un nodo.
+- **Pan/zoom no persisten entre re-renders del tab**: `renderProjectMapTab()` reconstruye el `innerHTML` completo cada vez que se vuelve a este tab (p. ej. después de mirar un tab de App y volver), así que la vista vuelve a su posición de reposo — mismo criterio de "no persiste" ya aceptado para el drag de nodos en la referencia real.
 - Mismo mecanismo de un solo tab: `resetPanelTabs()` se llama antes de abrir, así que si el panel ya tenía otros tabs abiertos (de una sesión de chat anterior), se pierden — coherente con "empezar un chat nuevo para este proyecto", pero vale confirmarlo si alguna vez se quiere que convivan.
+
+## Apps (2026-08-14)
+
+`onNavSectionChange` ya no cae en `sectionCopy.apps` (empty state genérico) — el nav item "Apps" abre una vista propia (`#appsView`), resolviendo el pendiente que existía acá arriba. Precedida de un documento de concepto (`docs/apps.md`), escrito **antes** de tocar código: el usuario aclaró explícitamente que "Apps" no son integraciones externas (el mock viejo — Slack/Snowflake/Google Drive — quedó descartado) sino **artefactos persistidos, construidos conversacionalmente**, que analizan proyectos, generan informes/comunicados y pueden tomar decisiones — con relación **muchos a muchos** con Proyectos (`app.projects: []`, 0..N), nunca contenida dentro de uno solo.
+
+- **Patrón de vista, calcado de Projects.** Mismo header (buscador colapsable a ícono, Filter, toggle grid/list, botón primario "New App"), mismo loading skeleton (700ms al entrar, 400ms por re-filtro, debounce 300ms en búsqueda), misma ellipsis con acciones. **Diferencias deliberadas frente a Projects**, porque una App no tiene lo mismo que un Proyecto:
+  - **"Filter by project"** en vez de "Filter by tag" — una App no tiene tags propios, pero sí 0..N proyectos de origen; el filtro multi-select opera sobre esos ids.
+  - **Tabs "All / Pinned / Archived"** en vez de las tabs de ownership de Projects ("Created by you"/"Shared") — Apps no tienen un modelo de owner/compartido definido todavía. "Pinned" reemplaza esa tercera posición porque, a diferencia de Projects (cuyo Pin/Unpin sincroniza con el sidebar), acá el pin es **local a esta vista** — sin una tab que lo refleje, togglear el pin no tendría ningún efecto visible.
+  - **Cards muestran proyectos vinculados como pills** (0–3 + "+N", o "No projects linked" en itálica si el array está vacío) en vez de tags, y un badge de status más simple (`Active`/`Draft`) en vez de Production/Draft + members.
+  - **Ellipsis sin "Invite members"** — a diferencia de Projects, el acceso/compartición de una App no está definido (ver `docs/apps.md` → Pendiente), así que esa opción no se inventó.
+  - **3 Apps sembradas** demostrando el rango completo 0/1/N de proyectos vinculados: `Bank Reconciliation Summary` (`latam-bank-reconciliation`), `Quarterly Anomaly Digest` (`q2-journal-entry-audit` + `q3-treasury-forecast`), `Board Update Draft` (ninguno, `status: 'draft'`).
+- **Own class family, sin excepción** (`.apps-*`/`.app-*`) — nunca comparte nombre con `.projects-*`/`.project-*`, mismo criterio que ya se aplicó a Chats and Tasks, evitando repetir la colisión de `.project-row`/`.search-tab` ya documentada.
+
+### Abrir/crear una App: mismo mecanismo que Project, generalizado
+
+Pedido explícito del usuario, con el criterio "revisá qué pasa al abrir una card de proyecto — debería ser lo mismo, con la diferencia de que abrís una app":
+
+- **`openAppChat(app)`** es `openProjectChat(project)` casi línea por línea: colapsa el sidebar, entra al hilo de chat con el saludo angosto (`showAppChatGreeting`, subtítulo condicionado a si la App todavía está `pendingNameFromChat`), y abre el panel lateral con esta App como único tab (`openPanelTab('app', app.id)`) — el panel muestra el artefacto ya construido (ver abajo), no la textura de mapa (eso es exclusivo de Project).
+- **`startNewAppFlow()`** es `startNewProjectFlow()` generalizado: `createApp({ name: 'New App', projects: [], pendingNameFromChat: true })` seguido de `openAppChat(app)` — **no** un modal de formulario. El "+" del nav item Apps y el botón "New App" de la propia vista disparan ambos esta misma función.
+- **`startChat()` generalizado** (antes exclusivo de `type === 'project'`): el branch que resuelve `pendingNameFromChat` ahora bifurca por tipo (`renameProjectFromFirstMessage` / `renameAppFromFirstMessage`, esta última nueva, mismo criterio: `deriveChatTitle(text)` para el nombre, el mensaje completo para la descripción, sin sync a sidebar); y el branch que colapsa a 370px + abre el panel automáticamente al mandar el primer mensaje con un contexto ya seleccionado en la barra gris pasó de `startContext.type === 'project'` a `startContext.type === 'project' || startContext.type === 'app'`, con `openPanelTab(startContext.type, startContext.id)` en vez de `'project'` hardcodeado.
+- **Sin sync al sidebar** — a diferencia de `renameProjectFromFirstMessage`, `renameAppFromFirstMessage` no busca ni actualiza ninguna fila de `Pinned` (Apps no están mirroreadas ahí en esta pasada, ver `docs/apps.md` → Pendiente).
+
+### El tab de App en el panel lateral: el artefacto real, no un placeholder
+
+`renderPanelTabContent()` gana un branch para `tab.type === 'app'` (`renderAppArtifactTab`), sacando a App del placeholder de texto plano que compartía con Agent (`PANEL_TAB_CONTENT_LABELS`, que ahora solo tiene `agent`):
+
+- **Mientras la App sigue `pendingNameFromChat`** (recién creada, sin primer mensaje todavía): estado vacío "This app doesn't have a build yet" / "Describe what you want it to do in the chat and I'll build it for you." — mismo lenguaje visual que el empty state del Project Map (`.section-empty`/`.panel-map-empty`), sin la retícula de puntos (esa es específicamente la metáfora de canvas del mapa).
+- **Una vez definida**: tarjeta de artefacto (`.app-artifact`) con ícono + nombre + descripción + badge de status en el header, una sección "Sources" con los proyectos vinculados como pills (o "runs standalone" si no hay ninguno), y un cuerpo de "Latest run" con copy genérico — mismo nivel de fidelidad "canned" que el resto de las respuestas del chat en este prototipo, no un motor de generación real.
+- **Se re-renderiza solo al reabrir el tab** (mismo criterio que `renderProjectMapTab`, que tampoco persiste estado entre renders) — si el usuario pide un cambio por chat y esto se conectara a lógica real en el futuro, el patrón para re-pintar ya existe.
+
+### Mock de integraciones reemplazado en todos los lugares donde se listaban Apps
+
+Diagnóstico pedido explícitamente por el usuario antes de construir: `Slack`/`Snowflake`/`Google Drive` aparecían en 3 lugares.
+
+- **`PANEL_APPS_DATA` → `APPS_DATA`**: pasó de una lista plana de 3 nombres a la fuente de verdad real (mismo rol que `PROJECTS_DATA` tiene para Proyectos) — alimenta el picker del panel lateral, el selector de contexto del chat (barra gris) y las menciones `@`, los tres ya genéricos vía `panelOpenDataFor('app')`, sin necesitar tocarlos.
+- **`SEARCH_DATA.apps`** (modal Cmd+K): actualizado a los 3 nombres reales — sigue intencionalmente desacoplado de `APPS_DATA` (mismo criterio ya aceptado para `SEARCH_DATA.projects`), así que una App creada por el usuario no aparece ahí.
+- **`CHATS_DATA`**: el chat de ejemplo con contexto App (`google-drive-sync-check`, `context: {type:'app', id:'google-drive'}`) se retargeteó a `reconciliation-summary-check-in` apuntando a `bank-reconciliation-summary`, para no dejar una referencia rota a un id de App que ya no existe.
+- **`iconForItem(type, item)`** se generalizó de `(type === 'project' && item.icon) || PANEL_OPEN_ICONS[type]` a `(item && item.icon) || PANEL_OPEN_ICONS[type]` — antes solo un Project podía traer su propio ícono; ahora una App también lo hace (cada una de las 3 sembradas tiene el suyo: `file-check`, `radar`, `megaphone`).
+
+### Edit App: nombre, descripción y proyectos vinculados
+
+Modal propio (`#appEditModalBackdrop`, `openAppEditModal`/`saveAppEdit`), mismo shell visual que `.project-edit-modal` pero con un campo que Projects no tiene: un checklist de proyectos (`#appEditProjectsList`, checkboxes sobre `PROJECTS_DATA` no archivados) — es la única superficie de UI donde se edita la relación 0..N con Proyectos después de creada la App. Guardar sobreescribe `app.projects` directamente con los ids marcados.
+
+### Pin/Unpin, Archive → Archived → Delete: mismo patrón que Projects, sin sync al sidebar
+
+- **Pin/Unpin** (`toggleAppPinned`) solo togglea `app.pinned` — sin `ensureSidebarPinnedItem` equivalente, así que no crea ninguna fila en el sidebar. Su único efecto visible es la tab "Pinned" de esta misma vista. Decisión explícita de esta pasada: no meterse con el lado del sidebar (propiedad de otra persona en este prototipo, ver `docs/apps.md` → Pendiente).
+- **Archive** (`archiveApp`) saca la App de la tab activa con el mismo fade+scale-down de 160ms que Projects, sin tocar el sidebar (no hay nada que ocultar ahí). La tab "Archived" es su único destino de vuelta.
+- **Delete** (`deleteApp`), solo disponible en una App archivada, abre un modal de confirmación propio (`#deleteAppModalBackdrop`, mismo texto/estructura que `delete-project-modal`) y sí hace `APPS_DATA.splice(...)` — eliminación real, no ocultamiento.
+
+### Pendiente / abierto
+
+- **Pin/Unpin no sincroniza con el sidebar** — a diferencia de Projects. Generalizar `ensureSidebarPinnedItem`/`toggleProjectPinned` (o construir el equivalente `.sidebar-pinned-app-*`) queda para una pasada futura, sin instrucción explícita todavía.
+- **El ícono "Project chats"/"New chat" del header del hilo sigue siendo exclusivo de Project** (`isProjectChat` en `updateChatThreadHeader` solo mira `selected.type === 'project'`) — abrir una App no muestra un histórico equivalente de sus propios chats ahí, aunque `CHATS_DATA.context.type === 'app'` ya lo soportaría sin cambios de datos.
+- Ver `docs/apps.md` → Pendiente para el resto (alcance de "accionar sobre datos", relación con Agents, `SEARCH_DATA.apps` desacoplado).
 
 ## Archivos relacionados
 
 - `flows/home/index.html` — markup + JS del home completo
 - `shared/tokens.css` — estilos de shell (sidebar) reutilizados acá
 - `shared/shell.js` — collapse de sidebar, expand de proyectos
+- `project-map.md` — modelo conceptual de los nodos del Project View Map (Integración/Dataset/Function) — leer antes de construir la Fase 2 (nodos + edges reales)

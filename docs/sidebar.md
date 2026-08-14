@@ -1,6 +1,6 @@
 # Sidebar
 
-> Última actualización: 2026-08-12
+> Última actualización: 2026-08-14
 > Archivos relacionados: `shared/tokens.css` (estilos y comportamiento vía clases de estado), `shared/shell.js` (JS de interacción), markup en `flows/home/index.html`
 >
 > Este documento describe la **definición final** del sidebar tal como quedó construido, no un historial de cambios. Para el registro turno a turno de cómo se llegó acá, ver `docs/README.md` → tabla de historial.
@@ -18,8 +18,8 @@ Sidebar (260px expandido / 52px colapsado)
 │   └── Header actions (solo expandido): Search · Close sidebar
 ├── Nav principal
 │   ├── Search           (solo visible colapsado — el de expandido vive en el header)
-│   ├── New Chat          (acción primaria, ícono +)
-│   ├── Chats and Tasks   (ícono message-circle-more — vista global, sin construir todavía)
+│   ├── New Chat          (acción primaria, ícono +, atajo real ⌘J/Ctrl+J)
+│   ├── Chats             (ícono message-circle-more — vista global de todos los chats, ver chats-and-tasks.md)
 │   ├── Projects          (ícono folder, "+" en hover → New Project)
 │   ├── Apps              (ícono layout-grid, "+" en hover → New App)
 │   └── Agents            (ícono bot, "+" en hover → New Agent)
@@ -49,13 +49,13 @@ Sidebar (260px expandido / 52px colapsado)
 - Footer: solo el avatar (36×36) queda visible; el botón Log out se oculta (no entra sin desbordar).
 - Los tooltips suprimidos en el estado expandido **sí se muestran** acá, porque ya no hay texto visible al lado del ícono.
 
-Trigger de colapsar/expandir: el ícono `panel-left` del header (visible solo expandido) colapsa; el hover sobre el isologo (visible solo colapsado) expande. Son dos botones distintos, no uno que cambia de ícono.
+Trigger de colapsar/expandir: el ícono `panel-left` del header (visible solo expandido) colapsa; el hover sobre el isologo (visible solo colapsado) expande. Son dos botones distintos, no uno que cambia de ícono. También responde a `⌘B`/`Ctrl+B` desde cualquier parte de la pantalla (ver sección propia más abajo).
 
-**Invariante:** navegar entre secciones (Projects, Chats and Tasks, Apps, Agents, New Chat) **nunca** debe tocar el estado collapse/expand del sidebar — ese estado es exclusivamente del usuario, vía los dos botones de arriba. Ver bug corregido abajo.
+**Invariante:** navegar entre secciones (Projects, Chats, Apps, Agents, New Chat) **nunca** debe tocar el estado collapse/expand del sidebar — ese estado es exclusivamente del usuario, vía los dos botones de arriba. Ver bug corregido abajo.
 
 ### Bug corregido (2026-08-14): navegar a una sección reabría el sidebar colapsado
 
-Clickear Projects (o Chats and Tasks / Apps / Agents) con el sidebar colapsado lo reabría, aunque el click navegaba correctamente a la sección. Causa: `onNavSectionChange` (en `flows/home/index.html`) llama `setPanelExpanded(false)` en cada cambio de sección, para resetear el panel lateral del chat (`#chatSidePanel`, ver `chat-side-panel.md`) si venías del hilo de chat — pero esa función, al pasar a `expanded=false`, también restaura el sidebar (`sidebar.classList.remove('is-collapsed')`) salvo que `sidebarWasCollapsedBeforeExpand` sea `true`. Esa variable arranca en `false` y solo se actualiza cuando "Expand" del panel lateral se usó de verdad — así que una llamada a `setPanelExpanded(false)` sin que el panel hubiera estado expandido (el caso normal al navegar por el nav) siempre evaluaba `!sidebarWasCollapsedBeforeExpand` como `true` y sacaba el collapse sin condición, sin importar si el usuario lo había colapsado a mano.
+Clickear Projects (o Chats / Apps / Agents) con el sidebar colapsado lo reabría, aunque el click navegaba correctamente a la sección. Causa: `onNavSectionChange` (en `flows/home/index.html`) llama `setPanelExpanded(false)` en cada cambio de sección, para resetear el panel lateral del chat (`#chatSidePanel`, ver `chat-side-panel.md`) si venías del hilo de chat — pero esa función, al pasar a `expanded=false`, también restaura el sidebar (`sidebar.classList.remove('is-collapsed')`) salvo que `sidebarWasCollapsedBeforeExpand` sea `true`. Esa variable arranca en `false` y solo se actualiza cuando "Expand" del panel lateral se usó de verdad — así que una llamada a `setPanelExpanded(false)` sin que el panel hubiera estado expandido (el caso normal al navegar por el nav) siempre evaluaba `!sidebarWasCollapsedBeforeExpand` como `true` y sacaba el collapse sin condición, sin importar si el usuario lo había colapsado a mano.
 
 Fix: `setPanelExpanded()` corta temprano (`return`) si el estado pedido ya es el estado actual (`expanded === chatThread.classList.contains('is-panel-expanded')`) — una llamada que no representa un cambio real ya no toca el sidebar ni el ícono del toggle. Las transiciones legítimas (click real en "Expand"/"Restore width", o cerrar el panel lateral estando expandido) siguen andando igual, porque en esos casos el estado pedido sí difiere del actual.
 
@@ -66,16 +66,40 @@ A 52px, Pinned pasa a mostrar solo su ícono (`pin`) — no hay espacio para lee
 - **Contenido = literalmente los mismos elementos DOM que la sección expandida usa, no una réplica visual.** Cada proyecto pineado se renderiza como un `.project-item` real (`.project-row-wrap`/`.project-row`/`.folder-icon`/`.chat-sublist`/`.chat-row` — las clases reales del sidebar, no unas propias del popover) y cada chat pineado suelto como un `.sidebar-pinned-chat-row-wrap` real. **Corrección (2026-08-14, feedback directo):** la primera versión mostraba los chats de cada proyecto siempre desplegados, sin click; el usuario pidió que abrir/cerrar y el hover funcionen **igual que la fila real** (mismo crossfade folder↔folder-open, mismo hover unificado de toda la fila) — al reusar las clases reales en vez de inventar unas paralelas, ese comportamiento sale gratis y sin riesgo de divergencia. Clickear el nombre de un proyecto solo abre/cierra sus chats (nunca selecciona ni cierra el popover, igual que la fila real); clickear un chat sí selecciona (ver abajo). El estado abierto/cerrado de cada proyecto se toma como foto del sidebar real al abrir el popover, pero desde ahí es independiente — togglearlo adentro del popover no escribe de vuelta a la fila real.
 - **Buscador en vivo**, arriba del listado — filtra por nombre de proyecto o de chat. Si el término matchea el nombre del proyecto, se muestran todos sus chats (forzado a expandido, sin necesidad de click); si no matchea el proyecto pero sí alguno de sus chats, se muestra el proyecto (como header de contexto) con solo los chats que matchean, también expandido.
 - **Seleccionar un chat (anidado en un proyecto, o pineado suelto) cierra el popover** — mismo criterio de "no hay destino real todavía" que el modal de Search y el open picker del panel lateral del chat; no es una omisión, es el mismo no-op ya establecido en el resto del prototipo.
-- **Sin datos propios — lee el DOM vivo de Pinned en cada apertura/tecla**, en vez de mantener una segunda lista. La lista de Pinned del sidebar (el `<ul class="project-list">`) ya es la fuente de verdad que sincronizan tanto la vista Projects como Chats and Tasks (`ensureSidebarPinnedItem`/`ensureSidebarPinnedChatItem`) — reusar su contenido evita que este popover divergiera de esa lista, el mismo tipo de bug de "dos mocks separados" que ya pasó antes en este prototipo (ver `home.md`).
+- **Sin datos propios — lee el DOM vivo de Pinned en cada apertura/tecla**, en vez de mantener una segunda lista. La lista de Pinned del sidebar (el `<ul class="project-list">`) ya es la fuente de verdad que sincronizan tanto la vista Projects como Chats (`ensureSidebarPinnedItem`/`ensureSidebarPinnedChatItem`) — reusar su contenido evita que este popover divergiera de esa lista, el mismo tipo de bug de "dos mocks separados" que ya pasó antes en este prototipo (ver `home.md`).
 - **Portal, mismo patrón que el popover de acciones por proyecto** (`sidebar-project-actions-menu`): el header de Pinned vive dentro de `.sidebar-section`, que recorta overflow para su propio scroll — cualquier popover anidado ahí se corta sin importar el `position` que use. Vive como sibling de `.app-shell` cerca de `</body>`, posicionado con `position: fixed` calculado vía `getBoundingClientRect()` (misma lógica de fallback a la izquierda + clamp contra los bordes de la ventana que ya usa el otro popover).
 - **No pisa el comportamiento expandido.** El header de Pinned sigue togglenado expand/collapse de la sección normalmente cuando el sidebar está expandido — el popover solo se activa si `#sidebar` tiene `.is-collapsed`. Un fix chico en `initSectionCollapse()` evita que el toggle de `.is-expanded` (invisible mientras está colapsado) se siga disparando en segundo plano en cada click del popover — sin eso, abrir/cerrar el popover varias veces iba a dejar la sección en un estado de expand/collapse aleatorio para cuando el usuario expandiera el sidebar de nuevo.
 - Expandir el sidebar (desde el isologo o el botón `panel-left`) cierra el popover si estaba abierto, para que no quede flotando al lado de un header que ya no está en esa posición.
+- **Altura dinámica (2026-08-14, pedido explícito): `min-height: 200px` / `max-height: 300px`, no una altura fija.** El popover crece o encoge según cuánto contenido tenga (pocos pineados = caja chica, hasta 200px mínimo; muchos = crece hasta 300px y ahí `#sidebarPinnedPopoverResults` habilita scroll interno, vía `overflow-y: auto` + `min-height: 0` para que el flex item efectivamente pueda encogerse por debajo de su contenido — sin ese `min-height: 0`, el `max-height` del contenedor no alcanza a frenarlo). Distinto del resto de popovers del prototipo (modal de Search, open picker del panel lateral), que usan altura **fija** a propósito porque su contenido está centrado y redimensionar causaría un salto visual de recentrado en cada tecla (ver `search.md`) — acá el popover está anclado arriba, no centrado, así que crecer/encoger no genera ese mismo salto.
+  - **Reposicionamiento defensivo**: como la posición (`top`) se calcula una sola vez al abrir, si el contenido crece después (se borra el término de búsqueda, se expande un proyecto) el borde inferior podría quedar fuera de la ventana. `repositionPopover()` corrige el `top` únicamente cuando eso pasa de verdad (nunca lo mueve hacia abajo ni lo recalcula horizontalmente, el ancho es fijo) — se llama tras cada tecla en el buscador y, al expandir un proyecto, tanto de inmediato como 210ms después (la transición del `chat-sublist` tarda `--dur-base`/200ms en asentarse, así que la altura final recién es medible ahí).
+- **Bug corregido (2026-08-14, feedback directo): hacer scroll adentro del popover lo cerraba.** El listener que cierra el popover al hacer scroll de la página (`document.addEventListener('scroll', closePopover, true)`) usa la fase de captura para poder escuchar el scroll del `.sidebar-section` de más arriba — pero la fase de captura también recibe el scroll de cualquier descendiente, incluyendo el propio `#sidebarPinnedPopoverResults` (que tiene su `overflow-y: auto` desde el fix de altura dinámica de arriba). Resultado: scrollear la lista de resultados del popover lo cerraba a sí mismo. Fix: el listener ahora chequea `popover.contains(e.target)` antes de cerrar — un scroll que se origina adentro del popover ya no lo afecta, solo lo cierra un scroll genuinamente externo (de la página o del `.sidebar-section`).
 
 ## Nav principal: comportamiento "seleccionado"
 
 New Chat, Projects, Apps y Agents comparten un sistema de estado activo mutuamente excluyente (`data-nav` + clase `.is-active`, manejado por `initNavActive()` en `shell.js`): clickear uno le agrega fondo `--color-primary-tint` + texto `--color-primary-ink`, y se lo saca a cualquier otro que lo tuviera. New Chat participa de este sistema (con `data-nav="new-chat"`) pero además dispara su propio handler que resetea el chat al estado vacío — ambos comportamientos conviven sin conflicto.
 
 Projects y New Chat, al clickear, **no** abren una vista alternativa en el área principal (`onNavSectionChange` los excluye explícitamente). Apps y Agents sí — muestran un empty state genérico ("esta sección se desarrolla en la próxima iteración").
+
+### New Chat: atajo de teclado real (⌘J / Ctrl+J) (2026-08-14)
+
+Pedido explícito del usuario: además del click, `New Chat` responde a un atajo de teclado desde cualquier parte de la pantalla — mismo alcance global que ya tiene `⌘K`/`Ctrl+K` para Search.
+
+- **Historial de combinaciones que no funcionaron, en orden** (cada una reportada por el usuario probándolo en su propio navegador — este entorno no tiene navegador conectado, así que ninguna de estas se pudo reproducir/verificar acá, solo razonar sobre ellas):
+  1. **`⌘N`/`Ctrl+N`** (primer intento, mnemónico obvio para "New"): reservado por el navegador para "abrir ventana nueva" en Chrome, Safari y Firefox — el evento `keydown` ni siquiera le llega a la página, así que `preventDefault()` nunca alcanza a ejecutarse. No es un bug de código, es una limitación de la plataforma web (mismo motivo por el que tampoco se puede interceptar `Ctrl/Cmd+T` o `Cmd+W`). `⌘⇧N` tampoco hubiera servido — Chrome lo reserva para ventana de incógnito.
+  2. **`⌥⌘N`/`Ctrl+Alt+N`** (segundo intento): el usuario reportó que Chrome lo usa para dividir la vista (split view).
+  3. **`⇧⌥⌘N`/`Ctrl+Shift+Alt+N`** (tercer intento, combo de 3 modificadores): tampoco funcionó en el navegador del usuario. Pedido explícito después de este fallo: volver a algo **simple** — un solo modificador Cmd/Ctrl + una letra, no seguir apilando modificadores.
+  4. **`⌘J`/`Ctrl+J`** (actual): razonamiento aplicado — los atajos de Chrome relacionados con la letra J son `⇧⌘J` (Downloads) y `⌥⌘J` (consola de JavaScript), ambos con un modificador extra además de Cmd; ninguno usa `⌘J` solo. Mismo patrón por el que `⌘B` (ver sección siguiente) sí funcionó — Chrome reserva `⇧⌘B` para la barra de marcadores, no `⌘B` solo. Sigue siendo una apuesta razonada, no verificada en vivo — si tampoco dispara, hace falta seguir probando.
+- **No reimplementa nada** — el listener global de teclado (en el script de `flows/home/index.html`, mismo bloque `keydown` que ya manejaba `⌘K`) hace `document.getElementById('newChatBtn').click()`. Dispara los mismos handlers reales que ya escuchan el click del botón (reset del chat a estado vacío, estado activo del nav, salir de Projects/Chats si estaban abiertos), igual que ya hacía "New Chat" dentro de la vista Chats (`#chatsNewChatBtn`) — mismo patrón, no una segunda implementación de "qué es un chat nuevo".
+- **Indicador visual permanente, no un tooltip simple.** A diferencia de Search (ícono siempre solo, sin label — el atajo vive en su `.tooltip-bubble` con `<kbd>⌘K</kbd>`, que solo se ve al hover), New Chat ya muestra su label "New Chat" en estado expandido — un tooltip redundante ahí no aportaría nada (misma regla que ya aplica al resto de nav items, ver sección Tooltips). En cambio, un chip `<kbd class="nav-item-kbd">⌘J</kbd>` queda **siempre visible** a la derecha del label, mismo criterio que ya usan los atajos `⌘1`/`⌘2` de ejemplo en los resultados del modal de Search (`.search-result-kbd`) — clase propia en `shared/tokens.css` porque esa vive en el `<style>` inline de `flows/home/index.html`, no en el shell compartido.
+- **Fix (feedback directo): el tooltip colapsado no se veía como un `<kbd>` real.** La primera versión dejó `data-tooltip="New chat (...)"` (el sistema simple de texto plano vía `attr()`) — se veía como texto con paréntesis, no como el chip `<kbd>` real que sí muestra Search en su tooltip. Corregido: `#newChatBtn` pasó del sistema simple al rico (`.tooltip-bubble tooltip-bubble--right` con un `<kbd>` real adentro, mismo componente que ya usa Search en el rail colapsado), quitando el atributo `data-tooltip`. Como New Chat es un único botón presente en ambos estados (a diferencia de Search, que usa dos elementos separados — uno por estado), hizo falta una regla de supresión nueva y propia (`.sidebar:not(.is-collapsed) #newChatBtn .tooltip-bubble { display: none; }`) para que el bubble no aparezca también en expandido, donde ya sería redundante con el label + el chip inline.
+
+### Sidebar collapse/expand: atajo de teclado real (⌘B / Ctrl+B) (2026-08-14)
+
+Pedido explícito del usuario, mismo pedido que el de New Chat. A diferencia de `⌘N`, `⌘B` **sí es interceptable** — los navegadores solo le dan un significado especial (negrita) *dentro* de un contexto de edición de texto enriquecido, no lo reservan a nivel de browser-chrome como pasa con "nueva ventana"/"nueva pestaña". Es además una convención ya establecida en varios productos reales (VSCode, Notion, Linear, Slack) para exactamente esta acción: "toggle sidebar".
+
+- **Vive en `initSidebarCollapse()` (`shell.js`), no en el listener de teclado de la página.** A diferencia de `⌘J` (que llama al click real del botón de New Chat, código que vive en `flows/home/index.html`), colapsar/expandir el sidebar ya es 100% responsabilidad de `shell.js` — el atajo llama directamente a la misma función `toggleSidebar()` interna que ya usan los dos botones (`#sidebarToggle`, `#sidebarLogoExpand`), sin duplicar lógica.
+- **Tooltips de los dos botones convertidos al sistema rico**, mismo criterio que New Chat: `#sidebarToggle` ("Close sidebar", visible solo expandido) y `#sidebarLogoExpand` ("Open sidebar", visible solo colapsado) pasaron de `data-tooltip` (texto plano) a `.tooltip-bubble` con `<kbd>⌘B</kbd>` real adentro. A diferencia de New Chat, acá **no hizo falta ninguna regla de supresión** — cada botón existe en un solo estado (nunca los dos a la vez, igual que las dos versiones de Search), así que no hay caso de "tooltip redundante en el otro estado" que evitar.
+- **CSS nuevo necesario**: `#sidebarLogoExpand` no es `.icon-btn` ni `.nav-item` (es `.logo-mark.sidebar-logo-icon`), así que las reglas existentes que muestran `.tooltip-bubble` al hover no lo alcanzaban — se sumó `.logo-mark.sidebar-logo-icon` a esas reglas (la de opacidad y la del deslizamiento de `.tooltip-bubble--right`). `#sidebarToggle` sí es `.icon-btn`, no necesitó nada nuevo.
 
 ## Pinned y Recent: por qué son secciones, no solo nav items
 
@@ -85,6 +109,13 @@ Cada uno existe como una categoría colapsable independiente (clase `.sidebar-se
 - **Recent**: chats generales sin proyecto asociado, lista plana sin jerarquía.
 
 Ambas se expanden/colapsan como grupo completo (chevron en el header de sección, mismo mecanismo grid `0fr↔1fr` que ya usaban las filas de proyecto individuales).
+
+### Recent ya no es puramente estático (2026-08-14)
+
+Hasta ahora `#sidebarRecentList` era markup fijo, sin ningún JS que lo tocara. Arrancar cualquier chat nuevo (`registerNewChat`, ver `docs/chat.md` → "Arrancar un chat lo registra en Recent...") ahora le hace `prepend` de una fila nueva (más reciente primero), con el título derivado del primer prompt.
+
+- **Se agrega el título tal cual, sin importar si el chat tiene un Project/App/Agent asociado.** Esto amplía un poco la definición de "Recent" de la lista de arriba (pensada originalmente como "chats *sin* proyecto") — hoy un chat recién iniciado aparece acá aunque sí tenga contexto, porque la intención pedida fue "cualquier chat que arranco impacta Recientes", no solo los sueltos. Las filas mock originales (sin contexto) siguen siendo el único contenido "curado" a mano; las nuevas se agregan tal cual, sin filtrar por contexto.
+- **Sin wiring de click/pin todavía** en las filas agregadas — mismo estado que el resto de Recent (`href="#"`, sin destino real).
 
 ## Colores
 
@@ -96,10 +127,12 @@ Ambas se expanden/colapsan como grupo completo (chevron en el header de sección
 
 Sistema de dos capas:
 
-1. **`[data-tooltip]` + `::after`** (texto plano vía `attr()`): usado en la mayoría de los íconos. Variante default = aparece a la derecha; clase `.tooltip-bottom` = aparece abajo (Search y Close sidebar del header la usan).
-2. **`.tooltip-bubble`** (markup real): usado donde hace falta más que texto plano — Search (header y colapsado) muestra `Search` + un `<kbd>⌘K</kbd>`. Variante `.tooltip-bubble--right` para la versión colapsada, consistente con sus vecinos del rail.
+1. **`[data-tooltip]` + `::after`** (texto plano vía `attr()`): usado en la mayoría de los íconos (Pinned/Recent, avatar del footer, etc.).
+2. **`.tooltip-bubble`** (markup real): usado donde hace falta más que texto plano — un `<kbd>` con el atajo real. Search (header y colapsado), Close/Open sidebar (`⌘B`) y New Chat (`⌘J`) lo usan. Variante `.tooltip-bubble--right` para los que viven en el rail colapsado (Search colapsado, Open sidebar, New Chat), consistente con sus vecinos; default (sin modificador) para los del header, que aparece abajo.
 
-**Regla de supresión:** cuando el sidebar está expandido, los tooltips de nav items, headers de sección y el avatar se ocultan (`display:none` sobre el `::after`) porque ya hay un texto visible al lado que dice lo mismo — mostrarlo sería redundante. Search, Close/Open sidebar y Log out **siempre** muestran su tooltip, en cualquier estado, porque nunca tienen un label de texto adyacente.
+**Regla de supresión:** cuando el sidebar está expandido, los tooltips de nav items, headers de sección y el avatar se ocultan (`display:none` sobre el `::after`, o una regla propia para `.tooltip-bubble` en el caso de New Chat — ver su sección) porque ya hay un texto visible al lado que dice lo mismo — mostrarlo sería redundante. Search, Close/Open sidebar y Log out **siempre** muestran su tooltip, en cualquier estado, porque nunca tienen un label de texto adyacente.
+
+**Bug corregido (2026-08-14): los tooltips de Open sidebar y New Chat no se veían en absoluto.** `.tooltip-bubble` es `position: absolute` — necesita un ancestro con `position` distinto de `static` para anclarse a ese botón; si no lo encuentra, usa el viewport completo como referencia y termina renderizado fuera de pantalla. `[data-tooltip]` (el sistema simple) trae ese `position: relative` de fábrica; `.tooltip-bubble` no. Al convertir estos botones del sistema simple al rico (ver secciones de `⌘B`/`⌘J` más arriba), perdieron ese anclaje porque ni `.nav-item` (New Chat) ni `.logo-mark` (Open sidebar) lo tenían — a diferencia de `.icon-btn` (Close sidebar, Search), que sí. Fix: `position: relative` agregado a `.nav-item` y a `.logo-mark.sidebar-logo-icon`. Efecto secundario positivo: esto también corrige un bug preexistente que nadie había notado — el tooltip de **Search en el rail colapsado** (`.nav-item.sidebar-search-collapsed`, usa `.tooltip-bubble` desde siempre) tenía exactamente el mismo problema desde antes de esta sesión.
 
 ## Micro-animaciones (todas hover/click, ninguna en loop)
 
@@ -152,7 +185,7 @@ Resuelve el gap que había quedado documentado acá mismo: al pinear un proyecto
 
 ## Chats and Tasks (2026-08-13)
 
-Nuevo nav item, entre New Chat y Projects: ícono `message-circle-more` + label "Chats and Tasks" (`data-nav="chats-tasks"`).
+Nuevo nav item, entre New Chat y Projects: ícono `message-circle-more` + label "Chats" (`data-nav="chats-tasks"`, nombre interno sin cambios). Label original "Chats and Tasks" — rebautizado a solo **"Chats"** el 2026-08-13, pedido explícito del usuario, mientras el concepto de "Task" siga sin definir (ver `chats-and-tasks.md`).
 
 - **Propósito**: listar los chats a nivel general de todo el sistema — a diferencia de **Pinned** (chats anidados dentro de sus proyectos, curados) y **Recent** (chats sueltos sin proyecto), esta sección es la vista global de *todos* los chats de la cuenta, sin ese recorte. Tampoco es lo mismo que **Projects** (que lista Proyectos, no chats).
 - Participa del sistema de estado activo mutuamente excluyente igual que el resto (`initNavActive()` en `shell.js`, genérico para cualquier `.nav-item[data-nav]` — no requirió cambios ahí).
@@ -170,7 +203,7 @@ Nuevo nav item, entre New Chat y Projects: ícono `message-circle-more` + label 
 
 ## Archivos relacionados
 
-- `shared/tokens.css` — todas las clases `.sidebar*`, `.nav-item*`, `.project-*`, `.sidebar-project-actions-*`, `.chat-row`, `.user-chip`, `.tooltip*`, keyframes de animación
-- `shared/shell.js` — `initSidebarCollapse()`, `initProjectExpand()`, `initSectionCollapse()`, `initNavActive()`, `initSidebarProjectActions()`
-- `flows/home/index.html` — markup concreto, mock data de proyectos/chats, `onNavSectionChange`, `.composer-menu-option` (reusado por el popover nuevo)
+- `shared/tokens.css` — todas las clases `.sidebar*` (incluye `.sidebar-project-actions-*` y `.sidebar-pinned-popover*`, el ellipsis y el popover de Pinned colapsado), `.nav-item*`, `.project-*`, `.chat-row`, `.sidebar-pinned-chat-*` (chats pineados sueltos), `.user-chip`, `.tooltip*`, keyframes de animación
+- `shared/shell.js` — `initSidebarCollapse()`, `initProjectExpand()`, `initSectionCollapse()`, `initNavActive()`, `initSidebarProjectActions()`, `initSidebarCollapsedPinnedPopover()`
+- `flows/home/index.html` — markup concreto, mock data de proyectos/chats, `onNavSectionChange`, `setPanelExpanded()`, el listener global de `keydown` (`⌘K`/`⌘J`), `.composer-menu-option` (reusado por los popovers del sidebar), `wireSidebarProjectActionsBehavior()`/`wireDynamicSidebarActionsTrigger()`/`ensureSidebarPinnedItem()`/`ensureSidebarPinnedChatItem()` (del lado de Projects/Chats, escriben en la lista de Pinned del sidebar)
 - `assets/img/Simetrik_logo.svg`, `Simetrik_isologo.png`, `Cover.png` — assets de marca usados en el sidebar

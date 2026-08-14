@@ -33,6 +33,21 @@ function initSidebarCollapse() {
 
   if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebar);
   if (expandBtn) expandBtn.addEventListener('click', toggleSidebar);
+
+  // Cmd/Ctrl+B → toggle sidebar collapse/expand, global (explicit user
+  // request). Well-established convention for exactly this action across
+  // real products (VSCode, Notion, Linear, Slack all bind Cmd/Ctrl+B to
+  // "toggle sidebar") — and safe to intercept, unlike Cmd+N: plain Cmd+B
+  // is only special-cased by browsers *inside* an editable rich-text
+  // context (execCommand('bold')), not reserved at the browser-chrome
+  // level the way "new window"/"new tab" are, so a page-level keydown
+  // listener can freely claim it. Lives here (not in the page script's
+  // keydown listener with ⌘K/⌘⇧⌥N) because toggling the sidebar is 100%
+  // this function's own responsibility — shell.js, not flow-specific code.
+  document.addEventListener('keydown', (e) => {
+    const isToggleSidebar = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b';
+    if (isToggleSidebar) { e.preventDefault(); toggleSidebar(); }
+  });
 }
 
 function initProjectExpand() {
@@ -182,6 +197,24 @@ function initSidebarCollapsedPinnedPopover() {
   }
   closeSidebarPinnedPopover = closePopover;
 
+  // The popover's height now tracks its content (min 200px / max 300px,
+  // see tokens.css) instead of being fixed — so unlike its initial open
+  // (which does a full clamp, including the left/right flip), content that
+  // grows AFTER opening (clearing the search term, expanding a project)
+  // can push its bottom edge past the viewport. This only ever nudges it
+  // back up when that actually happens; it never repositions horizontally
+  // (width is constant, so left/right never goes stale) and never moves it
+  // down (a shrinking popover collapsing from a fixed top is expected, not
+  // a bug).
+  function repositionPopover() {
+    if (!popover.classList.contains('is-open')) return;
+    const rect = popover.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - VIEWPORT_MARGIN) {
+      const top = Math.max(VIEWPORT_MARGIN, window.innerHeight - VIEWPORT_MARGIN - rect.height);
+      popover.style.top = `${Math.round(top)}px`;
+    }
+  }
+
   function openPopover() {
     searchInput.value = '';
     // Fresh snapshot of the real sidebar's open/closed projects every time
@@ -237,19 +270,38 @@ function initSidebarCollapsedPinnedPopover() {
         else expandedProjects.add(name);
       }
       item?.classList.toggle('is-expanded');
+      // .chat-sublist grows/shrinks via an animated grid-template-rows
+      // (--dur-base, 200ms) — reposition once immediately (handles the
+      // collapse case, and any overflow already present) and once after
+      // the transition settles (handles the expand case, once its final
+      // height is actually in the layout).
+      repositionPopover();
+      setTimeout(repositionPopover, 210);
       return;
     }
     if (e.target.closest('.chat-row')) { e.preventDefault(); closePopover(); return; }
     if (e.target.closest('.sidebar-pinned-chat-row')) closePopover();
   });
 
-  searchInput.addEventListener('input', () => renderResults(searchInput.value));
+  searchInput.addEventListener('input', () => {
+    renderResults(searchInput.value);
+    repositionPopover(); // filtering can grow the box (e.g. clearing the term) past where it fit before
+  });
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closePopover(); searchInput.blur(); }
   });
 
   document.addEventListener('click', closePopover);
-  document.addEventListener('scroll', closePopover, true);
+  // Bug fix (2026-08-14): scrolling the popover's own results list
+  // (#sidebarPinnedPopoverResults has overflow-y:auto) closed the popover —
+  // capture-phase scroll listeners on `document` also receive scroll events
+  // fired by descendants, including the popover's own scrollable content,
+  // not just the Pinned list's scroll it was meant to catch. Only close for
+  // scrolls whose target is actually outside the popover.
+  document.addEventListener('scroll', (e) => {
+    if (popover.contains(e.target)) return;
+    closePopover();
+  }, true);
   window.addEventListener('resize', closePopover);
 }
 

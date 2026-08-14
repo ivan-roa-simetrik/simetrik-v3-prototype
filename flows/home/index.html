@@ -541,15 +541,69 @@
   .panel-tab-add-btn:hover { background: var(--color-surface); color: var(--color-ink); }
   .panel-tab-add-btn svg, .panel-tab-add-btn i { width: 15px; height: 15px; }
   .panel-tab-content { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; color: var(--color-ink-faint); }
-  /* Project tab reads as a canvas/map, not a plain text panel — dot-grid
-     texture (same technique flow/whiteboard tools use for their canvas
-     background), evoking "a map view" ahead of any real content being
-     defined for what actually lives inside it. */
+  /* Project tab reads as a canvas/map, not a plain text panel. The dot-grid
+     texture itself now lives on .project-map-zoom-content (Fase 1) so it
+     pans/zooms along with the (still empty) content instead of sitting
+     still behind it — with zero nodes today, the grid IS the only visible
+     surface, so it's what has to move for pan/zoom to read as working at
+     all. overflow/padding/position override .panel-tab-content's own
+     scrolling/centered-text defaults: this is a canvas now, not a text box. */
   .panel-tab-content--map {
     background-color: var(--color-surface);
+    overflow: hidden; padding: 0; position: relative;
+  }
+  /* Project tab's empty-map state (Project View Map, Fase 0): reuses
+     .section-empty's icon+title+body language (see the Agents empty state,
+     and the App tab's own "not built yet" state, .app-artifact-empty) for
+     visual consistency instead of inventing a new one. Sits
+     inside .project-map-empty (Fase 1's overlay wrapper, see below), which
+     is what actually handles centering now — this modifier only cancels
+     the flex:1 that .section-empty still expects from a column-flex
+     ancestor, and caps the width to .section-empty p's own 380px reading
+     measure. */
+  .panel-map-empty { flex: 0 1 auto; max-width: 320px; }
+
+  /* ---------- Project View Map — Fase 1: canvas navigation ----------
+     Pan (drag) + zoom (buttons/wheel) over an, as yet, empty layer — no
+     nodes exist before Fase 2, but wiring the mechanics now means Fase 2
+     only has to mount SVG into .project-map-zoom-content, not touch this
+     transform logic again. See renderProjectMapTab/initProjectMapCanvas. */
+  .project-map-canvas { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
+  .project-map-canvas.is-panning { cursor: grabbing; }
+  /* Deliberately oversized (4000px square, inset -2000px on every edge —
+     symmetric, so the default transform-origin: 50% 50% zooms from the
+     panel's own center without any extra math) so a drag never runs out
+     of grid to reveal, short of an implausible amount of panning. */
+  .project-map-zoom-content {
+    position: absolute; inset: -2000px;
     background-image: radial-gradient(var(--color-border-strong) 1px, transparent 1px);
     background-size: 20px 20px;
+    transition: transform var(--dur-fast) var(--ease-out);
   }
+  /* Suspended mid-drag: a live 1:1 drag fighting a 150ms transition would
+     lag behind the cursor instead of tracking it exactly. */
+  .project-map-canvas.is-panning .project-map-zoom-content { transition: none; }
+  /* The empty-state message floats OVER the canvas, not instead of it.
+     pointer-events: none is load-bearing, not decorative — without it the
+     overlay would eat the pan drag and the zoom controls underneath it,
+     exactly the bug the mock reference had already found and fixed once. */
+  .project-map-empty {
+    position: absolute; inset: 0; padding: 24px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .project-map-controls { position: absolute; left: 12px; bottom: 12px; z-index: 1; display: flex; gap: 4px; }
+  .project-map-control-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface);
+    color: var(--color-ink-soft); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .project-map-control-btn:hover { background: var(--color-surface-sunken); }
+  .project-map-control-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .project-map-control-btn:disabled:hover { background: var(--color-surface); }
+  .project-map-control-btn svg, .project-map-control-btn i { width: 14px; height: 14px; }
 
   /* Chat thread header: chat icon + name, or (when a project was picked
      before starting) project icon + project name / chat icon + chat name. */
@@ -1303,6 +1357,326 @@
      wider the instant it swaps in. */
   .project-skeleton-members { width: 64px; height: 20px; border-radius: var(--radius-sm); }
 
+  /* ---------- Apps view (sidebar nav "Apps") ----------
+     See docs/apps.md for the concept: an App is a persisted artifact built
+     conversationally (NOT a third-party integration — replaces the old
+     Slack/Snowflake/Google Drive placeholder mock). Own class family
+     throughout (.apps- / .app- prefixes), never sharing a name with
+     .projects- / .project- — same lesson this file already learned twice
+     (.project-row, .search-tab collisions, see docs/home.md). Visual
+     pattern mirrors Projects (header/search/filter/grid-list/tabs/
+     skeleton/ellipsis), adapted for what an App actually has: a `projects`
+     array (0..N linked projects, shown as pills instead of tags) and a
+     simpler Active/Draft status instead of Production/Draft + members. */
+  .apps-view { flex: 1; overflow-y: auto; padding: 32px 40px; }
+  .apps-view-inner { width: 100%; max-width: 900px; margin: 0 auto; }
+
+  .apps-view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  .apps-header-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .apps-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .apps-view-header h1 { font-size: 20px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; flex-shrink: 0; }
+  .apps-view-header .btn-primary { height: 32px; padding: 0 14px; }
+  .apps-view-header .btn-primary svg, .apps-view-header .btn-primary i { width: 14px; height: 14px; }
+
+  .apps-view-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+  /* "All / Pinned / Archived" instead of Projects' ownership tabs — Apps
+     don't have an owner/created-by-you distinction defined yet. "Pinned"
+     gives Pin/Unpin an actual visible effect inside this view, since Apps
+     aren't mirrored into the sidebar's Pinned list in this pass (unlike
+     Projects' Pin/Unpin, which syncs there instead — see docs/apps.md →
+     Pendiente). Own class, not .search-tab/.projects-ownership-tab — same
+     collision reasoning already documented on those two. */
+  .apps-view-tab {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .apps-view-tab:hover { background: var(--color-surface-sunken); }
+  .apps-view-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+
+  .apps-search-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface);
+    color: var(--color-ink-soft); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .apps-search-btn:hover { background: var(--color-surface-sunken); }
+  .apps-search-btn svg, .apps-search-btn i { width: 14px; height: 14px; }
+
+  .apps-search-inline {
+    display: flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box;
+    max-width: 0; padding: 0; opacity: 0; overflow: hidden;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    transition: max-width var(--dur-base) var(--ease-out), padding var(--dur-base) var(--ease-out),
+      opacity var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .apps-search-inline.is-open { max-width: 220px; padding: 0 8px; opacity: 1; border-color: var(--color-border-strong); }
+  .apps-search-inline svg, .apps-search-inline i { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .apps-search-inline input {
+    flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13.5px;
+    color: var(--color-ink); font-family: inherit;
+  }
+  .apps-search-inline input::placeholder { color: var(--color-ink-faint); }
+  .apps-search-clear {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 16px; height: 16px; border-radius: 50%; border: none; background: transparent;
+    color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .apps-search-clear:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .apps-search-clear svg, .apps-search-clear i { width: 11px; height: 11px; }
+
+  .app-view-toggle {
+    display: flex; align-items: center; gap: 2px; padding: 2px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+  }
+  .app-view-toggle-btn {
+    width: 28px; height: 28px; border-radius: calc(var(--radius-sm) - 2px); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .app-view-toggle-btn svg, .app-view-toggle-btn i { width: 15px; height: 15px; }
+  .app-view-toggle-btn:hover { color: var(--color-ink); }
+  .app-view-toggle-btn.is-active { background: var(--color-surface-sunken); color: var(--color-ink); }
+
+  .apps-filter-btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface);
+    font-size: 13px; cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .apps-filter-btn:hover { background: var(--color-surface-sunken); }
+  .apps-filter-label { color: var(--color-ink-faint); font-weight: 500; white-space: nowrap; }
+  .apps-filter-value { color: var(--color-ink); font-weight: 600; white-space: nowrap; }
+  .apps-filter-chevron {
+    width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .composer-dropdown:has(#appsFilterMenu.is-open) .apps-filter-chevron { transform: rotate(180deg); }
+  #appsFilterMenu.composer-menu--filter { width: 220px; bottom: auto; top: calc(100% + 6px); left: auto; right: 0; }
+  #appsFilterList .composer-menu-option { min-height: 32px; padding: 0 8px; align-items: center; }
+
+  .apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  /* min-height matched with .app-skeleton-card below, same reasoning as
+     .project-card/.project-skeleton-card — taller than Projects' 124px to
+     fit the description line every App card has. */
+  .app-card {
+    display: flex; flex-direction: column;
+    min-height: 148px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    padding: 16px 16px 4px; background: var(--color-surface);
+    cursor: pointer; /* opens the app's own chat, see openAppChat */
+    transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  }
+  .app-card:hover { box-shadow: var(--shadow-sm); border-color: var(--color-border-strong); }
+  .app-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .app-card-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .app-card-name i, .app-card-name svg { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .app-card-name span { font-size: 14px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-card-description {
+    font-size: 12px; color: var(--color-ink-soft); line-height: 1.4; margin: 8px 0 0;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .app-card-projects { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; margin-top: 10px; flex: 1; }
+  .app-project-pill { font-size: 10.5px; font-weight: 600; color: var(--color-ink-faint); background: var(--color-surface-sunken); border-radius: 999px; padding: 2px 8px; }
+  .app-project-pill--empty { font-style: italic; }
+  .app-project-pill--more { color: var(--color-ink-soft); }
+  .app-card-footer {
+    position: relative;
+    display: flex; align-items: center; justify-content: flex-end;
+    height: 40px; margin-top: 14px;
+  }
+  .app-card-footer::before {
+    content: ''; position: absolute; top: 0; left: -16px; right: -16px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .apps-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .app-list-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface);
+    cursor: pointer;
+    transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  }
+  .app-list-row + .app-list-row { border-top: 1px solid var(--color-border); }
+  .app-list-row-icon { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .app-list-row-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-list-row-projects { display: none; align-items: center; gap: 4px; flex-shrink: 0; }
+  @media (min-width: 720px) { .app-list-row-projects { display: flex; } }
+
+  .app-card-actions-wrap, .app-list-row-actions-wrap { position: relative; flex-shrink: 0; }
+  .app-card-actions-btn, .app-list-row-actions-btn {
+    width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+    opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .app-card:hover .app-card-actions-btn, .app-card-actions-btn.is-open,
+  .app-list-row:hover .app-list-row-actions-btn, .app-list-row-actions-btn.is-open { opacity: 1; }
+  .app-card-actions-btn:hover, .app-list-row-actions-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .app-card-actions-btn svg, .app-card-actions-btn i,
+  .app-list-row-actions-btn svg, .app-list-row-actions-btn i { width: 15px; height: 15px; }
+
+  .app-actions-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    width: 170px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden; padding: 6px;
+  }
+  .app-actions-menu.is-open { display: block; }
+  .app-actions-menu .composer-menu-option { align-items: center; min-height: 32px; padding: 0 8px; }
+  .app-actions-menu .opt-icon { margin-top: 0; }
+
+  .apps-empty {
+    border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 32px;
+    text-align: center; color: var(--color-ink-faint); font-size: 13.5px;
+  }
+
+  /* ---------- Apps loading skeleton ---------- */
+  .apps-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .app-skeleton-card { min-height: 148px; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px 16px 4px; background: var(--color-surface); }
+  .app-skeleton-top { display: flex; align-items: center; gap: 8px; }
+  .app-skeleton-desc {
+    height: 12px; border-radius: 4px; width: 90%; margin-top: 10px;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%; animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .app-skeleton-pills { display: flex; gap: 4px; margin-top: 10px; }
+  .app-skeleton-footer { display: flex; align-items: center; justify-content: flex-end; height: 40px; margin-top: 14px; border-top: 1px solid var(--color-border); }
+
+  .apps-skeleton-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .app-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface); }
+  .app-skeleton-row + .app-skeleton-row { border-top: 1px solid var(--color-border); }
+
+  .app-skeleton-icon, .app-skeleton-line, .app-skeleton-pill, .app-skeleton-badge {
+    display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .app-skeleton-icon { width: 16px; height: 16px; }
+  .app-skeleton-line { height: 12px; border-radius: 4px; }
+  .app-skeleton-line--name { width: 60%; }
+  .app-skeleton-line--row { flex: 1; max-width: 220px; height: 12px; }
+  .app-skeleton-pill { width: 64px; height: 16px; border-radius: 999px; }
+  .app-skeleton-badge { width: 56px; height: 18px; }
+
+  /* ---------- Edit App modal ----------
+     Same shell as .project-edit-modal-backdrop, own class family. One field
+     beyond name/description: a project checklist — the 0..N linked-projects
+     relationship has no Project-side equivalent to reuse (see
+     docs/apps.md). */
+  .app-edit-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .app-edit-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .app-edit-modal {
+    width: 100%; max-width: 480px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .app-edit-modal-backdrop.is-open .app-edit-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .app-edit-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  .app-edit-modal-title { font-size: 20px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-edit-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .app-edit-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .app-edit-modal-close svg, .app-edit-modal-close i { width: 15px; height: 15px; }
+  .app-edit-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+  .app-edit-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+  .app-edit-projects-list {
+    display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 4px;
+  }
+  .app-edit-project-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: calc(var(--radius-sm) - 2px);
+    font-size: 13px; color: var(--color-ink); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .app-edit-project-row:hover { background: var(--color-surface-sunken); }
+  .app-edit-project-row input { accent-color: var(--color-primary); }
+
+  /* ---------- Delete App confirmation modal ---------- */
+  .delete-app-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 210;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .delete-app-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .delete-app-modal {
+    width: 100%; max-width: 400px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .delete-app-modal-backdrop.is-open .delete-app-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .delete-app-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  .delete-app-modal-title { font-size: 20px; font-weight: 600; color: var(--color-ink); }
+  .delete-app-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .delete-app-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .delete-app-modal-close svg, .delete-app-modal-close i { width: 15px; height: 15px; }
+  .delete-app-modal-body { padding: 20px; font-size: 13.5px; color: var(--color-ink-soft); line-height: 1.5; }
+  .delete-app-modal-body strong { color: var(--color-ink); }
+  .delete-app-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+
+  /* ---------- App artifact (chat side panel tab content, type "app") ----------
+     See docs/apps.md — an App IS its generated artifact, not a separate
+     "view" of something else the way a Project's tab is a view of its
+     data. Rendered by renderAppArtifactTab(). .app-artifact-empty reuses
+     .section-empty/.panel-map-empty for the "not built yet" state — same
+     visual language as the Project Map's own empty state, no dot-grid
+     texture (that's specifically the map's canvas metaphor). */
+  .app-artifact-empty { height: 100%; display: flex; align-items: center; justify-content: center; }
+  .app-artifact { padding: 24px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+  .app-artifact-header { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+  .app-artifact-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-surface-sunken); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft);
+  }
+  .app-artifact-icon svg, .app-artifact-icon i { width: 18px; height: 18px; }
+  .app-artifact-header-text { flex: 1; min-width: 0; }
+  .app-artifact-header-text h2 { font-size: 16px; font-weight: 700; color: var(--color-ink); margin: 0 0 4px; }
+  .app-artifact-header-text p { font-size: 12.5px; color: var(--color-ink-soft); line-height: 1.4; margin: 0; }
+  .app-artifact-section { margin-top: 20px; }
+  .app-artifact-section-title { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-ink-faint); margin-bottom: 8px; }
+  .app-artifact-sources { display: flex; flex-wrap: wrap; gap: 6px; }
+  .app-artifact-source-pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--color-ink-soft);
+    background: var(--color-surface-sunken); border-radius: 999px; padding: 4px 10px;
+  }
+  .app-artifact-source-pill svg, .app-artifact-source-pill i { width: 12px; height: 12px; color: var(--color-ink-faint); }
+  .app-artifact-source-empty { font-size: 12.5px; color: var(--color-ink-faint); font-style: italic; }
+  .app-artifact-body { font-size: 13px; color: var(--color-ink-soft); line-height: 1.6; }
+  .app-artifact-body p { margin: 0; }
+
   /* ---------- Chats and Tasks view (sidebar nav "Chats and Tasks") ----------
      System-wide list of every chat, whatever it's attached to (a Project,
      an App, an Agent, or nothing at all) — see docs/chats-and-tasks.md.
@@ -1322,6 +1696,18 @@
   .chats-view-header .btn-primary, .chats-view-header .btn-secondary { height: 32px; padding: 0 14px; }
   .chats-view-header .btn-primary svg, .chats-view-header .btn-primary i,
   .chats-view-header .btn-secondary svg, .chats-view-header .btn-secondary i { width: 14px; height: 14px; }
+
+  /* All / Archived — own class, copied 1:1 from .projects-ownership-tab
+     (same reasoning: the Search modal's global .search-tab click wiring
+     would otherwise also fire on these and stomp their active state). */
+  .chats-view-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+  .chats-view-tab {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .chats-view-tab:hover { background: var(--color-surface-sunken); }
+  .chats-view-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
 
   /* Search: same morph-between-icon-and-input trick as Projects (see
      comment above .projects-search-btn) — own classes, copied 1:1, so the
@@ -1530,16 +1916,20 @@
     <!-- Header: full logo + search + collapse (expanded) / icon-only, hover-to-expand (collapsed) -->
     <div class="sidebar-header">
       <img src="../../assets/img/Simetrik_logo.svg" alt="Simetrik" class="sidebar-logo-full" />
-      <button class="logo-mark sidebar-logo-icon" id="sidebarLogoExpand" aria-label="Open sidebar" data-tooltip="Open sidebar">
+      <button class="logo-mark sidebar-logo-icon" id="sidebarLogoExpand" aria-label="Open sidebar">
         <img src="../../assets/img/Simetrik_isologo.png" alt="Simetrik" class="sidebar-logo-icon-img" />
         <i data-lucide="panel-right" class="sidebar-logo-icon-expand"></i>
+        <span class="tooltip-bubble tooltip-bubble--right">Open sidebar <kbd>⌘B</kbd></span>
       </button>
       <div class="sidebar-header-actions">
         <button class="icon-btn search-trigger" aria-label="Search">
           <i data-lucide="search"></i>
           <span class="tooltip-bubble">Search <kbd>⌘K</kbd></span>
         </button>
-        <button class="icon-btn tooltip-bottom" id="sidebarToggle" aria-label="Close sidebar" data-tooltip="Close sidebar"><i data-lucide="panel-left"></i></button>
+        <button class="icon-btn" id="sidebarToggle" aria-label="Close sidebar">
+          <i data-lucide="panel-left"></i>
+          <span class="tooltip-bubble">Close sidebar <kbd>⌘B</kbd></span>
+        </button>
       </div>
     </div>
 
@@ -1552,23 +1942,26 @@
         <span class="tooltip-bubble tooltip-bubble--right">Search <kbd>⌘K</kbd></span>
       </button>
 
-      <button class="nav-item nav-item--primary" id="newChatBtn" data-nav="new-chat" data-tooltip="New chat">
+      <button class="nav-item nav-item--primary" id="newChatBtn" data-nav="new-chat">
         <span class="nav-icon">
           <i data-lucide="message-circle-plus" class="nav-icon-default"></i>
           <i data-lucide="message-circle-more" class="nav-icon-hover"></i>
         </span>
         <span class="nav-label">New Chat</span>
+        <kbd class="nav-item-kbd">⌘J</kbd>
+        <span class="tooltip-bubble tooltip-bubble--right">New Chat <kbd>⌘J</kbd></span>
       </button>
 
       <!-- System-wide view of every chat/task across the account, not scoped
            to one project — distinct from Pinned/Recent below (those are
            curated subsets) and from Projects (which lists Projects, not
-           chats). Nav item only for now, no real listing behind it yet —
-           uses the same generic empty-state pattern as Apps/Agents (see
-           sectionCopy) until that view gets built. -->
-      <button class="nav-item" data-nav="chats-tasks" data-tooltip="Chats and Tasks">
+           chats). Opens its own real view (#chatsView, see
+           docs/chats-and-tasks.md) — this comment used to say it fell back
+           to the generic sectionCopy empty state like Apps/Agents; Apps has
+           since graduated too (see docs/apps.md), only Agents still does. -->
+      <button class="nav-item" data-nav="chats-tasks" data-tooltip="Chats">
         <span class="nav-icon"><i data-lucide="message-circle-more"></i></span>
-        <span class="nav-label">Chats and Tasks</span>
+        <span class="nav-label">Chats</span>
       </button>
 
       <button class="nav-item" data-nav="projects" data-tooltip="Projects">
@@ -2162,6 +2555,105 @@
         </div>
       </div>
 
+      <!-- Apps view: sidebar nav "Apps" opens this instead of the old
+           generic empty-state placeholder — catalog of Apps the user has
+           built (see docs/apps.md). An App is a persisted artifact built
+           conversationally, NOT a third-party integration — the mock data
+           here (Bank Reconciliation Summary, Quarterly Anomaly Digest,
+           Board Update Draft) replaces the earlier Slack/Snowflake/Google
+           Drive placeholder. Same header/tabs/skeleton/grid-list pattern as
+           Projects, own class family throughout (.apps-*/.app-*, never
+           .projects-*/.project-*). No ownership tabs (Apps don't have an
+           owner/created-by-you distinction) — "Pinned" instead, since
+           Pin/Unpin here is local to this view (no sidebar sync yet, see
+           docs/apps.md → Pendiente) and needs a tab to have any visible
+           effect at all. Cards show linked projects as pills instead of
+           tags (0..N, "No projects linked" when standalone) and a simpler
+           Active/Draft status instead of Production/Draft + members. -->
+      <div class="apps-view" id="appsView" hidden>
+        <div class="apps-view-inner">
+          <div class="apps-view-header">
+            <div class="apps-header-left">
+              <h1>Apps</h1>
+            </div>
+            <div class="apps-header-right">
+              <div class="apps-search-inline" id="appsSearchInline">
+                <i data-lucide="search"></i>
+                <input type="text" id="appsSearchInput" placeholder="Search apps" autocomplete="off" />
+                <button type="button" class="apps-search-clear" id="appsSearchClear" aria-label="Close search">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <button type="button" class="apps-search-btn tooltip-bottom" id="appsSearchToggle" aria-label="Search apps" data-tooltip="Search">
+                <i data-lucide="search"></i>
+              </button>
+              <div class="composer-dropdown">
+                <button type="button" class="apps-filter-btn" id="appsFilterBtn" data-menu-trigger="apps-filter">
+                  <span class="apps-filter-label">Filter by project:</span>
+                  <span class="apps-filter-value" id="appsFilterValue">all</span>
+                  <i data-lucide="chevron-down" class="apps-filter-chevron"></i>
+                </button>
+                <div class="composer-menu composer-menu--filter" id="appsFilterMenu" data-menu="apps-filter">
+                  <div class="composer-menu-list" id="appsFilterList"></div>
+                </div>
+              </div>
+              <div class="app-view-toggle">
+                <button type="button" class="app-view-toggle-btn tooltip-bottom" id="appsGridBtn" aria-label="Grid view" data-tooltip="Grid view"><i data-lucide="layout-grid"></i></button>
+                <button type="button" class="app-view-toggle-btn tooltip-bottom" id="appsListBtn" aria-label="List view" data-tooltip="List view"><i data-lucide="list"></i></button>
+              </div>
+              <button type="button" class="btn-primary" id="newAppViewBtn">
+                <i data-lucide="plus"></i> New App
+              </button>
+            </div>
+          </div>
+
+          <div class="apps-view-tabs" id="appsViewTabs">
+            <button type="button" class="apps-view-tab is-active" data-apps-tab="all">All</button>
+            <button type="button" class="apps-view-tab" data-apps-tab="pinned">Pinned</button>
+            <button type="button" class="apps-view-tab" data-apps-tab="archived">Archived</button>
+          </div>
+
+          <div class="apps-skeleton-grid" id="appsSkeletonGrid" hidden>
+            <div class="app-skeleton-card">
+              <div class="app-skeleton-top">
+                <span class="app-skeleton-icon"></span>
+                <span class="app-skeleton-line app-skeleton-line--name"></span>
+              </div>
+              <div class="app-skeleton-desc"></div>
+              <div class="app-skeleton-pills"><span class="app-skeleton-pill"></span><span class="app-skeleton-pill"></span></div>
+              <div class="app-skeleton-footer"><span class="app-skeleton-badge"></span></div>
+            </div>
+            <div class="app-skeleton-card">
+              <div class="app-skeleton-top">
+                <span class="app-skeleton-icon"></span>
+                <span class="app-skeleton-line app-skeleton-line--name"></span>
+              </div>
+              <div class="app-skeleton-desc"></div>
+              <div class="app-skeleton-pills"><span class="app-skeleton-pill"></span><span class="app-skeleton-pill"></span></div>
+              <div class="app-skeleton-footer"><span class="app-skeleton-badge"></span></div>
+            </div>
+            <div class="app-skeleton-card">
+              <div class="app-skeleton-top">
+                <span class="app-skeleton-icon"></span>
+                <span class="app-skeleton-line app-skeleton-line--name"></span>
+              </div>
+              <div class="app-skeleton-desc"></div>
+              <div class="app-skeleton-pills"><span class="app-skeleton-pill"></span><span class="app-skeleton-pill"></span></div>
+              <div class="app-skeleton-footer"><span class="app-skeleton-badge"></span></div>
+            </div>
+          </div>
+          <div class="apps-skeleton-list" id="appsSkeletonList" hidden>
+            <div class="app-skeleton-row"><span class="app-skeleton-icon"></span><span class="app-skeleton-line app-skeleton-line--row"></span><span class="app-skeleton-badge"></span></div>
+            <div class="app-skeleton-row"><span class="app-skeleton-icon"></span><span class="app-skeleton-line app-skeleton-line--row"></span><span class="app-skeleton-badge"></span></div>
+            <div class="app-skeleton-row"><span class="app-skeleton-icon"></span><span class="app-skeleton-line app-skeleton-line--row"></span><span class="app-skeleton-badge"></span></div>
+          </div>
+
+          <div class="apps-grid" id="appsGrid"></div>
+          <div class="apps-list" id="appsList" hidden></div>
+          <div class="apps-empty" id="appsEmpty" hidden>No apps match your search.</div>
+        </div>
+      </div>
+
       <!-- Chats and Tasks view: sidebar nav "Chats and Tasks" opens this
            instead of a section-empty placeholder — system-wide list of
            every chat, regardless of what it's attached to (a Project, an
@@ -2174,7 +2666,7 @@
         <div class="chats-view-inner">
           <div class="chats-view-header">
             <div class="chats-header-left">
-              <h1>Chats and Tasks</h1>
+              <h1>Chats</h1>
             </div>
             <!-- Default controls: search, Select (enters bulk mode), New Chat.
                  Mutually exclusive with the select bar below via [hidden]. -->
@@ -2204,6 +2696,18 @@
                 <i data-lucide="archive"></i> Archive
               </button>
             </div>
+          </div>
+
+          <!-- All / Archived: a second, independent filter dimension next
+               to search (combined in getFilteredChats) — own class family
+               (.chats-view-tab), copied 1:1 from .projects-ownership-tab's
+               visual rules rather than reused, same reasoning as everywhere
+               else in this file (the Search modal's global .search-tab
+               click wiring would otherwise also fire on these and stomp
+               their active state). -->
+          <div class="chats-view-tabs" id="chatsViewTabs">
+            <button type="button" class="chats-view-tab is-active" data-chats-tab="all">All</button>
+            <button type="button" class="chats-view-tab" data-chats-tab="archived">Archived</button>
           </div>
 
           <!-- Loading skeleton: shown briefly on section entry and on every
@@ -2354,6 +2858,55 @@
     <div class="delete-project-modal-footer">
       <button type="button" class="btn-secondary" id="deleteProjectCancelBtn">Cancel</button>
       <button type="button" class="btn-danger" id="deleteProjectConfirmBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit App modal: opened from an App card/row's ellipsis ("Edit detail",
+     see appActionsMenuMarkup) — same name/description fields as the project
+     edit modal, plus a project checklist (the one field with no Project
+     equivalent: an App's 0..N linked-projects relationship, see
+     docs/apps.md). -->
+<div class="app-edit-modal-backdrop" id="appEditModalBackdrop" hidden>
+  <div class="app-edit-modal" role="dialog" aria-modal="true" aria-label="Edit app">
+    <div class="app-edit-modal-header">
+      <span class="app-edit-modal-title" id="appEditModalTitle">Edit app</span>
+      <button type="button" class="app-edit-modal-close" id="appEditModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="app-edit-modal-body">
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="appEditNameInput">What's this app called?</label>
+        <input type="text" id="appEditNameInput" autocomplete="off" />
+      </div>
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="appEditDescInput">What does it do?</label>
+        <textarea id="appEditDescInput" rows="3"></textarea>
+      </div>
+      <div class="create-project-field">
+        <label class="create-project-field-label">Which projects does it pull from?</label>
+        <div class="app-edit-projects-list" id="appEditProjectsList"></div>
+      </div>
+    </div>
+    <div class="app-edit-modal-footer">
+      <button type="button" class="btn-secondary" id="appEditCancelBtn">Cancel</button>
+      <button type="button" class="btn-primary" id="appEditSaveBtn" disabled>Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete App confirmation modal: opened from "Delete app" in an archived
+     card/row's ellipsis — same shell as delete-project-modal, own class
+     family since Apps and Projects are deliberately never sharing one. -->
+<div class="delete-app-modal-backdrop" id="deleteAppModalBackdrop" hidden>
+  <div class="delete-app-modal" role="alertdialog" aria-modal="true" aria-label="Delete app">
+    <div class="delete-app-modal-header">
+      <span class="delete-app-modal-title">Delete app</span>
+      <button type="button" class="delete-app-modal-close" id="deleteAppModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="delete-app-modal-body" id="deleteAppModalBody"></div>
+    <div class="delete-app-modal-footer">
+      <button type="button" class="btn-secondary" id="deleteAppCancelBtn">Cancel</button>
+      <button type="button" class="btn-danger" id="deleteAppConfirmBtn">Delete</button>
     </div>
   </div>
 </div>
@@ -2610,7 +3163,7 @@
 
   // Composer context selector (cycling "Select a project/app/agent" bar,
   // tabs + search popover, clear "x") is wired further down, once
-  // PROJECTS_DATA / PANEL_APPS_DATA / PANEL_AGENTS_DATA exist — see
+  // PROJECTS_DATA / APPS_DATA / PANEL_AGENTS_DATA exist — see
   // initContextSelector().
 
   // Voice dictation: real mic permission, live audio-reactive waveform, real
@@ -2839,6 +3392,27 @@
     return clean.slice(0, maxLen).trim() + '…';
   }
 
+  // Defines a "New Project" placeholder (see startNewProjectFlow) from its
+  // own first chat message — the same mocked derivation deriveChatTitle()
+  // already uses to name the chat itself (no real summarization exists in
+  // this prototype, reusing the one mechanism already established is more
+  // honest than inventing a fancier-looking second one). The description
+  // becomes the message verbatim — "todo surge de la explicación del
+  // usuario", per the explicit request. Same sidebar-sync pattern
+  // saveProjectEdit() already uses for a manual rename: look the row up by
+  // the OLD name before overwriting it, then push the new name in.
+  function renameProjectFromFirstMessage(project, text) {
+    const sidebarItem = findSidebarPinnedItem(project.name);
+    project.name = deriveChatTitle(text);
+    project.description = (text || '').trim();
+    project.pendingNameFromChat = false;
+    if (sidebarItem) {
+      const nameEl = sidebarItem.querySelector('.project-name');
+      if (nameEl) nameEl.textContent = project.name;
+    }
+    applyProjectsFilters();
+  }
+
   function updateChatThreadHeader(firstPrompt) {
     const chatLabel = document.getElementById('chatThreadChatLabel');
     const projectItem = document.getElementById('chatThreadProjectItem');
@@ -2892,22 +3466,45 @@
     chatMessages.hidden = false;
     const threadGreeting = document.getElementById('chatThreadGreeting');
     if (threadGreeting) threadGreeting.hidden = true;
+
+    const startContext = contextState.empty && contextState.empty.selected;
+    // A project created via startNewProjectFlow() (or an app via
+    // startNewAppFlow()) is still just a "New Project"/"New App"
+    // placeholder until its first message says what it actually is — this
+    // is that moment. Runs BEFORE updateChatThreadHeader() below so the
+    // breadcrumb already reflects the real name instead of flashing the
+    // placeholder one first.
+    if (startContext && startContext.type === 'project') {
+      const startProject = findProjectById(startContext.id);
+      if (startProject && startProject.pendingNameFromChat) {
+        renameProjectFromFirstMessage(startProject, firstPrompt);
+        startContext.name = startProject.name; // keep this in-memory selection in sync too
+      }
+    } else if (startContext && startContext.type === 'app') {
+      const startApp = findAppById(startContext.id);
+      if (startApp && startApp.pendingNameFromChat) {
+        renameAppFromFirstMessage(startApp, firstPrompt);
+        startContext.name = startApp.name;
+      }
+    }
+
     updateChatThreadHeader(firstPrompt);
     registerNewChat(deriveChatTitle(firstPrompt));
-    // Starting a chat with a Project attached as context behaves like
-    // opening that project directly (see openProjectChat): the
-    // conversation collapses to 370px and the project's own Map view
-    // opens in the side panel automatically — same effect as picking it
-    // from the panel's own "What do you want to open?" picker. Apps/
-    // Agents (or no context at all) keep the plain full-width chat,
-    // unaffected — this is specifically a Project behavior.
-    const startContext = contextState.empty && contextState.empty.selected;
-    if (startContext && startContext.type === 'project') {
-      // Match openProjectChat's layout exactly, not just the panel bit —
-      // otherwise the sidebar stays expanded (260px vs its 52px collapsed
-      // rail), which eats ~208px of clearance between this header's own
-      // icons (New chat / Project chats, right:46px/right:10px) and
-      // .chat-panel-actions (Expand/Hide panel, anchored to the pane's
+    // Starting a chat with a Project or an App attached as context behaves
+    // like opening that Project/App directly (see openProjectChat/
+    // openAppChat): the conversation collapses to 370px and its own tab
+    // (Map for a Project, artifact for an App) opens in the side panel
+    // automatically — same effect as picking it from the panel's own "What
+    // do you want to open?" picker. Agents (or no context at all) keep the
+    // plain full-width chat, unaffected — this is specifically a Project/
+    // App behavior, since only those two render something of their own in
+    // the panel today.
+    if (startContext && (startContext.type === 'project' || startContext.type === 'app')) {
+      // Match openProjectChat's/openAppChat's layout exactly, not just the
+      // panel bit — otherwise the sidebar stays expanded (260px vs its
+      // 52px collapsed rail), which eats ~208px of clearance between this
+      // header's own icons (New chat / Project chats, right:46px/right:10px)
+      // and .chat-panel-actions (Expand/Hide panel, anchored to the pane's
       // right edge) and crowds the two icon groups together.
       const sidebarEl = document.getElementById('sidebar');
       if (sidebarEl) sidebarEl.classList.add('is-collapsed');
@@ -2915,7 +3512,7 @@
       const newChatNavItem = document.querySelector('.nav-item[data-nav="new-chat"]');
       if (newChatNavItem) newChatNavItem.classList.add('is-active');
       resetPanelTabs();
-      openPanelTab('project', startContext.id);
+      openPanelTab(startContext.type, startContext.id);
     }
     addMessage('user', firstPrompt);
     showTyping();
@@ -3217,16 +3814,12 @@
     setPanelExpanded(!chatThread.classList.contains('is-panel-expanded'));
   });
 
-  // Apps / Agents: empty states for sections to be built in a later
-  // iteration. Chats and Tasks used to be a third entry here — it now has
-  // a real view (#chatsView, see docs/chats-and-tasks.md), wired in
-  // onNavSectionChange below instead of this generic placeholder.
+  // Agents: still an empty state for a section to be built in a later
+  // iteration. Chats and Tasks and Apps used to also be entries here — both
+  // now have real views (#chatsView/#appsView, see docs/chats-and-tasks.md
+  // and docs/apps.md respectively), wired in onNavSectionChange below
+  // instead of this generic placeholder.
   const sectionCopy = {
-    apps: {
-      icon: 'layout-grid',
-      title: 'Connect apps to your agents',
-      body: 'Apps extend what your agents can do with your sources. This section will be built out in the next prototype iteration.',
-    },
     agents: {
       icon: 'bot',
       title: 'Your agents work under your supervision',
@@ -3283,7 +3876,7 @@
   // SEARCH_DATA.projects (Cmd+K's own hand-authored mock, already
   // documented as intentionally decoupled from PROJECTS_DATA). Both are
   // flagged as open gaps in docs/home.md rather than reached into here.
-  function createProject({ name, description, icon }) {
+  function createProject({ name, description, icon, pendingNameFromChat }) {
     const project = {
       id: generateProjectId(name),
       name: name.trim(),
@@ -3295,6 +3888,14 @@
       archived: false,
       owner: 'you',
       members: 1, // just the creator so far — no invite flow sets this yet, see docs/home.md
+      // Set only by startNewProjectFlow() — flags a placeholder "New
+      // Project" whose real name/description haven't been defined yet, so
+      // startChat() knows to derive them from the first message instead of
+      // treating this as an ordinary chat under an already-named project.
+      // A dedicated flag instead of checking `name === 'New Project'`
+      // string-matching, which would misfire if a real project were ever
+      // renamed to that exact text by coincidence.
+      pendingNameFromChat: !!pendingNameFromChat,
     };
     PROJECTS_DATA.push(project);
     applyProjectsFilters();
@@ -3452,19 +4053,125 @@
     return li;
   }
 
-  // ---------- Chat side panel: Project/App/Agent picker + tabs ----------
-  // Reuses PROJECTS_DATA (above) for the Projects list. Apps and Agents
-  // have their own small mock lists here, independent of the Search
-  // modal's SEARCH_DATA.apps/.agents (same names, kept in sync by
-  // convention — not a shared data source, same criterion already used for
-  // PROJECTS_DATA vs. the sidebar's Pinned markup). Map isn't listed:
-  // opening a Project is what renders that project's map view, there's no
-  // separate "Map" entity to pick.
-  const PANEL_APPS_DATA = [
-    { id: 'slack', name: 'Slack' },
-    { id: 'snowflake', name: 'Snowflake' },
-    { id: 'google-drive', name: 'Google Drive' },
+  // ---------- Apps view (sidebar nav "Apps") ----------
+  // See docs/apps.md for the full concept this is built on. An App is a
+  // persisted artifact built conversationally (analysis, report,
+  // communication, decisioning) — NOT a third-party integration like the
+  // placeholder mock this replaces (Slack/Snowflake/Google Drive). Its
+  // relationship to Projects is many-to-many (`projects: []`, 0..N ids from
+  // PROJECTS_DATA) — an App can pull from several projects at once, one, or
+  // none, never contained inside a single one the way this view's cards
+  // used to imply integrations "belonged" to nothing in particular.
+  //
+  // The 3 seeded apps below are the proposal asked for explicitly, chosen
+  // to demonstrate the full 0/1/N range of that relationship rather than
+  // all looking the same:
+  // - Bank Reconciliation Summary: scoped to exactly 1 project.
+  // - Quarterly Anomaly Digest: transversal across 2 projects.
+  // - Board Update Draft: 0 projects yet (status stays 'draft') — a
+  //   standalone communication the user can point at whichever project(s)
+  //   matter once they're ready, illustrating that an App doesn't need a
+  //   project at all to exist.
+  const APPS_DATA = [
+    {
+      id: 'bank-reconciliation-summary',
+      name: 'Bank Reconciliation Summary',
+      description: 'Pulls LATAM Bank Reconciliation data and drafts a period-close reconciliation report — balances, exceptions, and a plain-language summary.',
+      icon: 'file-check',
+      projects: ['latam-bank-reconciliation'],
+      status: 'active',
+      pinned: true,
+      archived: false,
+      pendingNameFromChat: false,
+    },
+    {
+      id: 'quarterly-anomaly-digest',
+      name: 'Quarterly Anomaly Digest',
+      description: 'Cross-checks Q2 Journal Entry Audit and Q3 Treasury Forecast data to flag anomalies worth reviewing before period close.',
+      icon: 'radar',
+      projects: ['q2-journal-entry-audit', 'q3-treasury-forecast'],
+      status: 'active',
+      pinned: false,
+      archived: false,
+      pendingNameFromChat: false,
+    },
+    {
+      id: 'board-update-draft',
+      name: 'Board Update Draft',
+      description: "Drafts a leadership-ready update on financial operations — pick which projects to pull from when you're ready.",
+      icon: 'megaphone',
+      projects: [],
+      status: 'draft',
+      pinned: false,
+      archived: false,
+      pendingNameFromChat: false,
+    },
   ];
+
+  function findAppById(id) {
+    return APPS_DATA.find((a) => a.id === id);
+  }
+
+  // Same slugify + -2/-3… disambiguation convention as generateProjectId/
+  // generateChatId.
+  function generateAppId(name) {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'app';
+    let id = base;
+    let n = 2;
+    while (findAppById(id)) { id = `${base}-${n}`; n++; }
+    return id;
+  }
+
+  // Mirrors createProject: the single source of truth this view, the chat's
+  // context selector (panelOpenDataFor via CONTEXT_CYCLE), and the chat
+  // side panel's open picker all read directly, so a newly created app
+  // shows up in all three without extra wiring. `projects` defaults to []
+  // (an App doesn't need one to exist — see docs/apps.md) unless the entry
+  // point that calls this already knows which ones to attach.
+  function createApp({ name, description, icon, projects, pendingNameFromChat }) {
+    const app = {
+      id: generateAppId(name),
+      name: name.trim(),
+      description: (description || '').trim(),
+      icon: icon || 'layout-grid',
+      projects: projects || [],
+      status: 'draft',
+      pinned: false,
+      archived: false,
+      // Same flag/purpose as createProject's pendingNameFromChat — set only
+      // by startNewAppFlow(), tells startChat() to derive the real name/
+      // description from the first message instead of treating this as an
+      // ordinary chat under an already-named app.
+      pendingNameFromChat: !!pendingNameFromChat,
+    };
+    APPS_DATA.push(app);
+    applyAppsFilters();
+    return app;
+  }
+
+  // Defines a "New App" placeholder (see startNewAppFlow) from its own
+  // first chat message — same mocked derivation deriveChatTitle() already
+  // uses for the chat's own title and renameProjectFromFirstMessage already
+  // uses for a "New Project". The description becomes the message verbatim,
+  // same criterion as the Project version. No sidebar sync here (unlike
+  // renameProjectFromFirstMessage) — Apps aren't mirrored into the
+  // sidebar's Pinned list in this pass, see docs/apps.md → Pendiente.
+  function renameAppFromFirstMessage(app, text) {
+    app.name = deriveChatTitle(text);
+    app.description = (text || '').trim();
+    app.pendingNameFromChat = false;
+    applyAppsFilters();
+  }
+
+  // ---------- Chat side panel: Project/App/Agent picker + tabs ----------
+  // Reuses PROJECTS_DATA and APPS_DATA (both above, see the Projects/Apps
+  // view sections) for the Projects and Apps lists. Agents still have
+  // their own small mock list here, independent of the Search modal's
+  // SEARCH_DATA.apps/.agents (same names, kept in sync by convention — not
+  // a shared data source, same criterion already used for PROJECTS_DATA vs.
+  // the sidebar's Pinned markup). Map isn't listed: opening a Project is
+  // what renders that project's map view, there's no separate "Map" entity
+  // to pick.
   const PANEL_AGENTS_DATA = [
     { id: 'reconciliation-agent', name: 'Reconciliation Agent' },
     { id: 'anomaly-watcher', name: 'Anomaly Watcher' },
@@ -3472,18 +4179,23 @@
   ];
   const PANEL_OPEN_ICONS = { project: 'folder', app: 'layout-grid', agent: 'bot' };
   const PANEL_OPEN_LABELS = { project: 'Projects', app: 'Apps', agent: 'Agents' };
+  // APPS_DATA is declared in the Apps view section below (after the
+  // Projects view section) — hoisting/const-before-use isn't an issue here
+  // since this function is never CALLED until a later user interaction,
+  // long after every top-level const in this script has already run.
   function panelOpenDataFor(type) {
-    return type === 'project' ? PROJECTS_DATA : type === 'app' ? PANEL_APPS_DATA : PANEL_AGENTS_DATA;
+    return type === 'project' ? PROJECTS_DATA : type === 'app' ? APPS_DATA : PANEL_AGENTS_DATA;
   }
   // PANEL_OPEN_ICONS[type] is the generic fallback for a whole category —
-  // Apps/Agents items don't carry their own icon yet. A Project can
-  // override it via its own `.icon` (set at creation time through the icon
-  // picker in the create-project modal, see openCreateProjectModal) — every
+  // Agents items don't carry their own icon yet. A Project or an App can
+  // override it via its own `.icon` (Project: set at creation time through
+  // the icon picker in the create-project modal, see openCreateProjectModal;
+  // App: fixed per seeded/created app, see APPS_DATA/createApp) — every
   // place that renders ONE item's icon (not a bare category/type icon)
   // should go through this instead of reaching into PANEL_OPEN_ICONS
   // directly, so a custom icon actually shows up everywhere that item does.
   function iconForItem(type, item) {
-    return (type === 'project' && item && item.icon) || PANEL_OPEN_ICONS[type];
+    return (item && item.icon) || PANEL_OPEN_ICONS[type];
   }
 
   let panelTabsState = []; // { key: 'project:id' | 'app:id' | 'agent:id', type, id, name }
@@ -3590,19 +4302,236 @@
     panelOpenMenu.classList.toggle('panel-open-menu--end', overflowsAtStart);
   }
 
-  // Placeholder content only — real Project/App/Agent views inside a tab
-  // are a later iteration (same criterion already used for the empty
-  // Apps/Agents sections and the still-blank panel itself before this).
-  const PANEL_TAB_CONTENT_LABELS = { project: 'Project view', app: 'App view', agent: 'Agent view' };
+  // Agent tabs are still a later iteration — plain placeholder text, same
+  // criterion already used for their empty nav section. Project tabs
+  // graduated out of this placeholder first (see renderProjectMapTab, the
+  // Project View Map's Fase 0); App tabs graduated out of it too, once
+  // docs/apps.md defined what an App actually is — see renderAppArtifactTab
+  // below.
+  const PANEL_TAB_CONTENT_LABELS = { agent: 'Agent view' };
+
+  // Project View Map zoom range/step — module-level, not re-created per
+  // render: same reasoning as every other "constant used inside a function
+  // that runs often" in this file, just primitives here rather than
+  // objects, so it's tidiness more than a correctness requirement.
+  const PROJECT_MAP_ZOOM_MIN = 0.6;
+  const PROJECT_MAP_ZOOM_MAX = 1.2;
+  const PROJECT_MAP_ZOOM_STEP = 0.1;
+
+  // How many nodes a project's map currently has. No real node model
+  // exists yet — that's Fase 2 — so every project has zero until then.
+  // Kept as its own function, not an inline `0`, so Fase 2 only has to
+  // change what THIS reads (real node data, once it exists) instead of
+  // every caller that needs to know "does this project have nodes yet".
+  function projectMapNodeCount(_projectId) {
+    return 0;
+  }
+
+  // Project View Map — Fase 1: canvas navigation. Still no nodes (Fase 2+
+  // mounts them into .project-map-zoom-content, the empty <div> below) —
+  // Fase 0's empty state moves inside a new .project-map-empty overlay,
+  // floating on TOP of a real pannable/zoomable canvas instead of being
+  // the entire tab content.
+  function renderProjectMapTab(tab) {
+    // Nav controls (zoom in/out, fit to view) only make sense once there's
+    // something on the map to navigate TO — buttons that manipulate an
+    // admittedly empty canvas read as broken chrome, not as "ready and
+    // waiting". Explicit instruction: visible once nodes exist, not
+    // before. Pan (drag) and wheel-zoom stay available either way — those
+    // are gestures on the canvas itself, not UI elements to hide.
+    const tieneNodos = projectMapNodeCount(tab.id) > 0;
+    panelTabContent.innerHTML = `
+      <div class="project-map-canvas" data-map-canvas>
+        <div class="project-map-zoom-content" data-map-zoom-content></div>
+        <div class="project-map-empty">
+          <div class="section-empty panel-map-empty">
+            <span class="section-empty-icon"><i data-lucide="network"></i></span>
+            <h2>This project doesn't have nodes yet</h2>
+            <p>Describe what you want to reconcile in the chat and I'll build the map for you.</p>
+          </div>
+        </div>
+        ${tieneNodos ? `
+        <div class="project-map-controls">
+          <button type="button" class="project-map-control-btn tooltip-bottom" data-map-zoom-out aria-label="Zoom out" data-tooltip="Zoom out"><i data-lucide="minus"></i></button>
+          <button type="button" class="project-map-control-btn tooltip-bottom" data-map-zoom-in aria-label="Zoom in" data-tooltip="Zoom in"><i data-lucide="plus"></i></button>
+          <button type="button" class="project-map-control-btn tooltip-bottom" data-map-fit aria-label="Fit to view" data-tooltip="Fit to view"><i data-lucide="maximize"></i></button>
+        </div>` : ''}
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    initProjectMapCanvas();
+  }
+
+  // Pan (drag) + zoom (buttons/wheel) for the canvas above. Re-wired from
+  // scratch on every renderProjectMapTab() call, because that function
+  // rebuilds this tab's whole innerHTML from scratch too (switching to
+  // another tab and back to this one, e.g.) — so pan position and zoom
+  // level intentionally don't persist across a re-render, same "resets,
+  // doesn't carry state over" treatment already accepted elsewhere in this
+  // prototype (e.g. node drag position in the map reference this is
+  // modeled on). Nothing here leaks: the drag-move/drag-up listeners live
+  // on `document` only between a mousedown and its matching mouseup, and
+  // the mousedown listener itself dies with the old canvas element once
+  // innerHTML replaces it.
+  function initProjectMapCanvas() {
+    const canvas = panelTabContent.querySelector('[data-map-canvas]');
+    const zoomContent = panelTabContent.querySelector('[data-map-zoom-content]');
+    const zoomInBtn = panelTabContent.querySelector('[data-map-zoom-in]');
+    const zoomOutBtn = panelTabContent.querySelector('[data-map-zoom-out]');
+    const fitBtn = panelTabContent.querySelector('[data-map-fit]');
+    if (!canvas || !zoomContent) return;
+
+    let panX = 0;
+    let panY = 0;
+    let zoom = 1;
+
+    // translate() before scale() in the same transform is what makes the
+    // pan delta plain screen pixels regardless of the current zoom level —
+    // CSS composes transform functions right-to-left, so the point is
+    // scaled first and only then translated in the (unscaled) parent's
+    // pixel space. That's what lets onPointerMove below add a raw mouse
+    // delta straight onto panX/panY and have it track the cursor exactly
+    // at any zoom.
+    function applyTransform() {
+      zoomContent.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+
+    function setZoom(next) {
+      zoom = Math.min(PROJECT_MAP_ZOOM_MAX, Math.max(PROJECT_MAP_ZOOM_MIN, next));
+      if (zoomInBtn) zoomInBtn.disabled = zoom >= PROJECT_MAP_ZOOM_MAX;
+      if (zoomOutBtn) zoomOutBtn.disabled = zoom <= PROJECT_MAP_ZOOM_MIN;
+      applyTransform();
+    }
+
+    // Pan: drag on the (still empty) canvas. Fase 2+, once real nodes
+    // exist, will need its own mousedown guard so a drag that starts ON a
+    // node moves the node instead of panning the canvas underneath it —
+    // out of scope today since there's nothing yet to click on but the
+    // canvas itself.
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    function onPointerMove(e) {
+      panX = panStartX + (e.clientX - dragStartX);
+      panY = panStartY + (e.clientY - dragStartY);
+      applyTransform();
+    }
+    function onPointerUp() {
+      canvas.classList.remove('is-panning');
+      document.removeEventListener('mousemove', onPointerMove);
+      document.removeEventListener('mouseup', onPointerUp);
+    }
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left button only, same as every other drag in this file
+      canvas.classList.add('is-panning');
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+      document.addEventListener('mousemove', onPointerMove);
+      document.addEventListener('mouseup', onPointerUp);
+    });
+
+    // Wheel/trackpad zoom: no separate pinch-vs-scroll sensitivity split
+    // (the richer map reference has one) — a single deltaY-driven step is
+    // enough to make wheel zoom actually work, and there are no nodes yet
+    // to make the cursor-anchored version of this worth its own math.
+    // preventDefault() so this replaces the panel's own scroll instead of
+    // stacking with it.
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      setZoom(zoom + (e.deltaY < 0 ? PROJECT_MAP_ZOOM_STEP : -PROJECT_MAP_ZOOM_STEP));
+    }, { passive: false });
+
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => setZoom(zoom + PROJECT_MAP_ZOOM_STEP));
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => setZoom(zoom - PROJECT_MAP_ZOOM_STEP));
+    // Fit to view: a real bounding-box fit needs nodes to measure against
+    // (Fase 2+) — until then, this is the map's only defined "resting"
+    // view, so Fit to view and the initial render both just call this.
+    function resetView() {
+      panX = 0;
+      panY = 0;
+      setZoom(1);
+    }
+    if (fitBtn) fitBtn.addEventListener('click', resetView);
+
+    resetView();
+  }
+
+  // App tab: renders the artifact itself (see docs/apps.md — an App IS its
+  // generated artifact, not a separate "view" of something else the way a
+  // Project's tab is a view of its data). Two states:
+  // - pendingNameFromChat (a blank "New App" from startNewAppFlow, no first
+  //   message yet): "not built yet" empty state, same copy/visual pattern
+  //   as the Project Map's own empty state (renderProjectMapTab) — describe
+  //   it in the chat and it gets built, no seeded demo content.
+  // - Otherwise: the generated artifact — icon/name/status, the description
+  //   the conversation defined, which projects it pulls from (or "runs
+  //   standalone" if none), and a body representing what it produced. Same
+  //   canned-content fidelity as the rest of this prototype's chat replies
+  //   — not a real generation engine, just enough to read as "the artifact,
+  //   rendered" rather than a plain placeholder string.
+  function renderAppArtifactTab(tab) {
+    const app = findAppById(tab.id);
+    if (!app) { panelTabContent.textContent = ''; return; }
+
+    if (app.pendingNameFromChat) {
+      panelTabContent.innerHTML = `
+        <div class="app-artifact-empty">
+          <div class="section-empty panel-map-empty">
+            <span class="section-empty-icon"><i data-lucide="sparkles"></i></span>
+            <h2>This app doesn't have a build yet</h2>
+            <p>Describe what you want it to do in the chat and I'll build it for you.</p>
+          </div>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
+      return;
+    }
+
+    const linkedProjects = app.projects.map((id) => findProjectById(id)).filter(Boolean);
+    const sourcesHtml = linkedProjects.length
+      ? linkedProjects.map((p) => `<span class="app-artifact-source-pill"><i data-lucide="${p.icon || 'folder'}"></i>${p.name}</span>`).join('')
+      : '<span class="app-artifact-source-empty">No projects linked — this app runs standalone.</span>';
+
+    panelTabContent.innerHTML = `
+      <div class="app-artifact">
+        <div class="app-artifact-header">
+          <span class="app-artifact-icon"><i data-lucide="${app.icon || 'layout-grid'}"></i></span>
+          <div class="app-artifact-header-text">
+            <h2>${app.name}</h2>
+            <p>${app.description || 'No description yet.'}</p>
+          </div>
+          ${appStatusBadge(app.status)}
+        </div>
+        <div class="app-artifact-section">
+          <span class="app-artifact-section-title">Sources</span>
+          <div class="app-artifact-sources">${sourcesHtml}</div>
+        </div>
+        <div class="app-artifact-section">
+          <span class="app-artifact-section-title">Latest run</span>
+          <div class="app-artifact-body">
+            <p>Generated from the conversation that defined this app. Ask a follow-up question or request a change in the chat to update it.</p>
+          </div>
+        </div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+  }
+
   function renderPanelTabContent() {
     const tab = panelTabsState.find((t) => t.key === panelActiveKey);
     // A Project tab reads as a canvas/map (dot-grid texture, see
-    // .panel-tab-content--map) — the closest thing this prototype has
-    // today to "the flow/map view" the user referenced, before any real
-    // content is defined for what lives inside it (see docs/home.md).
-    // Apps/Agents keep the plain placeholder text treatment.
+    // .panel-tab-content--map) — the surface renderProjectMapTab's empty
+    // state sits on top of. An App tab is its own artifact card
+    // (renderAppArtifactTab), no dot-grid. Agent keeps the plain
+    // placeholder text treatment inside the same node.
     panelTabContent.classList.toggle('panel-tab-content--map', !!tab && tab.type === 'project');
     if (!tab) { panelTabContent.textContent = ''; return; }
+    if (tab.type === 'project') { renderProjectMapTab(tab); return; }
+    if (tab.type === 'app') { renderAppArtifactTab(tab); return; }
     panelTabContent.textContent = `${PANEL_TAB_CONTENT_LABELS[tab.type]} — ${tab.name}`;
   }
 
@@ -3693,11 +4622,13 @@
     chatMessages.innerHTML = '';
     chatMessages.hidden = true;
     document.getElementById('chatThreadGreeting').hidden = false;
-    // Names the project directly instead of #chatEmpty's generic subhead —
-    // invites analyzing something specific in it, since that's the whole
-    // reason this chat exists.
-    document.getElementById('chatThreadGreetingSubtitle').textContent =
-      `Ask me to dig into a specific part of ${project.name}.`;
+    // A still-unnamed project (see startNewProjectFlow) gets copy that
+    // invites *defining* it, not analyzing it — "dig into a specific part
+    // of New Project" doesn't mean anything yet, there's nothing there to
+    // dig into until the first message says what this project even is.
+    document.getElementById('chatThreadGreetingSubtitle').textContent = project.pendingNameFromChat
+      ? "Tell me what you're building, and I'll set up this project around it."
+      : `Ask me to dig into a specific part of ${project.name}.`;
     dockedInput.value = '';
     updateSendButtonIcon(dockedInput, dockedSendBtn);
   }
@@ -3712,6 +4643,7 @@
     if (sectionEmptyEl) sectionEmptyEl.hidden = true;
     projectsView.hidden = true;
     chatsView.hidden = true;
+    appsView.hidden = true;
 
     chatEmpty.hidden = true;
     chatThread.hidden = false;
@@ -3739,6 +4671,77 @@
     document.querySelectorAll('.nav-item[data-nav]').forEach((n) => n.classList.remove('is-active'));
     const newChatNavItem = document.querySelector('.nav-item[data-nav="new-chat"]');
     if (newChatNavItem) newChatNavItem.classList.add('is-active');
+  }
+
+  // Replaces the old "Create project" modal (name/description/icon form,
+  // now fully retired — see docs/home.md) at all 3 of its entry points.
+  // Creating a project is no longer a form: it drops a "New Project"
+  // placeholder straight into its own chat (openProjectChat), same
+  // experience as opening an already-named one — the first message the
+  // user sends there is what actually defines the project (see the
+  // pendingNameFromChat branch in startChat()).
+  function startNewProjectFlow() {
+    const project = createProject({ name: 'New Project', description: '', pendingNameFromChat: true });
+    openProjectChat(project);
+  }
+
+  // ---------- Apps: opening/creating one mirrors openProjectChat/
+  // startNewProjectFlow exactly, per explicit spec (see docs/apps.md →
+  // "Ciclo de vida / interacción") — same collapse-sidebar + narrow-
+  // greeting + auto-open-panel sequence, just for an App instead of a
+  // Project. The only real difference is what the panel ends up showing:
+  // a Project's tab renders the map canvas (renderProjectMapTab), an App's
+  // renders its artifact (renderAppArtifactTab, see the Chat side panel
+  // section) — empty/"not built yet" while pendingNameFromChat, the actual
+  // generated content once the first message defines it.
+  function showAppChatGreeting(app) {
+    chatMessages.innerHTML = '';
+    chatMessages.hidden = true;
+    document.getElementById('chatThreadGreeting').hidden = false;
+    document.getElementById('chatThreadGreetingSubtitle').textContent = app.pendingNameFromChat
+      ? "Tell me what you want this app to do, and I'll build it around that."
+      : `Ask me a question or request a change to ${app.name}.`;
+    dockedInput.value = '';
+    updateSendButtonIcon(dockedInput, dockedSendBtn);
+  }
+
+  function openAppChat(app) {
+    if (!app) return;
+
+    const sidebarEl = document.getElementById('sidebar');
+    if (sidebarEl) sidebarEl.classList.add('is-collapsed');
+
+    const sectionEmptyEl = document.getElementById('sectionEmpty');
+    if (sectionEmptyEl) sectionEmptyEl.hidden = true;
+    projectsView.hidden = true;
+    chatsView.hidden = true;
+    appsView.hidden = true;
+
+    chatEmpty.hidden = true;
+    chatThread.hidden = false;
+    showAppChatGreeting(app);
+    chatPanelToggle.hidden = false;
+    chatPanelExpandToggle.hidden = false;
+
+    contextState.empty.selected = { type: 'app', id: app.id, name: app.name };
+    updateChatThreadHeader();
+
+    resetPanelTabs();
+    openPanelTab('app', app.id);
+
+    document.querySelectorAll('.nav-item[data-nav]').forEach((n) => n.classList.remove('is-active'));
+    const newChatNavItem = document.querySelector('.nav-item[data-nav="new-chat"]');
+    if (newChatNavItem) newChatNavItem.classList.add('is-active');
+  }
+
+  // Creating an App is conversational, not a form (same decision already
+  // made for Projects) — drops a "New App" placeholder straight into its
+  // own chat, panel showing the "not built yet" empty state until the
+  // first message defines what it should do (see the pendingNameFromChat
+  // branch in startChat() and renderAppArtifactTab).
+  function startNewAppFlow() {
+    const app = createApp({ name: 'New App', description: '', projects: [], pendingNameFromChat: true });
+    openAppChat(app);
   }
 
   // Full-panel picker + tabs bar: not a .composer-menu, so clicks bubble
@@ -3773,7 +4776,7 @@
   // picked, the trigger cycles through the three ("Select a project" →
   // "Select an app" → "Select an agent", icon crossfading with it) so the
   // user discovers all three without opening the popover. Reuses the same
-  // PROJECTS_DATA/PANEL_APPS_DATA/PANEL_AGENTS_DATA + PANEL_OPEN_ICONS/
+  // PROJECTS_DATA/APPS_DATA/PANEL_AGENTS_DATA + PANEL_OPEN_ICONS/
   // PANEL_OPEN_LABELS + panelOpenDataFor() the side panel's own picker
   // already defined above — one consistent set of mock entities, not a
   // second copy invented for this bar.
@@ -4467,6 +5470,487 @@
     if (!projectEditModalBackdrop.hidden && e.key === 'Escape') closeProjectEditModal();
   });
 
+  // ---------- Apps view: filtering, rendering, CRUD ----------
+  // Own class family throughout (.apps-*/.app-*), never sharing a name with
+  // .projects-*/.project-* — same lesson this file already learned twice
+  // (.project-row, .search-tab collisions, see docs/home.md) and already
+  // applied once for Chats and Tasks. Visual pattern mirrors Projects
+  // (header + search + filter + grid/list + tabs + skeleton + ellipsis
+  // actions), adapted for what an App actually has: no tags/members/owner,
+  // instead a `projects` array (0..N linked projects) and a simpler status
+  // (active/draft). See docs/apps.md for the concept this is built on.
+  let appsSearchTerm = '';
+  let appsViewMode = 'grid';
+  // Filter by linked project — same multi-select-Set mechanism as
+  // projectsActiveTags, just keyed by project id instead of a raw tag
+  // string (an App has no tags of its own).
+  let appsActiveProjectFilter = new Set();
+  // All / Pinned / Archived — a second, independent filter dimension next
+  // to search (combined in getFilteredApps). "Pinned" instead of ownership
+  // tabs (Apps don't have an owner/created-by-you distinction defined) —
+  // gives Pin/Unpin an actual visible effect inside this view, since Apps
+  // aren't mirrored into the sidebar's Pinned list yet (see docs/apps.md →
+  // Pendiente), unlike Projects' Pin/Unpin which syncs there instead.
+  let appsTab = 'all';
+
+  function appStatusBadge(status) {
+    return status === 'active'
+      ? '<span class="badge badge--success badge--square">Active</span>'
+      : '<span class="badge badge--neutral badge--square">Draft</span>';
+  }
+
+  // Up to 3 linked-project names as pills + "+N" if there are more; a
+  // muted "No projects linked" when the app is standalone (projects: []) —
+  // the 0/1/N range docs/apps.md asked to demonstrate explicitly.
+  function appProjectPills(app) {
+    if (!app.projects.length) return '<span class="app-project-pill app-project-pill--empty">No projects linked</span>';
+    const names = app.projects.map((id) => { const p = findProjectById(id); return p ? p.name : null; }).filter(Boolean);
+    const shown = names.slice(0, 3);
+    let html = shown.map((n) => `<span class="app-project-pill">${n}</span>`).join('');
+    if (names.length > shown.length) html += `<span class="app-project-pill app-project-pill--more">+${names.length - shown.length}</span>`;
+    return html;
+  }
+
+  // Filter popover: multi-select over every project referenced by at least
+  // one App — same opt-check/composer-menu-option pattern as
+  // renderProjectsFilterMenu, just keyed by project id (label shows the
+  // project's name).
+  function renderAppsFilterMenu() {
+    const list = document.getElementById('appsFilterList');
+    if (!list) return;
+    const ids = Array.from(new Set(APPS_DATA.flatMap((a) => a.projects)));
+    const options = ids.map((id) => findProjectById(id)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+    list.innerHTML = options.map((p) => `
+      <button type="button" class="composer-menu-option composer-menu-option--model${appsActiveProjectFilter.has(p.id) ? ' is-selected' : ''}" data-app-project-filter="${p.id}">
+        <span class="opt-left"><span class="opt-body"><span class="opt-title">${p.name}</span></span></span>
+        <span class="opt-check"><i data-lucide="check"></i></span>
+      </button>
+    `).join('');
+    list.querySelectorAll('[data-app-project-filter]').forEach((option) => {
+      option.addEventListener('click', () => {
+        const id = option.dataset.appProjectFilter;
+        if (appsActiveProjectFilter.has(id)) appsActiveProjectFilter.delete(id);
+        else appsActiveProjectFilter.add(id);
+        option.classList.toggle('is-selected');
+        updateAppsFilterButton();
+        queryAppsWithLoading(400);
+      });
+    });
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function updateAppsFilterButton() {
+    const valueEl = document.getElementById('appsFilterValue');
+    if (!valueEl) return;
+    const n = appsActiveProjectFilter.size;
+    if (n === 0) valueEl.textContent = 'all';
+    else if (n === 1) { const p = findProjectById(Array.from(appsActiveProjectFilter)[0]); valueEl.textContent = p ? p.name : '1 project'; }
+    else valueEl.textContent = `${n} projects`;
+  }
+
+  function getFilteredApps() {
+    const term = appsSearchTerm.trim().toLowerCase();
+    const showArchived = appsTab === 'archived';
+    return APPS_DATA.filter((a) => a.archived === showArchived)
+      .filter((a) => showArchived || appsTab === 'all' || (appsTab === 'pinned' && a.pinned))
+      .filter((a) => {
+        const matchesTerm = !term || a.name.toLowerCase().includes(term);
+        const matchesProjects = appsActiveProjectFilter.size === 0 || a.projects.some((id) => appsActiveProjectFilter.has(id));
+        return matchesTerm && matchesProjects;
+      });
+  }
+
+  // Actions popover markup: Edit detail / Pin-unpin / Archive for a live
+  // app; Edit detail / Delete for an archived one — same split Projects'
+  // own projectActionsMenuMarkup uses, minus Invite members (access/sharing
+  // for an App isn't defined yet, see docs/apps.md → Pendiente).
+  function appActionsMenuMarkup(app) {
+    if (app.archived) {
+      return `
+        <div class="app-actions-menu" data-app-actions-menu="${app.id}">
+          <button type="button" class="composer-menu-option" data-app-edit-detail="${app.id}">
+            <span class="opt-icon"><i data-lucide="pencil"></i></span>
+            <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+          </button>
+          <button type="button" class="composer-menu-option composer-menu-option--danger" data-app-delete="${app.id}">
+            <span class="opt-icon"><i data-lucide="trash-2"></i></span>
+            <span class="opt-body"><span class="opt-title">Delete app</span></span>
+          </button>
+        </div>
+      `;
+    }
+    return `
+      <div class="app-actions-menu" data-app-actions-menu="${app.id}">
+        <button type="button" class="composer-menu-option" data-app-edit-detail="${app.id}">
+          <span class="opt-icon"><i data-lucide="pencil"></i></span>
+          <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-app-pin-toggle="${app.id}">
+          <span class="opt-icon"><i data-lucide="${app.pinned ? 'pin-off' : 'pin'}"></i></span>
+          <span class="opt-body"><span class="opt-title">${app.pinned ? 'Unpin app' : 'Pin app'}</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-app-archive="${app.id}">
+          <span class="opt-icon"><i data-lucide="archive"></i></span>
+          <span class="opt-body"><span class="opt-title">Archive app</span></span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Cards/rows open the app's own chat on click (openAppChat), same as
+  // Projects — only the ellipsis is interactive otherwise.
+  function renderAppsGrid(apps) {
+    document.getElementById('appsGrid').innerHTML = apps.map((a) => `
+      <div class="app-card" data-app-id="${a.id}">
+        <div class="app-card-top">
+          <div class="app-card-name"><i data-lucide="${a.icon || 'layout-grid'}"></i><span>${a.name}</span></div>
+          <div class="app-card-actions-wrap">
+            <button type="button" class="app-card-actions-btn" data-app-actions-trigger="${a.id}" aria-label="App actions">
+              <i data-lucide="more-vertical"></i>
+            </button>
+            ${appActionsMenuMarkup(a)}
+          </div>
+        </div>
+        <p class="app-card-description">${a.description || 'No description yet.'}</p>
+        <div class="app-card-projects">${appProjectPills(a)}</div>
+        <div class="app-card-footer">${appStatusBadge(a.status)}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderAppsList(apps) {
+    document.getElementById('appsList').innerHTML = apps.map((a) => `
+      <div class="app-list-row" data-app-id="${a.id}">
+        <i data-lucide="${a.icon || 'layout-grid'}" class="app-list-row-icon"></i>
+        <span class="app-list-row-name">${a.name}</span>
+        <div class="app-list-row-projects">${appProjectPills(a)}</div>
+        ${appStatusBadge(a.status)}
+        <div class="app-list-row-actions-wrap">
+          <button type="button" class="app-list-row-actions-btn" data-app-actions-trigger="${a.id}" aria-label="App actions">
+            <i data-lucide="more-vertical"></i>
+          </button>
+          ${appActionsMenuMarkup(a)}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function updateAppsToggleButtons() {
+    const isGrid = appsViewMode === 'grid';
+    document.getElementById('appsGridBtn').classList.toggle('is-active', isGrid);
+    document.getElementById('appsListBtn').classList.toggle('is-active', !isGrid);
+  }
+
+  function applyAppsFilters() {
+    const appsGridEl = document.getElementById('appsGrid');
+    if (!appsGridEl) return; // Apps view not initialized yet at this point in the script
+    const filtered = getFilteredApps();
+    const isGrid = appsViewMode === 'grid';
+    appsGridEl.hidden = !isGrid;
+    document.getElementById('appsList').hidden = isGrid;
+    if (isGrid) renderAppsGrid(filtered); else renderAppsList(filtered);
+    const emptyEl = document.getElementById('appsEmpty');
+    emptyEl.hidden = filtered.length > 0;
+    emptyEl.textContent = appsTab === 'archived'
+      ? 'No archived apps.'
+      : appsTab === 'pinned'
+        ? 'No pinned apps.'
+        : 'No apps match your search.';
+    updateAppsToggleButtons();
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function showAppsSkeleton() {
+    const isGrid = appsViewMode === 'grid';
+    document.getElementById('appsSkeletonGrid').hidden = !isGrid;
+    document.getElementById('appsSkeletonList').hidden = isGrid;
+    document.getElementById('appsGrid').hidden = true;
+    document.getElementById('appsList').hidden = true;
+    document.getElementById('appsEmpty').hidden = true;
+  }
+  function hideAppsSkeleton() {
+    document.getElementById('appsSkeletonGrid').hidden = true;
+    document.getElementById('appsSkeletonList').hidden = true;
+  }
+
+  let appsQueryTimer = null;
+  function queryAppsWithLoading(delay) {
+    showAppsSkeleton();
+    clearTimeout(appsQueryTimer);
+    appsQueryTimer = setTimeout(() => {
+      hideAppsSkeleton();
+      applyAppsFilters();
+    }, delay);
+  }
+
+  // Same 700ms "first load" / 400ms "re-filter" split as loadProjectsView.
+  function loadAppsView() {
+    queryAppsWithLoading(700);
+  }
+
+  function closeAllAppActionMenus() {
+    document.querySelectorAll('.app-actions-menu.is-open').forEach((menu) => menu.classList.remove('is-open'));
+    document.querySelectorAll('.app-card-actions-btn.is-open, .app-list-row-actions-btn.is-open')
+      .forEach((btn) => btn.classList.remove('is-open'));
+  }
+
+  // Pin/unpin: local to this view only (no sidebar sync — see docs/apps.md
+  // → Pendiente). Its visible effect is the "Pinned" tab above, not a
+  // mirrored sidebar row the way Projects' pin does.
+  function toggleAppPinned(id) {
+    const app = findAppById(id);
+    if (!app) return;
+    app.pinned = !app.pinned;
+    applyAppsFilters();
+  }
+
+  function archiveApp(id, tileEl) {
+    const app = findAppById(id);
+    if (!app) return;
+    const commit = () => { app.archived = true; applyAppsFilters(); };
+    if (tileEl) {
+      tileEl.style.opacity = '0';
+      tileEl.style.transform = 'scale(0.97)';
+      setTimeout(commit, 160);
+    } else {
+      commit();
+    }
+  }
+
+  function deleteApp(id, tileEl) {
+    const index = APPS_DATA.findIndex((a) => a.id === id);
+    if (index === -1) return;
+    const commit = () => { APPS_DATA.splice(index, 1); applyAppsFilters(); };
+    if (tileEl) {
+      tileEl.style.opacity = '0';
+      tileEl.style.transform = 'scale(0.97)';
+      setTimeout(commit, 160);
+    } else {
+      commit();
+    }
+  }
+
+  // Edit App modal: name + description (same phrasing convention as the
+  // project edit modal) plus a project checklist — the one field genuinely
+  // new here, since an App's 0..N project relationship has no Project
+  // equivalent to copy from. Checking/unchecking a project toggles its id
+  // in and out of app.projects directly; nothing commits until Save.
+  const appEditModalBackdrop = document.getElementById('appEditModalBackdrop');
+  const appEditModalTitle = document.getElementById('appEditModalTitle');
+  const appEditModalClose = document.getElementById('appEditModalClose');
+  const appEditNameInput = document.getElementById('appEditNameInput');
+  const appEditDescInput = document.getElementById('appEditDescInput');
+  const appEditProjectsList = document.getElementById('appEditProjectsList');
+  const appEditSaveBtn = document.getElementById('appEditSaveBtn');
+  const appEditCancelBtn = document.getElementById('appEditCancelBtn');
+  let appBeingEdited = null;
+  let appEditSelectedProjects = new Set();
+
+  function renderAppEditProjectsList() {
+    if (!appEditProjectsList) return;
+    appEditProjectsList.innerHTML = PROJECTS_DATA.filter((p) => !p.archived).map((p) => `
+      <label class="app-edit-project-row">
+        <input type="checkbox" data-app-edit-project="${p.id}" ${appEditSelectedProjects.has(p.id) ? 'checked' : ''} />
+        <span>${p.name}</span>
+      </label>
+    `).join('');
+    appEditProjectsList.querySelectorAll('[data-app-edit-project]').forEach((box) => {
+      box.addEventListener('change', () => {
+        const id = box.dataset.appEditProject;
+        if (box.checked) appEditSelectedProjects.add(id); else appEditSelectedProjects.delete(id);
+      });
+    });
+  }
+
+  function openAppEditModal(app) {
+    if (!app || !appEditModalBackdrop) return;
+    appBeingEdited = app;
+    appEditModalTitle.textContent = `Edit ${app.name}`;
+    appEditNameInput.value = app.name;
+    appEditDescInput.value = app.description || '';
+    appEditSelectedProjects = new Set(app.projects);
+    renderAppEditProjectsList();
+    appEditSaveBtn.disabled = !app.name.trim();
+    appEditModalBackdrop.hidden = false;
+    requestAnimationFrame(() => appEditModalBackdrop.classList.add('is-open'));
+    setTimeout(() => appEditNameInput.focus(), 50);
+  }
+
+  function closeAppEditModal() {
+    if (!appEditModalBackdrop) return;
+    appEditModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { appEditModalBackdrop.hidden = true; }, 200);
+    appBeingEdited = null;
+  }
+
+  function saveAppEdit() {
+    if (!appEditModalBackdrop || appEditSaveBtn.disabled || !appBeingEdited) return;
+    const app = appBeingEdited;
+    app.name = appEditNameInput.value.trim();
+    app.description = appEditDescInput.value.trim();
+    app.projects = Array.from(appEditSelectedProjects);
+    applyAppsFilters();
+    closeAppEditModal();
+  }
+
+  if (appEditModalBackdrop) {
+    appEditNameInput.addEventListener('input', () => { appEditSaveBtn.disabled = !appEditNameInput.value.trim(); });
+    appEditNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveAppEdit(); } });
+    appEditSaveBtn.addEventListener('click', saveAppEdit);
+    appEditCancelBtn.addEventListener('click', closeAppEditModal);
+    appEditModalClose.addEventListener('click', closeAppEditModal);
+    appEditModalBackdrop.addEventListener('click', (e) => { if (e.target === appEditModalBackdrop) closeAppEditModal(); });
+    document.addEventListener('keydown', (e) => { if (!appEditModalBackdrop.hidden && e.key === 'Escape') closeAppEditModal(); });
+  }
+
+  // Delete App confirmation modal — same shell as Projects' own
+  // delete-project-modal, own class family (.delete-app-modal-*).
+  const deleteAppModalBackdrop = document.getElementById('deleteAppModalBackdrop');
+  const deleteAppModalBody = document.getElementById('deleteAppModalBody');
+  const deleteAppConfirmBtn = document.getElementById('deleteAppConfirmBtn');
+  const deleteAppCancelBtn = document.getElementById('deleteAppCancelBtn');
+  const deleteAppModalClose = document.getElementById('deleteAppModalClose');
+  let appPendingDelete = null;
+  let appPendingDeleteTileEl = null;
+
+  function openDeleteAppModal(app, tileEl) {
+    if (!app || !deleteAppModalBackdrop) return;
+    appPendingDelete = app;
+    appPendingDeleteTileEl = tileEl || null;
+    deleteAppModalBody.innerHTML = `Are you sure you want to delete <strong>${app.name}</strong>? This action can't be undone.`;
+    deleteAppModalBackdrop.hidden = false;
+    requestAnimationFrame(() => deleteAppModalBackdrop.classList.add('is-open'));
+  }
+
+  function closeDeleteAppModal() {
+    if (!deleteAppModalBackdrop) return;
+    deleteAppModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { deleteAppModalBackdrop.hidden = true; }, 200);
+    appPendingDelete = null;
+    appPendingDeleteTileEl = null;
+  }
+
+  if (deleteAppModalBackdrop) {
+    deleteAppConfirmBtn.addEventListener('click', () => {
+      if (!appPendingDelete) return;
+      deleteApp(appPendingDelete.id, appPendingDeleteTileEl);
+      closeDeleteAppModal();
+    });
+    deleteAppCancelBtn.addEventListener('click', closeDeleteAppModal);
+    deleteAppModalClose.addEventListener('click', closeDeleteAppModal);
+    deleteAppModalBackdrop.addEventListener('click', (e) => { if (e.target === deleteAppModalBackdrop) closeDeleteAppModal(); });
+    document.addEventListener('keydown', (e) => { if (!deleteAppModalBackdrop.hidden && e.key === 'Escape') closeDeleteAppModal(); });
+  }
+
+  // Delegated click handling over #appsGrid/#appsList — same reasoning as
+  // wireProjectActionsDelegation: cards/rows re-render on every filter
+  // change, so per-element listeners would be lost each time.
+  function wireAppActionsDelegation() {
+    ['appsGrid', 'appsList'].forEach((containerId) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-app-actions-trigger]');
+        if (trigger) {
+          e.stopPropagation();
+          const id = trigger.dataset.appActionsTrigger;
+          const menu = container.querySelector(`.app-actions-menu[data-app-actions-menu="${id}"]`);
+          const isOpen = menu && menu.classList.contains('is-open');
+          closeAllAppActionMenus();
+          if (menu && !isOpen) { menu.classList.add('is-open'); trigger.classList.add('is-open'); }
+          return;
+        }
+        // Any other click landing inside an open popover (blank padding,
+        // etc.) must not bubble to document's global closer below — same
+        // guard wireProjectActionsDelegation already needed (see its own
+        // comment) once this popover carries anything besides plain
+        // buttons. The specific actions below still run either way; this
+        // only stops the click from escaping the container.
+        if (e.target.closest('.app-actions-menu')) e.stopPropagation();
+        const editBtn = e.target.closest('[data-app-edit-detail]');
+        if (editBtn) { e.stopPropagation(); closeAllAppActionMenus(); openAppEditModal(findAppById(editBtn.dataset.appEditDetail)); return; }
+        const pinBtn = e.target.closest('[data-app-pin-toggle]');
+        if (pinBtn) { e.stopPropagation(); toggleAppPinned(pinBtn.dataset.appPinToggle); closeAllAppActionMenus(); return; }
+        const archiveBtn = e.target.closest('[data-app-archive]');
+        if (archiveBtn) {
+          e.stopPropagation();
+          closeAllAppActionMenus();
+          archiveApp(archiveBtn.dataset.appArchive, archiveBtn.closest('[data-app-id]'));
+          return;
+        }
+        const deleteBtn = e.target.closest('[data-app-delete]');
+        if (deleteBtn) {
+          e.stopPropagation();
+          closeAllAppActionMenus();
+          openDeleteAppModal(findAppById(deleteBtn.dataset.appDelete), deleteBtn.closest('[data-app-id]'));
+          return;
+        }
+        // Clicking the card/row body itself (not the ellipsis or its
+        // popover) opens the app's own chat — same behavior as a Project
+        // card, see openAppChat.
+        const tile = e.target.closest('[data-app-id]');
+        if (tile && !e.target.closest('.app-actions-menu')) {
+          const app = findAppById(tile.dataset.appId);
+          if (app) openAppChat(app);
+        }
+      });
+    });
+    document.addEventListener('click', () => closeAllAppActionMenus());
+  }
+
+  function initAppsView() {
+    const searchBtn = document.getElementById('appsSearchToggle');
+    const searchInline = document.getElementById('appsSearchInline');
+    const searchInput = document.getElementById('appsSearchInput');
+    const searchClear = document.getElementById('appsSearchClear');
+    if (searchBtn && searchInline && searchInput && searchClear) {
+      searchBtn.addEventListener('click', () => {
+        searchBtn.hidden = true;
+        searchInline.classList.add('is-open');
+        searchInput.focus();
+      });
+      function closeAppsSearch() {
+        searchInline.classList.remove('is-open');
+        searchBtn.hidden = false;
+        searchInput.value = '';
+        appsSearchTerm = '';
+        queryAppsWithLoading(400);
+      }
+      searchClear.addEventListener('click', closeAppsSearch);
+      searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAppsSearch(); });
+      let appsSearchDebounce = null;
+      searchInput.addEventListener('input', () => {
+        appsSearchTerm = searchInput.value;
+        clearTimeout(appsSearchDebounce);
+        appsSearchDebounce = setTimeout(() => queryAppsWithLoading(400), 300);
+      });
+    }
+
+    const gridBtn = document.getElementById('appsGridBtn');
+    const listBtn = document.getElementById('appsListBtn');
+    if (gridBtn && listBtn) {
+      gridBtn.addEventListener('click', () => { appsViewMode = 'grid'; queryAppsWithLoading(400); });
+      listBtn.addEventListener('click', () => { appsViewMode = 'list'; queryAppsWithLoading(400); });
+    }
+
+    document.querySelectorAll('#appsViewTabs .apps-view-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        appsTab = tab.dataset.appsTab;
+        document.querySelectorAll('#appsViewTabs .apps-view-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
+        queryAppsWithLoading(400);
+      });
+    });
+
+    const newAppBtn = document.getElementById('newAppViewBtn');
+    if (newAppBtn) newAppBtn.addEventListener('click', () => startNewAppFlow());
+
+    renderAppsFilterMenu();
+    updateAppsFilterButton();
+    wireAppActionsDelegation();
+    applyAppsFilters();
+  }
+  initAppsView();
+
   // Rename chat modal: opened from "Rename chat" in a chat's ellipsis, from
   // EVERY point that offers it — the Chats and Tasks view's own rows and
   // the sidebar's Pinned ellipsis for a pinned chat both call renameChat(id)
@@ -4817,10 +6301,16 @@
     if (!deleteProjectModalBackdrop.hidden && e.key === 'Escape') closeDeleteProjectModal();
   });
 
-  // Entry point 1/3: the Projects view's own "New project" button.
-  document.getElementById('newProjectViewBtn').addEventListener('click', () => openCreateProjectModal());
+  // Entry point 1/2: the Projects view's own "New project" button. Used to
+  // open the create-project modal (name/description/icon form) — that
+  // modal is retired now (see startNewProjectFlow and docs/home.md), this
+  // jumps straight into a fresh "New Project" chat instead. (The gray
+  // bar's own "New project" — a 3rd entry point tried the same day — was
+  // already tried and explicitly reverted before this pass; see
+  // docs/chat.md, so there's no 3rd wiring to update here.)
+  document.getElementById('newProjectViewBtn').addEventListener('click', () => startNewProjectFlow());
 
-  // Entry point 2/3: the sidebar's "+" on the Projects nav item (hover-reveal,
+  // Entry point 2/2: the sidebar's "+" on the Projects nav item (hover-reveal,
   // see docs/sidebar.md). shell.js's initNavActive() already ignores clicks
   // on .nav-item-add so this doesn't also trigger a nav section change —
   // stopPropagation here is just an extra guard against anything else
@@ -4829,7 +6319,18 @@
   if (sidebarNewProjectBtn) {
     sidebarNewProjectBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openCreateProjectModal();
+      startNewProjectFlow();
+    });
+  }
+
+  // Same pattern, App's own "+" on the sidebar's Apps nav item — the other
+  // entry point into startNewAppFlow() besides the Apps view's own "New
+  // App" button (wired in initAppsView).
+  const sidebarNewAppBtn = document.querySelector('.nav-item[data-nav="apps"] .nav-item-add');
+  if (sidebarNewAppBtn) {
+    sidebarNewAppBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startNewAppFlow();
     });
   }
 
@@ -5086,17 +6587,20 @@
   // Consolidates the 6 chat names that already existed scattered across
   // the sidebar's Pinned/Recent (static markup) and SEARCH_DATA.chats
   // (flat, no context) into one array that actually carries a `context`,
-  // same move PROJECTS_DATA already made for the 3 mock projects. Two new
-  // chats (google-drive-sync-check, period-close-agent-review) were added
-  // purely so App-context and Agent-context rows have at least one real
-  // example — every other name here already existed somewhere else in the
-  // prototype.
+  // same move PROJECTS_DATA already made for the 3 mock projects. Two extra
+  // chats (reconciliation-summary-check-in, period-close-agent-review) were
+  // added purely so App-context and Agent-context rows have at least one
+  // real example — every other name here already existed somewhere else in
+  // the prototype. The App-context one was retargeted (2026-08-14) from the
+  // old integrations mock ("Google Drive sync check") to
+  // bank-reconciliation-summary once docs/apps.md redefined what an App is
+  // — see APPS_DATA in the Apps view section above.
   const CHATS_DATA = [
     { id: 'july-period-close', name: 'July period close', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '2 days ago', archived: false, pinned: false },
     { id: 'nequi-source-differences', name: 'Nequi source differences', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '3 days ago', archived: false, pinned: false },
     { id: 'manual-entries-review', name: 'Manual entries review', context: { type: 'project', id: 'q2-journal-entry-audit' }, createdAt: '1 week ago', archived: false, pinned: false },
     { id: 'base-vs-optimistic-scenario', name: 'Base vs. optimistic scenario', context: { type: 'project', id: 'q3-treasury-forecast' }, createdAt: '2 weeks ago', archived: false, pinned: false },
-    { id: 'google-drive-sync-check', name: 'Google Drive sync check', context: { type: 'app', id: 'google-drive' }, createdAt: '4 days ago', archived: false, pinned: false },
+    { id: 'reconciliation-summary-check-in', name: 'Reconciliation Summary check-in', context: { type: 'app', id: 'bank-reconciliation-summary' }, createdAt: '4 days ago', archived: false, pinned: false },
     { id: 'period-close-agent-review', name: 'Period close agent review', context: { type: 'agent', id: 'period-close-assistant' }, createdAt: '5 days ago', archived: false, pinned: false },
     { id: 'how-do-i-build-a-reconciliation-rule', name: 'How do I build a reconciliation rule?', context: null, createdAt: '1 week ago', archived: false, pinned: false },
     { id: 'this-weeks-anomaly-summary', name: "This week's anomaly summary", context: null, createdAt: '2 weeks ago', archived: false, pinned: false },
@@ -5104,6 +6608,10 @@
   let chatsSearchTerm = '';
   let chatsSelectMode = false;
   let chatsSelectedIds = new Set();
+  // All / Archived — a second, independent filter dimension next to
+  // search (combined in getFilteredChats), same principle as Projects'
+  // own ownership tabs (projectsOwnershipFilter).
+  let chatsTab = 'all';
 
   function findChatById(id) {
     return CHATS_DATA.find((c) => c.id === id);
@@ -5154,7 +6662,9 @@
 
   function getFilteredChats() {
     const term = chatsSearchTerm.trim().toLowerCase();
-    return CHATS_DATA.filter((c) => !c.archived).filter((c) => !term || c.name.toLowerCase().includes(term));
+    const showArchived = chatsTab === 'archived';
+    return CHATS_DATA.filter((c) => c.archived === showArchived)
+      .filter((c) => !term || c.name.toLowerCase().includes(term));
   }
 
   // Same icon+label pairing already used for the chat thread header's
@@ -5172,7 +6682,21 @@
       </div>`;
   }
 
+  // Archived chats get a shorter action set — Rename chat only, no Pin/Unpin.
+  // Same reasoning Projects already applies to its own archived cards:
+  // pinning something in a terminal "archived" state could silently
+  // resurrect a stale sidebar row (a chat hidden from the "All" tab, but
+  // still showing up in Pinned) — see docs/chats-and-tasks.md.
   function chatActionsMenuMarkup(c) {
+    if (c.archived) {
+      return `
+        <div class="chat-actions-menu" data-chat-actions-menu="${c.id}">
+          <button type="button" class="composer-menu-option" data-chat-rename="${c.id}">
+            <span class="opt-icon"><i data-lucide="pencil"></i></span>
+            <span class="opt-body"><span class="opt-title">Rename chat</span></span>
+          </button>
+        </div>`;
+    }
     return `
       <div class="chat-actions-menu" data-chat-actions-menu="${c.id}">
         <button type="button" class="composer-menu-option" data-chat-pin-toggle="${c.id}">
@@ -5359,7 +6883,13 @@
         </div>
       </div>
     `).join('');
-    document.getElementById('chatsEmpty').hidden = chats.length > 0;
+    const emptyEl = document.getElementById('chatsEmpty');
+    emptyEl.hidden = chats.length > 0;
+    // "No chats match your search" reads oddly on the Archived tab when
+    // nothing's been archived yet (no search involved at all) — same
+    // dedicated-message pattern Projects already uses for its own
+    // Archived tab.
+    emptyEl.textContent = chatsTab === 'archived' ? 'No archived chats.' : 'No chats match your search.';
     if (window.lucide) lucide.createIcons();
   }
 
@@ -5406,6 +6936,9 @@
     const count = chatsSelectedIds.size;
     document.getElementById('chatsSelectCount').textContent = `${count} selected`;
     document.getElementById('chatsArchiveBtn').disabled = count === 0;
+    // Bulk-archiving something that's already archived doesn't make sense
+    // — "Select" only makes sense on the All tab.
+    document.getElementById('chatsSelectToggleBtn').hidden = chatsTab === 'archived';
   }
 
   function setChatsSelectMode(on) {
@@ -5520,6 +7053,25 @@
     document.getElementById('chatsSelectCancelBtn').addEventListener('click', () => setChatsSelectMode(false));
     document.getElementById('chatsArchiveBtn').addEventListener('click', archiveSelectedChats);
 
+    // All / Archived — a second, independent filter dimension alongside
+    // search (both combine in getFilteredChats). Same loading treatment as
+    // search, for consistency, and the same criterion Projects already
+    // uses for its own ownership tabs.
+    document.querySelectorAll('.chats-view-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        if (tab.classList.contains('is-active')) return;
+        document.querySelectorAll('.chats-view-tab').forEach((t) => t.classList.remove('is-active'));
+        tab.classList.add('is-active');
+        chatsTab = tab.dataset.chatsTab;
+        // Bulk-select doesn't carry over across tabs — switching away from
+        // All while mid-selection would leave stale ids selected for a
+        // list the user can no longer see.
+        if (chatsSelectMode) setChatsSelectMode(false);
+        updateChatsSelectUI();
+        queryChatsWithLoading(400);
+      });
+    });
+
     // "New Chat" here is the same action as the sidebar's — reuses its
     // click handlers wholesale (reset to empty state, nav active state,
     // etc.) instead of re-implementing any of it.
@@ -5534,6 +7086,7 @@
 
   const projectsView = document.getElementById('projectsView');
   const chatsView = document.getElementById('chatsView');
+  const appsView = document.getElementById('appsView');
 
   window.onNavSectionChange = function (section) {
     if (section === 'new-chat') return; // handled by its own click handler below, not a section view.
@@ -5546,6 +7099,7 @@
       setPanelExpanded(false);
       if (sectionEmptyEl) sectionEmptyEl.hidden = true;
       chatsView.hidden = true;
+      appsView.hidden = true;
       projectsView.hidden = false;
       loadProjectsView();
       return;
@@ -5558,9 +7112,23 @@
       setPanelExpanded(false);
       if (sectionEmptyEl) sectionEmptyEl.hidden = true;
       projectsView.hidden = true;
+      appsView.hidden = true;
       chatsView.hidden = false;
       setChatsSelectMode(false); // fresh state every time the section is (re)entered
       loadChatsView();
+      return;
+    }
+    if (section === 'apps') {
+      chatThread.hidden = true;
+      chatEmpty.hidden = true;
+      chatPanelToggle.hidden = true;
+      chatPanelExpandToggle.hidden = true;
+      setPanelExpanded(false);
+      if (sectionEmptyEl) sectionEmptyEl.hidden = true;
+      projectsView.hidden = true;
+      chatsView.hidden = true;
+      appsView.hidden = false;
+      loadAppsView();
       return;
     }
     const copy = sectionCopy[section];
@@ -5572,6 +7140,7 @@
     setPanelExpanded(false);
     projectsView.hidden = true;
     chatsView.hidden = true;
+    appsView.hidden = true;
     let empty = sectionEmptyEl;
     if (!empty) {
       empty = document.createElement('div');
@@ -5593,6 +7162,7 @@
     if (empty) empty.hidden = true;
     projectsView.hidden = true;
     chatsView.hidden = true;
+    appsView.hidden = true;
     chatEmpty.hidden = false;
   });
 
@@ -5616,10 +7186,15 @@
       { name: 'Q2 Journal Entry Audit' },
       { name: 'Q3 Treasury Forecast' },
     ],
+    // Decoupled from APPS_DATA by convention (same criterion already
+    // applied to SEARCH_DATA.projects vs. PROJECTS_DATA, see docs/home.md)
+    // — kept in sync by hand, not read live. Names updated 2026-08-14 from
+    // the old integrations mock (Slack/Snowflake/Google Drive) to match the
+    // 3 real seeded apps once docs/apps.md redefined what an App is.
     apps: [
-      { name: 'Slack' },
-      { name: 'Snowflake' },
-      { name: 'Google Drive' },
+      { name: 'Bank Reconciliation Summary' },
+      { name: 'Quarterly Anomaly Digest' },
+      { name: 'Board Update Draft' },
     ],
     agents: [
       { name: 'Reconciliation Agent' },
@@ -5722,6 +7297,27 @@
   document.addEventListener('keydown', (e) => {
     const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
     if (isCmdK) { e.preventDefault(); openSearchModal(); return; }
+    // Cmd/Ctrl+J → New Chat, global (works from anywhere, same as Cmd+K).
+    // History of what didn't work, in order, each reported from the user's
+    // own browser (not reproducible in this environment, no browser access
+    // here): plain Cmd/Ctrl+N — reserved for "open new window", the keydown
+    // never reaches the page at all. Cmd+Shift+N — reserved for incognito
+    // window. Alt/Option+Cmd/Ctrl+N — reported to conflict with a Chrome
+    // window-splitting shortcut. Shift+Option+Cmd/Ctrl+N — worked in no
+    // browser the user tried; explicit request afterward to go back to a
+    // *simple* plain Cmd+letter instead of stacking more modifiers.
+    // Landed on plain Cmd/Ctrl+J: Chrome's own J-related shortcuts are
+    // Shift+Cmd+J (Downloads) and Option+Cmd+J (JS Console) — both need an
+    // extra modifier beyond plain Cmd, so plain Cmd+J itself isn't bound to
+    // a menu item (same reasoning that already made plain Cmd+B — not
+    // Chrome's own Shift+Cmd+B bookmarks-bar toggle — safe to use for the
+    // sidebar toggle below). Best-effort pick, not verified live — flag it
+    // if this one doesn't fire either.
+    // Reuses the real button's click handlers wholesale (reset to empty
+    // state, nav active state, etc.) instead of re-implementing any of it —
+    // same pattern already used by "New Chat" inside the Chats view.
+    const isNewChatShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j';
+    if (isNewChatShortcut) { e.preventDefault(); document.getElementById('newChatBtn').click(); return; }
     if (searchModalBackdrop.hidden) return;
     if (e.key === 'Escape') { closeSearchModal(); return; }
     const items = searchModalResults.querySelectorAll('.search-result-item');

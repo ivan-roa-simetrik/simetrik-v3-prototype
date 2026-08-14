@@ -50,6 +50,12 @@
     5.4% { color: var(--color-ink); }
   }
 
+  /* Rotating word ("build" → "audit" → "operate"): only this span's own
+     letters get swapped every few seconds, with a quick fade — the
+     surrounding sentence's shine keeps running uninterrupted. */
+  .greeting-swap-word { display: inline-block; transition: opacity 260ms ease-in-out; }
+  .greeting-swap-word.is-fading { opacity: 0; }
+
   /* Agent icon above the greeting */
   .chat-agent-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
   .chat-agent-icon { width: 48px; height: 48px; object-fit: contain; }
@@ -102,7 +108,7 @@
      already does on selection. */
   .project-select-trigger-content {
     display: flex; align-items: center; gap: 7px; min-width: 0;
-    transition: opacity 200ms var(--ease-out);
+    transition: opacity 320ms ease-in-out;
   }
   .project-select-trigger-content.is-fading { opacity: 0; }
   .project-select-trigger-content span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -124,7 +130,7 @@
      and the composer sits alone, same as before this feature existed. */
   .project-select-wrap--docked .project-select-dropdown { display: none; }
 
-  .composer-menu.project-select-menu { width: 300px; padding: 0; }
+  .composer-menu.project-select-menu { width: 300px; max-height: 300px; padding: 0; }
   .project-select-search {
     display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-border);
   }
@@ -142,18 +148,40 @@
     padding: 8px 10px; border-bottom: 1px solid var(--color-border);
   }
   /* Reuses .panel-open-results/.panel-open-item (same picker component the
-     side panel uses) — just resized to fit this narrower 260px popover. */
-  .project-select-menu .panel-open-results { height: 220px; padding: 6px; }
+     side panel uses), resized so the whole popover (search + tabs +
+     results) lands at ~300px total instead of the picker's own 280px/220px
+     defaults, which ran taller here. */
+  .project-select-menu .panel-open-results { height: 210px; padding: 6px; }
   .project-select-menu .panel-open-item { padding: 6px 8px; }
+
+  /* @-mention: typing "@" in the textarea opens this, matching the full
+     width of .chat-input-shell (not a narrow popover like the ones above).
+     Opens upward (bottom, not top) — the docked composer sits close to the
+     viewport's bottom edge, and a downward panel would get clipped by
+     .chat-pane/.chat-thread-main's overflow:hidden there. */
+  .mention-panel {
+    position: absolute; bottom: calc(100% + 8px); left: 0; width: 100%; z-index: 60;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+  }
+  .mention-panel-tabs {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    padding: 8px 10px; border-bottom: 1px solid var(--color-border);
+  }
+  .mention-panel .panel-open-results { height: 200px; padding: 6px; }
 
   /* Composer toolbar: Add context · Mode | Model · Voice · Send */
   .composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; gap: 8px; }
   .composer-toolbar-left, .composer-toolbar-right { display: flex; align-items: center; gap: 2px; }
   .composer-icon-btn {
+    position: relative;
     width: 28px; height: 28px; border-radius: var(--radius-sm); flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     color: var(--color-ink-faint); background: transparent; border: none; cursor: pointer;
     transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .composer-icon-btn:hover .tooltip-bubble, .composer-icon-btn:focus-visible .tooltip-bubble {
+    opacity: 1; transform: translateX(-50%) translateY(0);
   }
   .composer-icon-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
   .composer-icon-btn svg, .composer-icon-btn i { width: 16px; height: 16px; }
@@ -186,6 +214,7 @@
   /* Dismiss a tooltip immediately on click, instead of waiting for mouseleave —
      used when a click opens a popover right where the tooltip was showing. */
   [data-tooltip].tooltip-suppressed::after { display: none; }
+  .tooltip-suppressed .tooltip-bubble { display: none; }
   .composer-menu-section {
     display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px;
     font-size: 11px; font-weight: 500; color: var(--color-ink-faint);
@@ -209,6 +238,14 @@
   .composer-menu-option .opt-sub { display: block; font-size: 12px; color: var(--color-ink-faint); margin-top: 1px; }
   .composer-menu-option .opt-check { width: 16px; height: 16px; color: var(--color-primary); display: none; flex-shrink: 0; margin-top: 2px; }
   .composer-menu-option.is-selected .opt-check { display: flex; }
+  /* Destructive row modifier (2026-08-14) — first use: "Delete project" in
+     an archived card's ellipsis. Icon + label read in --color-danger at
+     rest (not just on hover) since this is the one row in these popovers
+     that isn't reversible, and the hover tint switches from the default
+     neutral gray to the danger tint so it doesn't read as just another
+     option in the list. */
+  .composer-menu-option--danger .opt-icon, .composer-menu-option--danger .opt-title { color: var(--color-danger); }
+  .composer-menu-option--danger:hover { background: var(--color-danger-tint); }
 
   /* Model options: single-line, centered, plain (non-brand) check — matches build-model-option */
   .composer-menu-option--model { align-items: center; gap: 10px; padding: 4px 2px; justify-content: space-between; }
@@ -324,7 +361,10 @@
      moves. */
   .panel-open-results { width: 100%; height: 280px; overflow-y: auto; display: flex; flex-direction: column; }
   .panel-open-results-group + .panel-open-results-group { margin-top: 8px; }
-  .panel-open-group-title { font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-ink-faint); padding: 6px 8px; }
+  /* text-align explicit, not left to inherit — the empty-state composer's
+     popover sits inside .chat-empty (text-align: center), which otherwise
+     cascades all the way down to this label since text-align inherits. */
+  .panel-open-group-title { font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-ink-faint); padding: 6px 8px; text-align: left; }
   .panel-open-empty { padding: 20px 8px; text-align: center; font-size: 12.5px; color: var(--color-ink-faint); }
   /* Wider row than the old fixed-220px list — icon + name + generous
      padding, matching the Cmd+K search modal's own result rows. */
@@ -664,6 +704,7 @@
      skeleton→content swap never visibly shrinks or grows the grid. If this
      value changes, .project-skeleton-card must change with it. */
   .project-card {
+    display: flex; flex-direction: column;
     min-height: 124px;
     border: 1px solid var(--color-border); border-radius: var(--radius-md);
     padding: 16px 16px 4px; background: var(--color-surface);
@@ -677,7 +718,20 @@
   .project-card-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .project-card-name i, .project-card-name svg { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
   .project-card-name span { font-size: 14px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .project-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  /* Bug fix (2026-08-14): a project with no tags (every project created
+     via "Create project" starts with `tags: []`) rendered an empty,
+     zero-height .project-card-tags — since .project-card wasn't a flex
+     container, the slack between that shorter content and the card's own
+     min-height:124px landed entirely BELOW .project-card-footer (a plain
+     block element just extends its parent's box downward when min-height
+     forces extra space), reading as a random bigger bottom padding only on
+     new cards. Fix: .project-card is now `display:flex; flex-direction:
+     column`, and this row gets `flex: 1` — it absorbs the min-height slack
+     itself (below whatever tags exist, kept top-aligned via
+     align-content: flex-start), so the footer always sits the same fixed
+     distance from the card's bottom edge regardless of how many tags
+     there are, tags-less included. */
+  .project-card-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; margin-top: 10px; flex: 1; }
   .project-tag-pill { font-size: 10.5px; font-weight: 600; color: var(--color-ink-faint); background: var(--color-surface-sunken); border-radius: 999px; padding: 2px 8px; }
   /* Footer separated from the tags above by a horizontal rule, not just
      spacing — reads as a distinct "meta" row (status + owner) rather than
@@ -701,9 +755,20 @@
     content: ''; position: absolute; top: 0; left: -16px; right: -16px;
     border-top: 1px solid var(--color-border);
   }
-  /* Square, not circular — matches the sidebar footer avatar's own square
-     treatment (see sidebar.md), not the generic rounded-avatar default. */
-  .project-avatar { width: 24px; height: 24px; border-radius: var(--radius-sm); object-fit: cover; flex-shrink: 0; }
+  /* Replaces the old person-photo avatar (2026-08-14, explicit request):
+     "how many people have access" reads better as a count than a single
+     face, especially once a project can have more than one member.
+     Square corners (--radius-sm, not a pill) — same "square, not circular"
+     convention the old avatar already followed (see sidebar.md), kept
+     here for the same reason: consistent with the rest of this
+     footer's shapes (the status badge next to it is --radius-sm too,
+     via .badge--square). */
+  .project-members-badge {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    padding: 2px 8px; border-radius: var(--radius-sm); background: var(--color-surface-sunken);
+    color: var(--color-ink-soft); font-size: 12px; font-weight: 600;
+  }
+  .project-members-badge i, .project-members-badge svg { width: 13px; height: 13px; color: var(--color-ink-faint); flex-shrink: 0; }
 
   .projects-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
   /* No background tint on hover here either — same rule as the grid card.
@@ -783,6 +848,267 @@
   .project-invite-view .btn-primary { width: 100%; height: 32px; padding: 0 10px; font-size: 12.5px; }
   .project-invite-view .btn-primary[disabled] { opacity: .5; cursor: not-allowed; }
 
+  /* ---------- Edit project detail modal ----------
+     Opened from the ellipsis's "Edit detail" action. Same centered
+     backdrop + scale-in treatment as the Search modal
+     (.search-modal-backdrop), but its own class family since this one will
+     carry a real form later — for this pass it only needs to exist and be
+     openable, the body is a placeholder (see docs/home.md). */
+  .project-edit-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .project-edit-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .project-edit-modal {
+    width: 100%; max-width: 480px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .project-edit-modal-backdrop.is-open .project-edit-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .project-edit-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  /* Standardized modal title size (2026-08-14): Edit detail's title had
+     been left at 15px after Create project's got bumped to 20px on a
+     previous, deliberately scoped request — explicit follow-up now to
+     make every modal title match, so the two don't keep drifting.
+     Grouped with .create-project-modal-title below so both read the
+     shared value from one rule instead of two copies of "20px" that could
+     go out of sync again later. */
+  .project-edit-modal-title, .create-project-modal-title { font-size: 20px; font-weight: 600; color: var(--color-ink); }
+  .project-edit-modal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-edit-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .project-edit-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .project-edit-modal-close svg, .project-edit-modal-close i { width: 15px; height: 15px; }
+  /* Real form now (2026-08-14) — was a centered placeholder string before
+     any fields existed. Reuses .create-project-field/-label as-is (the
+     name suggests it's scoped to the create modal, but the rule itself is
+     a generic labeled-field primitive with nothing create-specific in it)
+     instead of duplicating the same input/textarea styling a second time
+     for what's editing the exact same two fields. */
+  .project-edit-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .project-edit-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+
+  /* ---------- Create project modal ----------
+     Same backdrop + scale-in shell as .project-edit-modal-backdrop, reused
+     class-for-class in structure (header/body/close) but its own family —
+     this one carries a real form + footer actions. Two entry points open
+     it (see openCreateProjectModal): the Projects view's "New project"
+     button and the sidebar's "+" on the Projects nav item. (A third entry
+     point — "New project" inside the chat's context selector popover —
+     was tried and then removed; the popover went back to a plain
+     All/Projects/Apps/Agents picker with no create action.) */
+  .create-project-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .create-project-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .create-project-modal {
+    width: 100%; max-width: 480px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .create-project-modal-backdrop.is-open .create-project-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .create-project-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  .create-project-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .create-project-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .create-project-modal-close svg, .create-project-modal-close i { width: 15px; height: 15px; }
+  .create-project-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  /* Field labels are phrased as friendly guiding questions ("What are you
+     working on?" / "What's the goal of this project?"), not neutral nouns
+     ("Name" / "Description") — explicit request, so the form itself nudges
+     the user toward the right kind of answer instead of just labeling the
+     field it wants filled. */
+  .create-project-field { display: flex; flex-direction: column; gap: 6px; }
+  .create-project-field-label { font-size: 13px; font-weight: 600; color: var(--color-ink); }
+  .create-project-field input, .create-project-field textarea {
+    width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 9px 11px; font-size: 13.5px; color: var(--color-ink); font-family: inherit; outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .create-project-field textarea { resize: none; line-height: 1.5; }
+  .create-project-field input:focus, .create-project-field textarea:focus { border-color: var(--color-primary); }
+  .create-project-field input::placeholder, .create-project-field textarea::placeholder { color: var(--color-ink-faint); }
+  .create-project-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+
+  /* Name field's leading icon button, embedded inside the input itself
+     (not beside it) — matches the reference (Notion's project icon
+     picker), so the icon reads as part of what's being named, not a
+     separate control next to it. */
+  .create-project-name-row { position: relative; display: flex; }
+  .create-project-icon-trigger {
+    position: absolute; top: 50%; left: 5px; transform: translateY(-50%); z-index: 1;
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .create-project-icon-trigger:hover, .create-project-icon-trigger.is-open { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .create-project-icon-trigger svg, .create-project-icon-trigger i { width: 16px; height: 16px; }
+  .create-project-name-row input#createProjectNameInput { padding-left: 36px; }
+
+  /* Icon picker popover: a portal (see the HTML comment above its markup
+     for why), position:fixed computed at open time from the trigger's
+     getBoundingClientRect() — same technique already used for the
+     sidebar's per-project actions popover. Search + grid + Done, no color
+     row — icon-only by explicit request. */
+  .create-project-icon-popover {
+    position: fixed; z-index: 260; width: 280px;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); display: none; flex-direction: column; overflow: hidden;
+  }
+  .create-project-icon-popover.is-open { display: flex; }
+  .create-project-icon-search {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+  }
+  .create-project-icon-search i, .create-project-icon-search svg { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .create-project-icon-search input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 13px; color: var(--color-ink); font-family: inherit;
+  }
+  .create-project-icon-search input::placeholder { color: var(--color-ink-faint); }
+  .create-project-icon-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px;
+    padding: 8px; height: 220px; overflow-y: auto; align-content: flex-start;
+  }
+  .create-project-icon-option {
+    width: 100%; aspect-ratio: 1; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .create-project-icon-option:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .create-project-icon-option.is-selected { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .create-project-icon-option svg, .create-project-icon-option i { width: 18px; height: 18px; }
+  .create-project-icon-empty { grid-column: 1 / -1; padding: 20px 8px; text-align: center; font-size: 12px; color: var(--color-ink-faint); }
+  /* Progressive-load placeholders (see loadMoreCreateProjectIcons) — reuses
+     the exact shimmer gradient + @keyframes skeletonShimmer already
+     defined above for the Projects view's own loading skeleton, instead of
+     inventing a second shimmer treatment for this one grid. */
+  .create-project-icon-skeleton {
+    width: 100%; aspect-ratio: 1; border-radius: var(--radius-sm);
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .create-project-icon-done {
+    width: 100%; height: 36px; border: none; background: var(--color-surface-sunken);
+    border-top: 1px solid var(--color-border); font-size: 13px; font-weight: 600; color: var(--color-ink);
+    cursor: pointer; flex-shrink: 0; transition: background var(--dur-fast) var(--ease-out);
+  }
+  .create-project-icon-done:hover { background: var(--color-border); }
+
+  /* ---------- Delete project confirmation modal ---------- */
+  .delete-project-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 210;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .delete-project-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .delete-project-modal {
+    width: 100%; max-width: 400px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .delete-project-modal-backdrop.is-open .delete-project-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .delete-project-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  .delete-project-modal-title { font-size: 20px; font-weight: 600; color: var(--color-ink); }
+  .delete-project-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .delete-project-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .delete-project-modal-close svg, .delete-project-modal-close i { width: 15px; height: 15px; }
+  .delete-project-modal-body { padding: 20px; font-size: 13.5px; color: var(--color-ink-soft); line-height: 1.5; }
+  .delete-project-modal-body strong { color: var(--color-ink); }
+  .delete-project-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+
+  /* ---------- Rename chat modal ----------
+     Opened from "Rename chat" in a chat's ellipsis — both the Chats and
+     Tasks view's own rows and the sidebar's Pinned ellipsis for a pinned
+     chat (see renameChat() in the page script) share this one instance,
+     same reasoning as the project edit modal above. Same backdrop +
+     scale-in shell as the other modals, own class family (a single-field
+     form, not a placeholder or a destructive confirm). */
+  .rename-chat-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(23, 23, 31, .4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 210;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .rename-chat-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .rename-chat-modal {
+    width: 100%; max-width: 400px; margin: 0 20px;
+    background: var(--color-surface); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    transform: translateY(-8px) scale(.98); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .rename-chat-modal-backdrop.is-open .rename-chat-modal { transform: translateY(0) scale(1); opacity: 1; }
+  .rename-chat-modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+  }
+  .rename-chat-modal-title { font-size: 20px; font-weight: 600; color: var(--color-ink); }
+  .rename-chat-modal-close {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer; flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .rename-chat-modal-close:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .rename-chat-modal-close svg, .rename-chat-modal-close i { width: 15px; height: 15px; }
+  /* Reuses .create-project-field/-label as-is, same generic labeled-field
+     primitive the edit-project modal already reuses — nothing about it is
+     actually create-project-specific. */
+  .rename-chat-modal-body { padding: 20px; }
+  .rename-chat-modal-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--color-border);
+  }
+
   .projects-empty {
     border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 32px;
     text-align: center; color: var(--color-ink-faint); font-size: 13.5px;
@@ -811,7 +1137,7 @@
   .project-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface); }
   .project-skeleton-row + .project-skeleton-row { border-top: 1px solid var(--color-border); }
 
-  .project-skeleton-icon, .project-skeleton-line, .project-skeleton-pill, .project-skeleton-badge, .project-skeleton-avatar {
+  .project-skeleton-icon, .project-skeleton-line, .project-skeleton-pill, .project-skeleton-badge, .project-skeleton-members {
     display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
     background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
     background-size: 400% 100%;
@@ -824,7 +1150,161 @@
   .project-skeleton-line--row { flex: 1; max-width: 220px; height: 12px; }
   .project-skeleton-pill { width: 64px; height: 16px; border-radius: 999px; }
   .project-skeleton-badge { width: 56px; height: 18px; }
-  .project-skeleton-avatar { width: 24px; height: 24px; }
+  /* Widened from the old avatar's 24px square (2026-08-14) — the real
+     footer element is now a wider "N members" badge, not a small square
+     photo; keeping the skeleton at 24px would make the real content jump
+     wider the instant it swaps in. */
+  .project-skeleton-members { width: 64px; height: 20px; border-radius: var(--radius-sm); }
+
+  /* ---------- Chats and Tasks view (sidebar nav "Chats and Tasks") ----------
+     System-wide list of every chat, whatever it's attached to (a Project,
+     an App, an Agent, or nothing at all) — see docs/chats-and-tasks.md.
+     Visual pattern deliberately mirrors .projects-view (title + search
+     only, no Filter, no grid — list rows only, per explicit instruction),
+     but as fully independent classes (.chats-* and .chat-list-row*), never
+     sharing a name with .projects-* and .project-list-row — same lesson
+     this file already learned twice (.project-row, .search-tab collisions,
+     see docs/home.md). */
+  .chats-view { flex: 1; overflow-y: auto; padding: 32px 40px; }
+  .chats-view-inner { width: 100%; max-width: 900px; margin: 0 auto; }
+
+  .chats-view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  .chats-header-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .chats-view-header h1 { font-size: 20px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; flex-shrink: 0; }
+  .chats-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .chats-view-header .btn-primary, .chats-view-header .btn-secondary { height: 32px; padding: 0 14px; }
+  .chats-view-header .btn-primary svg, .chats-view-header .btn-primary i,
+  .chats-view-header .btn-secondary svg, .chats-view-header .btn-secondary i { width: 14px; height: 14px; }
+
+  /* Search: same morph-between-icon-and-input trick as Projects (see
+     comment above .projects-search-btn) — own classes, copied 1:1, so the
+     two views' search controls never share behavior/state by accident. */
+  .chats-search-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface);
+    color: var(--color-ink-soft); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .chats-search-btn:hover { background: var(--color-surface-sunken); }
+  .chats-search-btn svg, .chats-search-btn i { width: 14px; height: 14px; }
+  .chats-search-inline {
+    display: flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box;
+    max-width: 0; padding: 0; opacity: 0; overflow: hidden;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    transition: max-width var(--dur-base) var(--ease-out), padding var(--dur-base) var(--ease-out),
+      opacity var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  }
+  .chats-search-inline.is-open { max-width: 220px; padding: 0 8px; opacity: 1; border-color: var(--color-border-strong); }
+  .chats-search-inline svg, .chats-search-inline i { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chats-search-inline input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13.5px; color: var(--color-ink); font-family: inherit; }
+  .chats-search-inline input::placeholder { color: var(--color-ink-faint); }
+  .chats-search-clear {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 16px; height: 16px; border-radius: 50%; border: none; background: transparent;
+    color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .chats-search-clear:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .chats-search-clear svg, .chats-search-clear i { width: 11px; height: 11px; }
+
+  /* Select mode: swaps the header's right-side controls entirely
+     (search/Select/New Chat) for a bulk-action bar (count + Cancel +
+     Archive) — [hidden] on both groups makes them mutually exclusive, no
+     partial overlap to keep in sync by hand. */
+  .chats-select-count { font-size: 13px; font-weight: 600; color: var(--color-ink-soft); margin-right: 4px; }
+  .chats-archive-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+  .chats-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .chat-list-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface);
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .chat-list-row + .chat-list-row { border-top: 1px solid var(--color-border); }
+  /* Click-to-toggle only makes sense in select mode — outside of it, a chat
+     row is a deliberate no-op, same criterion as Projects cards, Pinned/
+     Recent rows and Search results: no destination to click into yet. */
+  .chats-list.is-select-mode .chat-list-row { cursor: pointer; }
+  .chats-list.is-select-mode .chat-list-row:hover { background: var(--color-surface-sunken); }
+  .chat-list-row.is-selected { background: var(--color-primary-tint); }
+
+  .chat-list-row-check {
+    display: none; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 18px; height: 18px; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong);
+    background: var(--color-surface); color: transparent;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .chats-list.is-select-mode .chat-list-row-check { display: flex; }
+  .chat-list-row-check svg, .chat-list-row-check i { width: 12px; height: 12px; }
+  .chat-list-row.is-selected .chat-list-row-check { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+  .chat-list-row-icon { width: 16px; height: 16px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chat-list-row-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Context (Project/App/Agent, if any) — same icon+label pairing already
+     used for the chat thread header's breadcrumb crumb
+     (#chatThreadProjectItem), just inline in the row instead of a header
+     crumb. No context renders nothing, not a placeholder dash — a
+     standalone chat isn't a broken state. */
+  .chat-list-row-context { display: none; align-items: center; gap: 6px; flex-shrink: 0; color: var(--color-ink-faint); font-size: 12.5px; }
+  .chat-list-row-context.has-context { display: flex; }
+  .chat-list-row-context svg, .chat-list-row-context i { width: 14px; height: 14px; flex-shrink: 0; }
+  .chat-list-row-context span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-list-row-date { flex-shrink: 0; font-size: 12.5px; color: var(--color-ink-faint); width: 88px; text-align: right; }
+
+  .chat-list-row-actions-wrap { position: relative; flex-shrink: 0; }
+  .chats-list.is-select-mode .chat-list-row-actions-wrap { display: none; }
+  .chat-list-row-actions-btn {
+    width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+    opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .chat-list-row:hover .chat-list-row-actions-btn, .chat-list-row-actions-btn.is-open { opacity: 1; }
+  .chat-list-row-actions-btn:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .chat-list-row-actions-btn svg, .chat-list-row-actions-btn i { width: 15px; height: 15px; }
+
+  /* Ellipsis popover: a single action for now ("Rename chat") — visible
+     and openable, but deliberately a no-op on click (no modal, no inline
+     field) per explicit instruction; it only closes the popover, same
+     placeholder criterion already used elsewhere in this prototype (e.g.
+     Edit detail before its modal existed). */
+  .chat-actions-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    width: 170px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden; padding: 6px;
+  }
+  .chat-actions-menu.is-open { display: block; }
+  .chat-actions-menu .composer-menu-option { align-items: center; min-height: 32px; padding: 0 8px; }
+  .chat-actions-menu .opt-icon { margin-top: 0; }
+
+  .chats-empty {
+    border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 32px;
+    text-align: center; color: var(--color-ink-faint); font-size: 13.5px;
+  }
+
+  /* ---------- Chats and Tasks loading skeleton ----------
+     Same simulated-fetch treatment as Projects (queryChatsWithLoading/
+     loadChatsView in the page script): shown briefly on section entry and
+     on every search re-query, never on Select/Archive — same criterion
+     Projects already established (see .projects-skeleton-* above), those
+     aren't "search/filter", they don't refetch anything. Reuses the exact
+     shimmer gradient/@keyframes already defined for the Projects skeleton
+     (skeletonShimmer) instead of inventing a second shimmer treatment, but
+     with its own element classes — never depends on .project-skeleton-*
+     naming, same rule as everywhere else in this file. */
+  .chats-skeleton-list { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .chat-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface); }
+  .chat-skeleton-row + .chat-skeleton-row { border-top: 1px solid var(--color-border); }
+  .chat-skeleton-icon, .chat-skeleton-line, .chat-skeleton-pill {
+    display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .chat-skeleton-icon { width: 16px; height: 16px; }
+  .chat-skeleton-line { height: 12px; border-radius: 4px; }
+  .chat-skeleton-line--name { flex: 1; max-width: 260px; }
+  .chat-skeleton-line--context { width: 130px; }
+  .chat-skeleton-pill { width: 64px; height: 16px; border-radius: 999px; }
 
   /* ---------- Search modal (Cmd+K / click the lupa) ---------- */
   .search-modal-backdrop {
@@ -933,6 +1413,17 @@
         <span class="nav-label">New Chat</span>
       </button>
 
+      <!-- System-wide view of every chat/task across the account, not scoped
+           to one project — distinct from Pinned/Recent below (those are
+           curated subsets) and from Projects (which lists Projects, not
+           chats). Nav item only for now, no real listing behind it yet —
+           uses the same generic empty-state pattern as Apps/Agents (see
+           sectionCopy) until that view gets built. -->
+      <button class="nav-item" data-nav="chats-tasks" data-tooltip="Chats and Tasks">
+        <span class="nav-icon"><i data-lucide="message-circle-more"></i></span>
+        <span class="nav-label">Chats and Tasks</span>
+      </button>
+
       <button class="nav-item" data-nav="projects" data-tooltip="Projects">
         <span class="nav-icon"><i data-lucide="folder"></i></span>
         <span class="nav-label">Projects</span>
@@ -971,27 +1462,9 @@
               <span class="project-name">LATAM Bank Reconciliation</span>
             </button>
             <div class="sidebar-project-actions-wrap">
-              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger="latam-bank-reconciliation" aria-label="Project actions">
                 <i data-lucide="more-vertical"></i>
               </button>
-              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
-                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
-                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
-                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
-                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
-                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
-                  <span class="opt-icon"><i data-lucide="archive"></i></span>
-                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
-                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
-                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
-                </button>
-              </div>
             </div>
           </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
@@ -1009,27 +1482,9 @@
               <span class="project-name">Q2 Journal Entry Audit</span>
             </button>
             <div class="sidebar-project-actions-wrap">
-              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger="q2-journal-entry-audit" aria-label="Project actions">
                 <i data-lucide="more-vertical"></i>
               </button>
-              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
-                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
-                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
-                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
-                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
-                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
-                  <span class="opt-icon"><i data-lucide="archive"></i></span>
-                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
-                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
-                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
-                </button>
-              </div>
             </div>
           </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
@@ -1046,27 +1501,9 @@
               <span class="project-name">Q3 Treasury Forecast</span>
             </button>
             <div class="sidebar-project-actions-wrap">
-              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger aria-label="Project actions">
+              <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger="q3-treasury-forecast" aria-label="Project actions">
                 <i data-lucide="more-vertical"></i>
               </button>
-              <div class="sidebar-project-actions-menu" data-sidebar-actions-menu>
-                <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
-                  <span class="opt-icon"><i data-lucide="pin-off"></i></span>
-                  <span class="opt-body"><span class="opt-title">Unpin project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="invite">
-                  <span class="opt-icon"><i data-lucide="user-plus"></i></span>
-                  <span class="opt-body"><span class="opt-title">Invite members</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="archive">
-                  <span class="opt-icon"><i data-lucide="archive"></i></span>
-                  <span class="opt-body"><span class="opt-title">Archive project</span></span>
-                </button>
-                <button type="button" class="composer-menu-option" data-sidebar-action="edit">
-                  <span class="opt-icon"><i data-lucide="pencil"></i></span>
-                  <span class="opt-body"><span class="opt-title">Edit info</span></span>
-                </button>
-              </div>
             </div>
           </div>
           <div class="chat-sublist"><div class="chat-sublist-inner">
@@ -1085,7 +1522,7 @@
         <span class="sidebar-section-chevron"><i data-lucide="chevron-right"></i></span>
       </button>
       <div class="sidebar-section-body"><div class="sidebar-section-body-inner">
-      <ul>
+      <ul id="sidebarRecentList">
         <li><a class="chat-row" href="#">How do I build a reconciliation rule?</a></li>
         <li><a class="chat-row" href="#">This week's anomaly summary</a></li>
       </ul>
@@ -1160,12 +1597,24 @@
           </div>
 
         <div class="chat-input-shell">
+          <div class="mention-panel" data-mention-panel="empty" hidden>
+            <div class="mention-panel-tabs" data-mention-tabs="empty">
+              <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+              <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+              <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+              <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
+            </div>
+            <div class="panel-open-results" data-mention-results="empty"></div>
+          </div>
           <textarea id="emptyInput" rows="1" placeholder="e.g. Build a July bank reconciliation summary for LATAM"></textarea>
 
           <div class="composer-toolbar">
             <div class="composer-toolbar-left">
               <div class="composer-dropdown">
-                <button class="composer-icon-btn tooltip-bottom" data-menu-trigger="attach-empty" data-attach-trigger="empty" aria-label="Add context" data-tooltip="Add context"><i data-lucide="plus"></i></button>
+                <button class="composer-icon-btn" data-menu-trigger="attach-empty" data-attach-trigger="empty" aria-label="Add context">
+                  <i data-lucide="plus"></i>
+                  <span class="tooltip-bubble">Add context <kbd>@</kbd></span>
+                </button>
                 <div class="composer-menu composer-menu--attach" id="attachMenu-empty" data-menu="attach-empty">
                   <div class="composer-menu-list">
                     <button type="button" class="composer-menu-option composer-menu-option--model" data-attach-option="empty">
@@ -1273,12 +1722,24 @@
           </div>
 
         <div class="chat-input-shell chat-input-shell--docked">
+          <div class="mention-panel" data-mention-panel="docked" hidden>
+            <div class="mention-panel-tabs" data-mention-tabs="docked">
+              <button type="button" class="panel-filter-tab is-active" data-filter="all">All</button>
+              <button type="button" class="panel-filter-tab" data-filter="project">Projects</button>
+              <button type="button" class="panel-filter-tab" data-filter="app">Apps</button>
+              <button type="button" class="panel-filter-tab" data-filter="agent">Agents</button>
+            </div>
+            <div class="panel-open-results" data-mention-results="docked"></div>
+          </div>
           <textarea id="dockedInput" rows="1" placeholder="Type to keep building…"></textarea>
 
           <div class="composer-toolbar">
             <div class="composer-toolbar-left">
               <div class="composer-dropdown">
-                <button class="composer-icon-btn tooltip-bottom" data-menu-trigger="attach-docked" data-attach-trigger="docked" aria-label="Add context" data-tooltip="Add context"><i data-lucide="plus"></i></button>
+                <button class="composer-icon-btn" data-menu-trigger="attach-docked" data-attach-trigger="docked" aria-label="Add context">
+                  <i data-lucide="plus"></i>
+                  <span class="tooltip-bubble">Add context <kbd>@</kbd></span>
+                </button>
                 <div class="composer-menu composer-menu--attach" id="attachMenu-docked" data-menu="attach-docked">
                   <div class="composer-menu-list">
                     <button type="button" class="composer-menu-option composer-menu-option--model" data-attach-option="docked">
@@ -1466,6 +1927,7 @@
             <button type="button" class="projects-ownership-tab is-active" data-ownership="all">All</button>
             <button type="button" class="projects-ownership-tab" data-ownership="you">Created by you</button>
             <button type="button" class="projects-ownership-tab" data-ownership="shared">Shared projects</button>
+            <button type="button" class="projects-ownership-tab" data-ownership="archived">Archived</button>
           </div>
 
           <!-- Loading skeleton: shown briefly every time the Projects
@@ -1480,7 +1942,7 @@
                 <span class="project-skeleton-line project-skeleton-line--name"></span>
               </div>
               <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
-              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
             </div>
             <div class="project-skeleton-card">
               <div class="project-skeleton-top">
@@ -1488,7 +1950,7 @@
                 <span class="project-skeleton-line project-skeleton-line--name"></span>
               </div>
               <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
-              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
             </div>
             <div class="project-skeleton-card">
               <div class="project-skeleton-top">
@@ -1496,18 +1958,78 @@
                 <span class="project-skeleton-line project-skeleton-line--name"></span>
               </div>
               <div class="project-skeleton-tags"><span class="project-skeleton-pill"></span><span class="project-skeleton-pill"></span></div>
-              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+              <div class="project-skeleton-footer"><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
             </div>
           </div>
           <div class="projects-skeleton-list" id="projectsSkeletonList" hidden>
-            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
-            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
-            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-avatar"></span></div>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
+            <div class="project-skeleton-row"><span class="project-skeleton-icon"></span><span class="project-skeleton-line project-skeleton-line--row"></span><span class="project-skeleton-badge"></span><span class="project-skeleton-members"></span></div>
           </div>
 
           <div class="projects-grid" id="projectsGrid"></div>
           <div class="projects-list" id="projectsList" hidden></div>
           <div class="projects-empty" id="projectsEmpty" hidden>No projects match your search.</div>
+        </div>
+      </div>
+
+      <!-- Chats and Tasks view: sidebar nav "Chats and Tasks" opens this
+           instead of a section-empty placeholder — system-wide list of
+           every chat, regardless of what it's attached to (a Project, an
+           App, an Agent, or nothing at all). Same header pattern as
+           Projects (title + search, no Filter, no grid — list rows only,
+           per explicit instruction), plus "Select" for bulk archive and a
+           per-row ellipsis ("Rename chat", visible but not wired to a real
+           modal yet). See docs/chats-and-tasks.md. -->
+      <div class="chats-view" id="chatsView" hidden>
+        <div class="chats-view-inner">
+          <div class="chats-view-header">
+            <div class="chats-header-left">
+              <h1>Chats and Tasks</h1>
+            </div>
+            <!-- Default controls: search, Select (enters bulk mode), New Chat.
+                 Mutually exclusive with the select bar below via [hidden]. -->
+            <div class="chats-header-right" id="chatsHeaderDefault">
+              <div class="chats-search-inline" id="chatsSearchInline">
+                <i data-lucide="search"></i>
+                <input type="text" id="chatsSearchInput" placeholder="Search chats" autocomplete="off" />
+                <button type="button" class="chats-search-clear" id="chatsSearchClear" aria-label="Close search">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <button type="button" class="chats-search-btn tooltip-bottom" id="chatsSearchToggle" aria-label="Search chats" data-tooltip="Search">
+                <i data-lucide="search"></i>
+              </button>
+              <button type="button" class="btn-secondary" id="chatsSelectToggleBtn">Select</button>
+              <button type="button" class="btn-primary" id="chatsNewChatBtn">
+                <i data-lucide="plus"></i> New Chat
+              </button>
+            </div>
+            <!-- Select bar: replaces the controls above entirely while bulk
+                 mode is on. Archive is the only bulk action for now
+                 (explicit: no delete, no move to project). -->
+            <div class="chats-header-right" id="chatsHeaderSelect" hidden>
+              <span class="chats-select-count" id="chatsSelectCount">0 selected</span>
+              <button type="button" class="btn-secondary" id="chatsSelectCancelBtn">Cancel</button>
+              <button type="button" class="btn-primary chats-archive-btn" id="chatsArchiveBtn" disabled>
+                <i data-lucide="archive"></i> Archive
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading skeleton: shown briefly on section entry and on every
+               search re-query (see queryChatsWithLoading) — same simulated
+               "under request" delay as Projects, never on Select/Archive. -->
+          <div class="chats-skeleton-list" id="chatsSkeletonList" hidden>
+            <div class="chat-skeleton-row"><span class="chat-skeleton-icon"></span><span class="chat-skeleton-line chat-skeleton-line--name"></span><span class="chat-skeleton-line chat-skeleton-line--context"></span><span class="chat-skeleton-pill"></span></div>
+            <div class="chat-skeleton-row"><span class="chat-skeleton-icon"></span><span class="chat-skeleton-line chat-skeleton-line--name"></span><span class="chat-skeleton-line chat-skeleton-line--context"></span><span class="chat-skeleton-pill"></span></div>
+            <div class="chat-skeleton-row"><span class="chat-skeleton-icon"></span><span class="chat-skeleton-line chat-skeleton-line--name"></span><span class="chat-skeleton-line chat-skeleton-line--context"></span><span class="chat-skeleton-pill"></span></div>
+            <div class="chat-skeleton-row"><span class="chat-skeleton-icon"></span><span class="chat-skeleton-line chat-skeleton-line--name"></span><span class="chat-skeleton-line chat-skeleton-line--context"></span><span class="chat-skeleton-pill"></span></div>
+            <div class="chat-skeleton-row"><span class="chat-skeleton-icon"></span><span class="chat-skeleton-line chat-skeleton-line--name"></span><span class="chat-skeleton-line chat-skeleton-line--context"></span><span class="chat-skeleton-pill"></span></div>
+          </div>
+
+          <div class="chats-list" id="chatsList"></div>
+          <div class="chats-empty" id="chatsEmpty" hidden>No chats match your search.</div>
         </div>
       </div>
 
@@ -1535,6 +2057,193 @@
   </div>
 </div>
 
+<!-- Edit project detail modal: opened from a project's ellipsis ("Edit
+     detail" action, see projectActionsMenuMarkup) — same shared instance
+     from every entry point (Projects view cards/rows, sidebar Pinned,
+     static or dynamically created — see openProjectEditModal). Edits name
+     + description only, per explicit request; the icon isn't editable
+     here (that's the create modal's icon picker, not repeated here). -->
+<div class="project-edit-modal-backdrop" id="projectEditModalBackdrop" hidden>
+  <div class="project-edit-modal" role="dialog" aria-modal="true" aria-label="Edit project detail">
+    <div class="project-edit-modal-header">
+      <span class="project-edit-modal-title" id="projectEditModalTitle">Edit project</span>
+      <button type="button" class="project-edit-modal-close" id="projectEditModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="project-edit-modal-body">
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="projectEditNameInput">What are you working on?</label>
+        <input type="text" id="projectEditNameInput" autocomplete="off" />
+      </div>
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="projectEditDescInput">What's the goal of this project?</label>
+        <textarea id="projectEditDescInput" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="project-edit-modal-footer">
+      <button type="button" class="btn-secondary" id="projectEditCancelBtn">Cancel</button>
+      <button type="button" class="btn-primary" id="projectEditSaveBtn" disabled>Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create project modal: opened from 2 entry points (see
+     openCreateProjectModal) — the Projects view's "New project" button and
+     the sidebar's "+" on the Projects nav item. Field labels are phrased as
+     guiding questions on purpose (see docs/home.md → "Create project"). -->
+<div class="create-project-modal-backdrop" id="createProjectModalBackdrop" hidden>
+  <div class="create-project-modal" role="dialog" aria-modal="true" aria-label="Create project">
+    <div class="create-project-modal-header">
+      <span class="create-project-modal-title">Create project</span>
+      <button type="button" class="create-project-modal-close" id="createProjectModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="create-project-modal-body">
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="createProjectNameInput">What are you working on?</label>
+        <div class="create-project-name-row">
+          <button type="button" class="create-project-icon-trigger" id="createProjectIconTrigger" aria-label="Choose project icon">
+            <i data-lucide="folder"></i>
+          </button>
+          <input type="text" id="createProjectNameInput" placeholder="e.g. LATAM Bank Reconciliation" autocomplete="off" />
+        </div>
+      </div>
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="createProjectDescInput">What's the goal of this project?</label>
+        <textarea id="createProjectDescInput" rows="3" placeholder="e.g. Automate monthly bank reconciliation for LATAM entities"></textarea>
+      </div>
+    </div>
+    <div class="create-project-modal-footer">
+      <button type="button" class="btn-secondary" id="createProjectCancelBtn">Cancel</button>
+      <button type="button" class="btn-primary" id="createProjectSubmitBtn" disabled>Create project</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project icon picker: opened from the icon button inside "What are you
+     working on?" (see openCreateProjectIconPopover). Rendered as a sibling
+     of .app-shell, same portal reasoning as the sidebar's project-actions
+     popovers below — .create-project-modal has overflow:hidden, so a
+     popover nested inside it would get clipped rather than floating over
+     the modal's own edges the way the reference design needs. No color
+     picker here — icon-only, by explicit request. -->
+<div class="create-project-icon-popover" id="createProjectIconPopover" hidden>
+  <div class="create-project-icon-search">
+    <i data-lucide="search"></i>
+    <input type="text" id="createProjectIconSearchInput" placeholder="Search icons…" autocomplete="off" />
+  </div>
+  <div class="create-project-icon-grid" id="createProjectIconGrid"></div>
+  <button type="button" class="create-project-icon-done" id="createProjectIconDoneBtn">Done</button>
+</div>
+
+<!-- Delete project confirmation modal: opened from "Delete project" in an
+     archived card/row's ellipsis (see openDeleteProjectModal). Same
+     backdrop/scale-in shell as the other project modals, its own class
+     family since this one is a destructive confirm, not a form. -->
+<div class="delete-project-modal-backdrop" id="deleteProjectModalBackdrop" hidden>
+  <div class="delete-project-modal" role="alertdialog" aria-modal="true" aria-label="Delete project">
+    <div class="delete-project-modal-header">
+      <span class="delete-project-modal-title">Delete project</span>
+      <button type="button" class="delete-project-modal-close" id="deleteProjectModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="delete-project-modal-body">
+      <p id="deleteProjectModalMessage"></p>
+    </div>
+    <div class="delete-project-modal-footer">
+      <button type="button" class="btn-secondary" id="deleteProjectCancelBtn">Cancel</button>
+      <button type="button" class="btn-danger" id="deleteProjectConfirmBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename chat modal: opened from "Rename chat" in a chat's ellipsis,
+     from EVERY point that offers it — the Chats and Tasks view's own rows
+     and the sidebar's Pinned ellipsis for a pinned chat (see renameChat()
+     in the page script) — both already call the same function, so building
+     the real form here once is what makes renaming work from either place
+     at the same time, no per-entry-point wiring needed. -->
+<div class="rename-chat-modal-backdrop" id="renameChatModalBackdrop" hidden>
+  <div class="rename-chat-modal" role="dialog" aria-modal="true" aria-label="Rename chat">
+    <div class="rename-chat-modal-header">
+      <span class="rename-chat-modal-title">Rename chat</span>
+      <button type="button" class="rename-chat-modal-close" id="renameChatModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="rename-chat-modal-body">
+      <div class="create-project-field">
+        <label class="create-project-field-label" for="renameChatNameInput">Chat name</label>
+        <input type="text" id="renameChatNameInput" autocomplete="off" />
+      </div>
+    </div>
+    <div class="rename-chat-modal-footer">
+      <button type="button" class="btn-secondary" id="renameChatCancelBtn">Cancel</button>
+      <button type="button" class="btn-primary" id="renameChatSaveBtn" disabled>Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sidebar Pinned project actions: rendered as siblings of .app-shell (same
+     portal pattern as the search modal above), not nested inside the sidebar's
+     Pinned list. That list sits inside three nested overflow-clipping
+     ancestors (.sidebar-section, .sidebar-section-body, .sidebar-section-body-inner
+     — needed for its own scroll + the collapse animation), which would clip
+     the popover no matter what position value it used while nested there.
+     shell.js matches each menu to its trigger via data-sidebar-actions-menu /
+     data-sidebar-actions-trigger (same project id) and positions it with
+     inline `position:fixed` styles computed from the trigger's
+     getBoundingClientRect(). Actions are no-ops for now — see docs/sidebar.md. -->
+<div class="sidebar-project-actions-menu" data-sidebar-actions-menu="latam-bank-reconciliation">
+  <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+    <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+    <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+    <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+    <span class="opt-body"><span class="opt-title">Invite members</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+    <span class="opt-icon"><i data-lucide="archive"></i></span>
+    <span class="opt-body"><span class="opt-title">Archive project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+    <span class="opt-icon"><i data-lucide="pencil"></i></span>
+    <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+  </button>
+</div>
+<div class="sidebar-project-actions-menu" data-sidebar-actions-menu="q2-journal-entry-audit">
+  <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+    <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+    <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+    <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+    <span class="opt-body"><span class="opt-title">Invite members</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+    <span class="opt-icon"><i data-lucide="archive"></i></span>
+    <span class="opt-body"><span class="opt-title">Archive project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+    <span class="opt-icon"><i data-lucide="pencil"></i></span>
+    <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+  </button>
+</div>
+<div class="sidebar-project-actions-menu" data-sidebar-actions-menu="q3-treasury-forecast">
+  <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+    <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+    <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+    <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+    <span class="opt-body"><span class="opt-title">Invite members</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+    <span class="opt-icon"><i data-lucide="archive"></i></span>
+    <span class="opt-body"><span class="opt-title">Archive project</span></span>
+  </button>
+  <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+    <span class="opt-icon"><i data-lucide="pencil"></i></span>
+    <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+  </button>
+</div>
+
 <script src="../../shared/shell.js"></script>
 <script>
   const chatEmpty = document.getElementById('chatEmpty');
@@ -1542,20 +2251,66 @@
   const chatMessages = document.getElementById('chatMessages');
   const chatPane = document.getElementById('chatPane');
 
-  // Greeting shine: wrap each letter of the headline in its own span so the
-  // CSS animation (.glow-letter) can stagger a small delay per character —
-  // that stagger is what makes it read as a wave sweeping across the text
-  // instead of the whole line pulsing at once. Spaces are wrapped too (kept
-  // as a literal space) just to preserve layout/spacing exactly.
+  // Greeting shine + rotating word: wrap each letter of the headline in its
+  // own span so the CSS animation (.glow-letter) can stagger a small delay
+  // per character — that stagger is what makes it read as a wave sweeping
+  // across the text instead of the whole line pulsing at once. Spaces are
+  // wrapped too (kept as a literal space) just to preserve layout/spacing
+  // exactly. Prefix/suffix letters are only rendered once and never
+  // touched again, so their shine keeps running uninterrupted — only
+  // .greeting-swap-word's own letters get replaced (with a quick fade)
+  // every few seconds, cycling through "build" / "audit" / "operate".
   (function initGreetingShine() {
     const headline = document.getElementById('chatGreetingHeadline');
     if (!headline) return;
-    const text = headline.textContent;
+    const PREFIX = 'What do you want to ';
+    const SUFFIX = ' today?';
+    const WORDS = ['build', 'audit', 'operate'];
     const staggerMs = 60;
-    headline.innerHTML = text
-      .split('')
-      .map((char, i) => `<span class="glow-letter" style="animation-delay:${i * staggerMs}ms">${char === ' ' ? '&nbsp;' : char}</span>`)
-      .join('');
+    const wordFadeMs = 260;
+    const wordDisplayMs = 2600;
+
+    function wrapLetters(text, delayOffset) {
+      return text
+        .split('')
+        .map((char, i) => `<span class="glow-letter" style="animation-delay:${delayOffset + i * staggerMs}ms">${char === ' ' ? '&nbsp;' : char}</span>`)
+        .join('');
+    }
+
+    const prefixEl = document.createElement('span');
+    prefixEl.innerHTML = wrapLetters(PREFIX, 0);
+    const wordEl = document.createElement('span');
+    wordEl.className = 'greeting-swap-word';
+    const suffixEl = document.createElement('span');
+
+    headline.innerHTML = '';
+    headline.append(prefixEl, wordEl, suffixEl);
+
+    function renderWord(word, { fade = false } = {}) {
+      const apply = () => {
+        const wordOffset = PREFIX.length * staggerMs;
+        wordEl.innerHTML = wrapLetters(word, wordOffset);
+        // Suffix's delay offset depends on the current word's length, so
+        // its own shine wave keeps timing correctly relative to it —
+        // "build"/"audit" (5) and "operate" (7) shift " today?" slightly.
+        suffixEl.innerHTML = wrapLetters(SUFFIX, (PREFIX.length + word.length) * staggerMs);
+        headline.setAttribute('aria-label', `What do you want to ${word} today?`);
+        if (fade) requestAnimationFrame(() => wordEl.classList.remove('is-fading'));
+      };
+      if (fade) {
+        wordEl.classList.add('is-fading');
+        setTimeout(apply, wordFadeMs);
+      } else {
+        apply();
+      }
+    }
+
+    let wordIndex = 0;
+    renderWord(WORDS[wordIndex]);
+    setInterval(() => {
+      wordIndex = (wordIndex + 1) % WORDS.length;
+      renderWord(WORDS[wordIndex], { fade: true });
+    }, wordDisplayMs);
   })();
 
   // ---------- Composer: mode/model dropdowns + voice dictation ----------
@@ -1873,7 +2628,8 @@
       const iconEl = projectItem.querySelector('svg, i');
       if (iconEl) {
         const fresh = document.createElement('i');
-        fresh.setAttribute('data-lucide', PANEL_OPEN_ICONS[selected.type] || 'folder');
+        const selectedItem = selected.type === 'project' ? findProjectById(selected.id) : panelOpenDataFor(selected.type).find((it) => it.id === selected.id);
+        fresh.setAttribute('data-lucide', iconForItem(selected.type, selectedItem) || 'folder');
         iconEl.replaceWith(fresh);
         if (window.lucide) lucide.createIcons();
       }
@@ -1891,6 +2647,7 @@
     chatPanelToggle.hidden = false;
     chatPanelExpandToggle.hidden = false;
     updateChatThreadHeader(firstPrompt);
+    registerNewChat(deriveChatTitle(firstPrompt));
     addMessage('user', firstPrompt);
     showTyping();
     setTimeout(() => {
@@ -1987,6 +2744,19 @@
 
   function setPanelExpanded(expanded) {
     const sidebar = document.getElementById('sidebar');
+    // Bug fix (2026-08-14): onNavSectionChange calls setPanelExpanded(false)
+    // defensively on every section switch (Projects, Chats and Tasks, Apps,
+    // Agents) to reset panel-expand state when leaving the chat thread — but
+    // sidebarWasCollapsedBeforeExpand defaults to `false`, and it's never
+    // updated unless Expand was actually clicked at least once. So calling
+    // setPanelExpanded(false) when the panel was never expanded still ran
+    // the `else` branch below, and `!sidebarWasCollapsedBeforeExpand` was
+    // always true, force-removing `.is-collapsed` from the sidebar — i.e.
+    // clicking Projects while the sidebar was manually collapsed silently
+    // re-expanded it. Fix: bail out immediately when this call wouldn't
+    // actually change anything (already in the requested state), so a
+    // same-state call never touches the sidebar (or the toggle icon) at all.
+    if (expanded === chatThread.classList.contains('is-panel-expanded')) return;
     if (expanded) {
       sidebarWasCollapsedBeforeExpand = sidebar ? sidebar.classList.contains('is-collapsed') : false;
       if (sidebar) sidebar.classList.add('is-collapsed');
@@ -2008,7 +2778,10 @@
     setPanelExpanded(!chatThread.classList.contains('is-panel-expanded'));
   });
 
-  // Apps / Agents: empty states for sections to be built in a later iteration
+  // Apps / Agents: empty states for sections to be built in a later
+  // iteration. Chats and Tasks used to be a third entry here — it now has
+  // a real view (#chatsView, see docs/chats-and-tasks.md), wired in
+  // onNavSectionChange below instead of this generic placeholder.
   const sectionCopy = {
     apps: {
       icon: 'layout-grid',
@@ -2035,9 +2808,9 @@
   // projects" tabs below the header. Mock split: 2 owned, 1 shared, purely
   // to make both filters return something non-empty in the demo.
   const PROJECTS_DATA = [
-    { id: 'latam-bank-reconciliation', name: 'LATAM Bank Reconciliation', status: 'production', tags: ['source:bank-statement', 'region:LATAM'], pinned: true, archived: false, owner: 'you' },
-    { id: 'q2-journal-entry-audit', name: 'Q2 Journal Entry Audit', status: 'production', tags: ['journal-entry', 'period:Q2'], pinned: true, archived: false, owner: 'you' },
-    { id: 'q3-treasury-forecast', name: 'Q3 Treasury Forecast', status: 'draft', tags: ['period:Q3'], pinned: true, archived: false, owner: 'shared' },
+    { id: 'latam-bank-reconciliation', name: 'LATAM Bank Reconciliation', status: 'production', tags: ['source:bank-statement', 'region:LATAM'], pinned: true, archived: false, owner: 'you', members: 10 },
+    { id: 'q2-journal-entry-audit', name: 'Q2 Journal Entry Audit', status: 'production', tags: ['journal-entry', 'period:Q2'], pinned: true, archived: false, owner: 'you', members: 6 },
+    { id: 'q3-treasury-forecast', name: 'Q3 Treasury Forecast', status: 'draft', tags: ['period:Q3'], pinned: true, archived: false, owner: 'shared', members: 5 },
   ];
   let projectsSearchTerm = '';
   let projectsViewMode = 'grid';
@@ -2046,6 +2819,47 @@
 
   function findProjectById(id) {
     return PROJECTS_DATA.find((p) => p.id === id);
+  }
+
+  // Slugifies the name into an id, disambiguating with -2/-3/... on
+  // collision (two projects can share a display name; ids can't).
+  function generateProjectId(name) {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+    let id = base;
+    let n = 2;
+    while (findProjectById(id)) { id = `${base}-${n}`; n++; }
+    return id;
+  }
+
+  // Appends a new mock project to PROJECTS_DATA — the single source of
+  // truth this view, the chat's project selector (panelOpenDataFor via
+  // CONTEXT_CYCLE), and the chat side panel's open picker all read
+  // directly, so a newly created project shows up in all three without
+  // extra wiring. Starts as `status: 'draft'` (nothing's happened in it
+  // yet), unpinned, and `owner: 'you'` (the creator).
+  //
+  // Deliberately does NOT touch: the sidebar's Pinned list (static markup
+  // per project, owned by the sidebar side of this prototype — see
+  // docs/sidebar.md — not data-driven off PROJECTS_DATA) or
+  // SEARCH_DATA.projects (Cmd+K's own hand-authored mock, already
+  // documented as intentionally decoupled from PROJECTS_DATA). Both are
+  // flagged as open gaps in docs/home.md rather than reached into here.
+  function createProject({ name, description, icon }) {
+    const project = {
+      id: generateProjectId(name),
+      name: name.trim(),
+      description: (description || '').trim(),
+      icon: icon || 'folder',
+      status: 'draft',
+      tags: [],
+      pinned: false,
+      archived: false,
+      owner: 'you',
+      members: 1, // just the creator so far — no invite flow sets this yet, see docs/home.md
+    };
+    PROJECTS_DATA.push(project);
+    applyProjectsFilters();
+    return project;
   }
 
   // The sidebar's Pinned list is static markup (not data-driven), so
@@ -2057,6 +2871,146 @@
       const nameEl = item.querySelector('.project-name');
       return nameEl && nameEl.textContent.trim() === projectName;
     });
+  }
+
+  // Bug fix (2026-08-14): pinning a project only ever worked for the 3
+  // original mock projects, because the sidebar's Pinned list is static
+  // markup — findSidebarPinnedItem() matches by name against <li>s that
+  // already exist, and a project created later (via the "Create project"
+  // modal) has none yet. toggleProjectPinned() now calls this instead of
+  // findSidebarPinnedItem() directly when turning pinning ON, so a project
+  // with no row gets one created — using its own `.icon` (the whole point
+  // of the icon picker actually mattering outside this modal), not a
+  // hardcoded folder.
+  //
+  // Deliberately minimal: no folder↔folder-open expand crossfade (that's
+  // specifically a folder-metaphor affordance for the nested chat list —
+  // a custom icon replaces it outright rather than animating between two
+  // states) and no nested chat sublist (a project created this way has no
+  // chats yet to show) — just icon + name, same look as the others
+  // otherwise. It also doesn't get the ellipsis (Unpin/Invite/Archive/Edit
+  // detail) the 3 original rows have — that popover is matched to its
+  // trigger through markup generated per-project ahead of time
+  // (data-sidebar-actions-menu/-trigger, see docs/sidebar.md), and
+  // wiring a new pair of those dynamically is sidebar-side territory this
+  // fix doesn't reach into. Flagged in docs/home.md rather than
+  // silently left half-working.
+  // Same open/close/position mechanics as shell.js's initSidebarProjectActions()
+  // (portal popover, position:fixed computed from the trigger's
+  // getBoundingClientRect(), opens to the trigger's right with a left-flip
+  // fallback when it wouldn't fit) — but self-contained here for ONE
+  // specific trigger/menu pair created after page load. Re-running
+  // initSidebarProjectActions() itself was not an option: it re-queries
+  // ALL [data-sidebar-actions-trigger] on the page and would attach a
+  // SECOND click listener to the 3 original triggers too, double-firing
+  // open/close on every click. shell.js's own global closers
+  // (document click/scroll → closeAllSidebarActionMenus) already close
+  // THIS popover too, since they query by class rather than a fixed list
+  // captured at init time — so this only needs to handle opening it.
+  function wireDynamicSidebarActionsTrigger(trigger, menu) {
+    const POPOVER_GAP = 6;
+    const VIEWPORT_MARGIN = 8;
+    function closeAllSidebarActionMenusLocal() {
+      document.querySelectorAll('.sidebar-project-actions-menu.is-open').forEach((m) => m.classList.remove('is-open'));
+      document.querySelectorAll('.sidebar-project-actions-btn.is-open').forEach((b) => b.classList.remove('is-open'));
+    }
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = menu.classList.contains('is-open');
+      closeAllSidebarActionMenusLocal();
+      if (isOpen) return;
+      menu.classList.add('is-open');
+      trigger.classList.add('is-open');
+      const rect = trigger.getBoundingClientRect();
+      let left = rect.right + POPOVER_GAP;
+      let top = rect.top;
+      const menuRect = menu.getBoundingClientRect();
+      if (left + menuRect.width > window.innerWidth - VIEWPORT_MARGIN) left = rect.left - menuRect.width - POPOVER_GAP;
+      if (top + menuRect.height > window.innerHeight - VIEWPORT_MARGIN) top = window.innerHeight - VIEWPORT_MARGIN - menuRect.height;
+      top = Math.max(VIEWPORT_MARGIN, top);
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+    });
+    // Mirrors shell.js's own menu listener: clicking an action closes the
+    // popover after (see wireSidebarActionsMenuBehavior for what the click
+    // actually does — that's wired separately, right after this).
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.closest('[data-sidebar-action]')) closeAllSidebarActionMenusLocal();
+    });
+  }
+
+  // Markup for the ellipsis's 4 actions — identical to the 3 rows written
+  // by hand in the sidebar's markup, kept in one place so a dynamically
+  // created row never drifts from them.
+  function sidebarProjectActionsMenuMarkup(id) {
+    return `
+      <div class="sidebar-project-actions-menu" data-sidebar-actions-menu="${id}">
+        <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
+          <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+          <span class="opt-body"><span class="opt-title">Unpin project</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-sidebar-action="invite">
+          <span class="opt-icon"><i data-lucide="user-plus"></i></span>
+          <span class="opt-body"><span class="opt-title">Invite members</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-sidebar-action="archive">
+          <span class="opt-icon"><i data-lucide="archive"></i></span>
+          <span class="opt-body"><span class="opt-title">Archive project</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-sidebar-action="edit">
+          <span class="opt-icon"><i data-lucide="pencil"></i></span>
+          <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+        </button>
+      </div>
+    `;
+  }
+
+  function ensureSidebarPinnedItem(project) {
+    const existing = findSidebarPinnedItem(project.name);
+    if (existing) return existing;
+    const list = document.querySelector('.sidebar-section .project-list');
+    if (!list) return null;
+    const li = document.createElement('li');
+    li.className = 'project-item';
+    li.dataset.projectId = project.id;
+    li.innerHTML = `
+      <div class="project-row-wrap">
+        <button type="button" class="project-row">
+          <!-- .folder-icon-closed reused purely for its 16×16 sizing
+               (tokens.css only sizes icons through that class/its
+               "-open" pair, there's no generic bare-icon size rule for
+               .folder-icon) — no "-open" sibling exists here, so it
+               never actually crossfades to anything, it just renders as a
+               normal static icon. -->
+          <span class="folder-icon"><i data-lucide="${project.icon || 'folder'}" class="folder-icon-closed"></i></span>
+          <span class="project-name">${project.name}</span>
+        </button>
+        <div class="sidebar-project-actions-wrap">
+          <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger="${project.id}" aria-label="Project actions">
+            <i data-lucide="more-vertical"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(li);
+
+    // The popover itself is a portal (see the original 3's own HTML
+    // comment for why: .sidebar-section's overflow would clip it if it
+    // stayed nested) — appended as a plain sibling of .app-shell near the
+    // end of <body>, same as the hand-written ones. Same reasoning as
+    // wireDynamicSidebarActionsTrigger above for why this is wired here
+    // instead of via shell.js's initSidebarProjectActions().
+    document.body.insertAdjacentHTML('beforeend', sidebarProjectActionsMenuMarkup(project.id));
+    const menu = document.querySelector(`.sidebar-project-actions-menu[data-sidebar-actions-menu="${project.id}"]`);
+    const trigger = li.querySelector('[data-sidebar-actions-trigger]');
+    if (menu && trigger) {
+      wireDynamicSidebarActionsTrigger(trigger, menu);
+      wireSidebarActionsMenuBehavior(menu);
+    }
+
+    if (window.lucide) lucide.createIcons();
+    return li;
   }
 
   // ---------- Chat side panel: Project/App/Agent picker + tabs ----------
@@ -2081,6 +3035,16 @@
   const PANEL_OPEN_LABELS = { project: 'Projects', app: 'Apps', agent: 'Agents' };
   function panelOpenDataFor(type) {
     return type === 'project' ? PROJECTS_DATA : type === 'app' ? PANEL_APPS_DATA : PANEL_AGENTS_DATA;
+  }
+  // PANEL_OPEN_ICONS[type] is the generic fallback for a whole category —
+  // Apps/Agents items don't carry their own icon yet. A Project can
+  // override it via its own `.icon` (set at creation time through the icon
+  // picker in the create-project modal, see openCreateProjectModal) — every
+  // place that renders ONE item's icon (not a bare category/type icon)
+  // should go through this instead of reaching into PANEL_OPEN_ICONS
+  // directly, so a custom icon actually shows up everywhere that item does.
+  function iconForItem(type, item) {
+    return (type === 'project' && item && item.icon) || PANEL_OPEN_ICONS[type];
   }
 
   let panelTabsState = []; // { key: 'project:id' | 'app:id' | 'agent:id', type, id, name }
@@ -2121,7 +3085,7 @@
       items.forEach((item) => {
         html += `
           <button type="button" class="panel-open-item" data-panel-open="${type}:${item.id}">
-            <span class="panel-open-item-icon"><i data-lucide="${PANEL_OPEN_ICONS[type]}"></i></span>
+            <span class="panel-open-item-icon"><i data-lucide="${iconForItem(type, item)}"></i></span>
             <span class="panel-open-item-name">${item.name}</span>
           </button>`;
       });
@@ -2159,7 +3123,7 @@
     panelTabsList.innerHTML = panelTabsState.map((tab) => `
       <div class="panel-tab-wrap${tab.key === panelActiveKey ? ' is-active' : ''}">
         <button type="button" class="panel-tab" data-panel-tab="${tab.key}">
-          <i data-lucide="${PANEL_OPEN_ICONS[tab.type]}"></i><span>${tab.name}</span>
+          <i data-lucide="${iconForItem(tab.type, findPanelItem(tab.type, tab.id))}"></i><span>${tab.name}</span>
         </button>
         <button type="button" class="panel-tab-close" data-panel-tab-close="${tab.key}" aria-label="Close ${tab.name}"><i data-lucide="x"></i></button>
       </div>
@@ -2315,17 +3279,17 @@
     };
     if (fade) {
       content.classList.add('is-fading');
-      setTimeout(apply, 200);
+      setTimeout(apply, 320);
     } else {
       apply();
     }
   }
 
-  function startContextCycle(suffix) {
+  function startContextCycle(suffix, { fade = false } = {}) {
     const state = contextState[suffix];
     if (!state || state.selected || state.cycleTimer) return;
     state.cycleIndex = 0;
-    setContextTriggerContent(suffix, PANEL_OPEN_ICONS[CONTEXT_CYCLE[0].type], CONTEXT_CYCLE[0].label);
+    setContextTriggerContent(suffix, PANEL_OPEN_ICONS[CONTEXT_CYCLE[0].type], CONTEXT_CYCLE[0].label, { fade });
     state.cycleTimer = setInterval(() => {
       state.cycleIndex = (state.cycleIndex + 1) % CONTEXT_CYCLE.length;
       const step = CONTEXT_CYCLE[state.cycleIndex];
@@ -2355,7 +3319,7 @@
       items.forEach((item) => {
         html += `
           <button type="button" class="panel-open-item" data-context-item="${type}:${item.id}">
-            <span class="panel-open-item-icon"><i data-lucide="${PANEL_OPEN_ICONS[type]}"></i></span>
+            <span class="panel-open-item-icon"><i data-lucide="${iconForItem(type, item)}"></i></span>
             <span class="panel-open-item-name">${item.name}</span>
           </button>`;
       });
@@ -2371,7 +3335,7 @@
     const state = contextState[suffix];
     state.selected = { type, id, name: item.name };
     stopContextCycle(suffix);
-    setContextTriggerContent(suffix, PANEL_OPEN_ICONS[type], item.name);
+    setContextTriggerContent(suffix, iconForItem(type, item), item.name, { fade: true });
     const bar = document.querySelector(`[data-project-bar="${suffix}"]`);
     if (bar) bar.classList.add('has-project');
     const menu = document.querySelector(`.composer-menu[data-menu="project-${suffix}"]`);
@@ -2386,7 +3350,7 @@
     state.selected = null;
     const bar = document.querySelector(`[data-project-bar="${suffix}"]`);
     if (bar) bar.classList.remove('has-project');
-    startContextCycle(suffix);
+    startContextCycle(suffix, { fade: true });
   }
 
   function initContextSelector(suffix) {
@@ -2438,10 +3402,143 @@
   initContextSelector('empty');
   initContextSelector('docked');
 
+  // ---------- @-mention: tag a Project, App, or Agent from the textarea ----------
+  // Typing "@" (at the start of a word — not mid-email, requires a preceding
+  // space or start-of-text) opens a panel matching the full width of
+  // .chat-input-shell, right above it. Reuses the same Projects/Apps/Agents
+  // data + tabs pattern as the context selector and the side panel's picker.
+  const mentionState = {}; // per-suffix: { tab, query, start }
+
+  function getMentionQuery(textarea) {
+    const value = textarea.value;
+    const pos = textarea.selectionStart;
+    const upToCursor = value.slice(0, pos);
+    const match = upToCursor.match(/(^|\s)@([^\s@]*)$/);
+    if (!match) return null;
+    return { query: match[2], start: pos - match[2].length - 1 };
+  }
+
+  function renderMentionResults(suffix) {
+    const state = mentionState[suffix];
+    const results = document.querySelector(`[data-mention-results="${suffix}"]`);
+    if (!state || !results) return;
+    const term = state.query.trim().toLowerCase();
+    const types = state.tab === 'all' ? ['project', 'app', 'agent'] : [state.tab];
+    let html = '';
+    let total = 0;
+    types.forEach((type) => {
+      const items = panelOpenDataFor(type).filter((it) => it.name.toLowerCase().includes(term));
+      if (!items.length) return;
+      total += items.length;
+      html += '<div class="panel-open-results-group">';
+      if (state.tab === 'all') html += `<div class="panel-open-group-title">${PANEL_OPEN_LABELS[type]}</div>`;
+      items.forEach((item) => {
+        html += `
+          <button type="button" class="panel-open-item" data-mention-item="${type}:${item.id}">
+            <span class="panel-open-item-icon"><i data-lucide="${iconForItem(type, item)}"></i></span>
+            <span class="panel-open-item-name">${item.name}</span>
+          </button>`;
+      });
+      html += '</div>';
+    });
+    results.innerHTML = total ? html : `<div class="panel-open-empty">No results for "${term}"</div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openMentionPanel(suffix) {
+    const panel = document.querySelector(`[data-mention-panel="${suffix}"]`);
+    if (panel) panel.hidden = false;
+  }
+
+  function closeMentionPanel(suffix) {
+    const panel = document.querySelector(`[data-mention-panel="${suffix}"]`);
+    if (panel) panel.hidden = true;
+  }
+
+  function insertMention(suffix, textarea, type, id) {
+    const item = panelOpenDataFor(type).find((it) => it.id === id);
+    const state = mentionState[suffix];
+    if (!item || !state) return;
+    const pos = textarea.selectionStart;
+    const before = textarea.value.slice(0, state.start);
+    const after = textarea.value.slice(pos);
+    const inserted = `@${item.name} `;
+    textarea.value = before + inserted + after;
+    const newPos = before.length + inserted.length;
+    textarea.focus();
+    textarea.setSelectionRange(newPos, newPos);
+    closeMentionPanel(suffix);
+  }
+
+  function wireMention(suffix, textarea) {
+    mentionState[suffix] = { tab: 'all', query: '', start: 0 };
+
+    textarea.addEventListener('input', () => {
+      const mention = getMentionQuery(textarea);
+      if (mention) {
+        mentionState[suffix].query = mention.query;
+        mentionState[suffix].start = mention.start;
+        renderMentionResults(suffix);
+        openMentionPanel(suffix);
+      } else {
+        closeMentionPanel(suffix);
+      }
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      const panel = document.querySelector(`[data-mention-panel="${suffix}"]`);
+      if (panel && !panel.hidden && e.key === 'Escape') closeMentionPanel(suffix);
+    });
+
+    const tabsWrap = document.querySelector(`[data-mention-tabs="${suffix}"]`);
+    if (tabsWrap) {
+      tabsWrap.querySelectorAll('.panel-filter-tab').forEach((tab) => {
+        // Keep focus on the textarea (mousedown fires before the textarea
+        // would blur) so the mention query/cursor position stays intact.
+        tab.addEventListener('mousedown', (e) => e.preventDefault());
+        tab.addEventListener('click', () => {
+          mentionState[suffix].tab = tab.dataset.filter;
+          tabsWrap.querySelectorAll('.panel-filter-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
+          renderMentionResults(suffix);
+        });
+      });
+    }
+
+    const results = document.querySelector(`[data-mention-results="${suffix}"]`);
+    if (results) {
+      results.addEventListener('mousedown', (e) => e.preventDefault());
+      results.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-mention-item]');
+        if (!btn) return;
+        const [type, id] = btn.dataset.mentionItem.split(':');
+        insertMention(suffix, textarea, type, id);
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const panel = document.querySelector(`[data-mention-panel="${suffix}"]`);
+      if (!panel || panel.hidden) return;
+      if (e.target === textarea || panel.contains(e.target)) return;
+      closeMentionPanel(suffix);
+    });
+  }
+
+  wireMention('empty', emptyInput);
+  wireMention('docked', dockedInput);
+
   function statusBadge(status) {
     return status === 'production'
       ? '<span class="badge badge--success badge--square">Production</span>'
       : '<span class="badge badge--neutral badge--square">Draft</span>';
+  }
+
+  // Replaces the old avatar image in the card/row footer — a gray square
+  // badge (icon + count) instead of a person's photo, since what's shown
+  // now is "how many people have access," not "who owns this." Singular/
+  // plural handled here once instead of inline at each of the 2 call sites.
+  function membersBadge(count) {
+    const n = count || 0;
+    return `<span class="project-members-badge"><i data-lucide="users"></i><span>${n} member${n === 1 ? '' : 's'}</span></span>`;
   }
 
   // Filter: multi-select tag popover (Filter button → composer-menu),
@@ -2486,8 +3583,14 @@
 
   function getFilteredProjects() {
     const term = projectsSearchTerm.trim().toLowerCase();
-    return PROJECTS_DATA.filter((p) => !p.archived)
-      .filter((p) => projectsOwnershipFilter === 'all' || p.owner === projectsOwnershipFilter)
+    // "Archived" is a 4th ownership tab, not an owner value — flips the
+    // base set to archived-only instead of the usual "hide archived"
+    // (every other tab), and skips the owner comparison entirely (an
+    // archived project keeps whatever `owner` it had, that's irrelevant
+    // once it's archived).
+    const showArchived = projectsOwnershipFilter === 'archived';
+    return PROJECTS_DATA.filter((p) => p.archived === showArchived)
+      .filter((p) => showArchived || projectsOwnershipFilter === 'all' || p.owner === projectsOwnershipFilter)
       .filter((p) => {
         const matchesTerm = !term || p.name.toLowerCase().includes(term);
         const matchesTags = projectsActiveTags.size === 0 || p.tags.some((t) => projectsActiveTags.has(t));
@@ -2495,13 +3598,18 @@
       });
   }
 
-  // Actions popover markup shared by grid/list: pin/unpin (label + icon
-  // reflect the project's current .pinned state), invite members, and
-  // archive. Reuses .composer-menu-option for visual consistency with the
-  // Filter popover, but click handling is delegated (see
-  // wireProjectActionsDelegation) instead of the composer's
+  // Actions popover markup shared by grid/list: edit detail, pin/unpin
+  // (label + icon reflect the project's current .pinned state), invite
+  // members, and archive. Reuses .composer-menu-option for visual
+  // consistency with the Filter popover, but click handling is delegated
+  // (see wireProjectActionsDelegation) instead of the composer's
   // data-menu-trigger mechanism, since these rows get re-rendered on every
   // filter change.
+  //
+  // Edit detail: opens .project-edit-modal-backdrop (see
+  // openProjectEditModal). Placeholder pass only — the user asked for the
+  // entry point + an empty, visibly-openable modal for now; its real
+  // fields/content are defined in a follow-up pass.
   //
   // Invite members: per docs/proyecto.md's conceptual model, access to a
   // Project is granted by inviting someone directly to THAT project, not
@@ -2512,10 +3620,39 @@
   // invite" is a no-op like the rest of this view's actions (no real email
   // goes out) — it shows a brief confirmation, then closes the popover,
   // same spirit as the canned chat replies elsewhere in the prototype.
+  // Archived projects get a different, shorter action set: Pin/Unpin and
+  // Invite members don't make sense for something in a terminal "archived"
+  // state (an archived project isn't shown in the sidebar regardless of
+  // its .pinned flag — toggling it from here could silently resurrect a
+  // stale sidebar row) — so instead of the usual 4, an archived card only
+  // offers Edit detail (still useful to double-check what you're about to
+  // delete) and Delete project (destructive, opens a confirmation modal —
+  // see openDeleteProjectModal). No invite view markup needed either,
+  // since that option doesn't exist here.
   function projectActionsMenuMarkup(p) {
+    if (p.archived) {
+      return `
+        <div class="project-actions-menu" data-actions-menu="${p.id}">
+          <div class="project-actions-menu-default">
+            <button type="button" class="composer-menu-option" data-edit-detail="${p.id}">
+              <span class="opt-icon"><i data-lucide="pencil"></i></span>
+              <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+            </button>
+            <button type="button" class="composer-menu-option composer-menu-option--danger" data-delete-project="${p.id}">
+              <span class="opt-icon"><i data-lucide="trash-2"></i></span>
+              <span class="opt-body"><span class="opt-title">Delete project</span></span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
     return `
       <div class="project-actions-menu" data-actions-menu="${p.id}">
         <div class="project-actions-menu-default">
+          <button type="button" class="composer-menu-option" data-edit-detail="${p.id}">
+            <span class="opt-icon"><i data-lucide="pencil"></i></span>
+            <span class="opt-body"><span class="opt-title">Edit detail</span></span>
+          </button>
           <button type="button" class="composer-menu-option" data-pin-toggle="${p.id}">
             <span class="opt-icon"><i data-lucide="${p.pinned ? 'pin-off' : 'pin'}"></i></span>
             <span class="opt-body"><span class="opt-title">${p.pinned ? 'Unpin project' : 'Pin project'}</span></span>
@@ -2551,7 +3688,7 @@
     document.getElementById('projectsGrid').innerHTML = projects.map((p) => `
       <div class="project-card" data-project-id="${p.id}">
         <div class="project-card-top">
-          <div class="project-card-name"><i data-lucide="folder"></i><span>${p.name}</span></div>
+          <div class="project-card-name"><i data-lucide="${p.icon || 'folder'}"></i><span>${p.name}</span></div>
           <div class="project-card-actions-wrap">
             <button type="button" class="project-card-actions-btn" data-actions-trigger="${p.id}" aria-label="Project actions">
               <i data-lucide="more-vertical"></i>
@@ -2562,7 +3699,7 @@
         <div class="project-card-tags">${p.tags.map((t) => `<span class="project-tag-pill">${t}</span>`).join('')}</div>
         <div class="project-card-footer">
           ${statusBadge(p.status)}
-          <img src="../../assets/img/user_profile.jpeg" alt="" class="project-avatar" />
+          ${membersBadge(p.members)}
         </div>
       </div>
     `).join('');
@@ -2571,11 +3708,11 @@
   function renderProjectsList(projects) {
     document.getElementById('projectsList').innerHTML = projects.map((p) => `
       <div class="project-list-row" data-project-id="${p.id}">
-        <i data-lucide="folder" class="project-list-row-icon"></i>
+        <i data-lucide="${p.icon || 'folder'}" class="project-list-row-icon"></i>
         <span class="project-list-row-name">${p.name}</span>
         <div class="project-list-row-tags">${p.tags.map((t) => `<span class="project-tag-pill">${t}</span>`).join('')}</div>
         ${statusBadge(p.status)}
-        <img src="../../assets/img/user_profile.jpeg" alt="" class="project-avatar" />
+        ${membersBadge(p.members)}
         <div class="project-list-row-actions-wrap">
           <button type="button" class="project-list-row-actions-btn" data-actions-trigger="${p.id}" aria-label="Project actions">
             <i data-lucide="more-vertical"></i>
@@ -2598,7 +3735,15 @@
     document.getElementById('projectsGrid').hidden = !isGrid;
     document.getElementById('projectsList').hidden = isGrid;
     if (isGrid) renderProjectsGrid(filtered); else renderProjectsList(filtered);
-    document.getElementById('projectsEmpty').hidden = filtered.length > 0;
+    const emptyEl = document.getElementById('projectsEmpty');
+    emptyEl.hidden = filtered.length > 0;
+    // "No projects match your search" reads oddly on the Archived tab when
+    // nothing's been archived yet (no search involved at all) — swap in a
+    // dedicated message for that specific empty case instead of reusing
+    // the generic search-miss copy everywhere.
+    emptyEl.textContent = projectsOwnershipFilter === 'archived'
+      ? 'No archived projects.'
+      : 'No projects match your search.';
     updateProjectsToggleButtons();
     if (window.lucide) lucide.createIcons();
   }
@@ -2678,7 +3823,10 @@
     const project = findProjectById(id);
     if (!project) return;
     project.pinned = !project.pinned;
-    const sidebarItem = findSidebarPinnedItem(project.name);
+    // Turning pinning ON: create the row if this project never had one
+    // (see ensureSidebarPinnedItem). Turning it OFF: just hide whatever's
+    // there, same as before — no reason to create one just to hide it.
+    const sidebarItem = project.pinned ? ensureSidebarPinnedItem(project) : findSidebarPinnedItem(project.name);
     if (sidebarItem) sidebarItem.hidden = !project.pinned;
     applyProjectsFilters();
   }
@@ -2704,6 +3852,472 @@
     } else {
       commit();
     }
+  }
+
+  // Permanent removal — only reachable from an archived card's "Delete
+  // project" (see projectActionsMenuMarkup), behind the confirmation modal
+  // below. Unlike archive (which just hides), this actually splices the
+  // project out of PROJECTS_DATA and cleans up its sidebar row + portal
+  // popover entirely (not just `.hidden = true`, since there's no path
+  // back to un-delete it) — leaving either behind would be a dead, inert
+  // element cluttering the DOM forever.
+  function deleteProject(id, tileEl) {
+    const index = PROJECTS_DATA.findIndex((p) => p.id === id);
+    if (index === -1) return;
+    const project = PROJECTS_DATA[index];
+    const commit = () => {
+      const sidebarItem = findSidebarPinnedItem(project.name);
+      if (sidebarItem) sidebarItem.remove();
+      const sidebarMenu = document.querySelector(`.sidebar-project-actions-menu[data-sidebar-actions-menu="${id}"]`);
+      if (sidebarMenu) sidebarMenu.remove();
+      PROJECTS_DATA.splice(index, 1);
+      applyProjectsFilters();
+    };
+    if (tileEl) {
+      tileEl.style.opacity = '0';
+      tileEl.style.transform = 'scale(0.97)';
+      setTimeout(commit, 160);
+    } else {
+      commit();
+    }
+  }
+
+  // Edit project detail modal: opened from the ellipsis's "Edit detail"
+  // action, from EVERY point that offers it — the Projects view's own
+  // cards/rows, and the sidebar's Pinned ellipsis (both the 3 static rows
+  // and any created later by ensureSidebarPinnedItem) — since all of them
+  // already call this exact same function, building the real form here
+  // once is what makes editing work everywhere at the same time, no
+  // per-entry-point wiring needed. Edits name + description only (the
+  // icon has its own picker in the create modal, not repeated here).
+  const projectEditModalBackdrop = document.getElementById('projectEditModalBackdrop');
+  const projectEditModalTitle = document.getElementById('projectEditModalTitle');
+  const projectEditModalClose = document.getElementById('projectEditModalClose');
+  const projectEditNameInput = document.getElementById('projectEditNameInput');
+  const projectEditDescInput = document.getElementById('projectEditDescInput');
+  const projectEditSaveBtn = document.getElementById('projectEditSaveBtn');
+  const projectEditCancelBtn = document.getElementById('projectEditCancelBtn');
+  let projectBeingEdited = null;
+
+  function openProjectEditModal(project) {
+    if (!project) return;
+    projectBeingEdited = project;
+    projectEditModalTitle.textContent = `Edit ${project.name}`;
+    projectEditNameInput.value = project.name;
+    projectEditDescInput.value = project.description || '';
+    projectEditSaveBtn.disabled = !project.name.trim();
+    projectEditModalBackdrop.hidden = false;
+    requestAnimationFrame(() => projectEditModalBackdrop.classList.add('is-open'));
+    setTimeout(() => projectEditNameInput.focus(), 50);
+  }
+
+  function closeProjectEditModal() {
+    projectEditModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { projectEditModalBackdrop.hidden = true; }, 200);
+    projectBeingEdited = null;
+  }
+
+  // Renaming a project after it's been pinned would otherwise desync from
+  // the sidebar: findSidebarPinnedItem()/toggleProjectPinned() match rows
+  // by name, and the <li>'s own .project-name text doesn't update itself
+  // just because PROJECTS_DATA changed underneath it. Look the row up by
+  // the OLD name before overwriting it, then push the new name into that
+  // same element — same reasoning as the pin/archive sync already does
+  // elsewhere, just for a rename instead of a visibility toggle.
+  function saveProjectEdit() {
+    if (projectEditSaveBtn.disabled || !projectBeingEdited) return;
+    const project = projectBeingEdited;
+    const sidebarItem = findSidebarPinnedItem(project.name);
+    project.name = projectEditNameInput.value.trim();
+    project.description = projectEditDescInput.value.trim();
+    if (sidebarItem) {
+      const nameEl = sidebarItem.querySelector('.project-name');
+      if (nameEl) nameEl.textContent = project.name;
+    }
+    applyProjectsFilters();
+    closeProjectEditModal();
+  }
+
+  projectEditNameInput.addEventListener('input', () => {
+    projectEditSaveBtn.disabled = !projectEditNameInput.value.trim();
+  });
+  projectEditNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveProjectEdit(); }
+  });
+  projectEditSaveBtn.addEventListener('click', saveProjectEdit);
+  projectEditCancelBtn.addEventListener('click', closeProjectEditModal);
+  projectEditModalClose.addEventListener('click', closeProjectEditModal);
+  projectEditModalBackdrop.addEventListener('click', (e) => {
+    if (e.target === projectEditModalBackdrop) closeProjectEditModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!projectEditModalBackdrop.hidden && e.key === 'Escape') closeProjectEditModal();
+  });
+
+  // Rename chat modal: opened from "Rename chat" in a chat's ellipsis, from
+  // EVERY point that offers it — the Chats and Tasks view's own rows and
+  // the sidebar's Pinned ellipsis for a pinned chat both call renameChat(id)
+  // (see the Chats and Tasks section further down), which just delegates
+  // here — one shared instance, same reasoning as the project edit modal
+  // above. Unlike that one, there's no need to look the sidebar row up by
+  // its OLD name before renaming: findSidebarPinnedChatItem matches by
+  // data-chat-id, which never changes, so the lookup can happen anytime.
+  const renameChatModalBackdrop = document.getElementById('renameChatModalBackdrop');
+  const renameChatNameInput = document.getElementById('renameChatNameInput');
+  const renameChatSaveBtn = document.getElementById('renameChatSaveBtn');
+  const renameChatCancelBtn = document.getElementById('renameChatCancelBtn');
+  const renameChatModalClose = document.getElementById('renameChatModalClose');
+  let chatBeingRenamed = null;
+
+  function openRenameChatModal(id) {
+    const chat = findChatById(id);
+    if (!chat) return;
+    chatBeingRenamed = chat;
+    renameChatNameInput.value = chat.name;
+    renameChatSaveBtn.disabled = !chat.name.trim();
+    renameChatModalBackdrop.hidden = false;
+    requestAnimationFrame(() => renameChatModalBackdrop.classList.add('is-open'));
+    setTimeout(() => { renameChatNameInput.focus(); renameChatNameInput.select(); }, 50);
+  }
+
+  function closeRenameChatModal() {
+    renameChatModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { renameChatModalBackdrop.hidden = true; }, 200);
+    chatBeingRenamed = null;
+  }
+
+  function saveRenameChat() {
+    if (renameChatSaveBtn.disabled || !chatBeingRenamed) return;
+    const chat = chatBeingRenamed;
+    chat.name = renameChatNameInput.value.trim();
+    // If this chat is currently pinned, its sidebar row's text is separate
+    // markup (not re-rendered from CHATS_DATA) — push the new name into it
+    // directly, same principle as the project version's sidebar sync.
+    const sidebarItem = findSidebarPinnedChatItem(chat.id);
+    if (sidebarItem) {
+      const nameEl = sidebarItem.querySelector('.sidebar-pinned-chat-name');
+      if (nameEl) nameEl.textContent = chat.name;
+    }
+    applyChatsFilters();
+    closeRenameChatModal();
+  }
+
+  renameChatNameInput.addEventListener('input', () => {
+    renameChatSaveBtn.disabled = !renameChatNameInput.value.trim();
+  });
+  renameChatNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveRenameChat(); }
+  });
+  renameChatSaveBtn.addEventListener('click', saveRenameChat);
+  renameChatCancelBtn.addEventListener('click', closeRenameChatModal);
+  renameChatModalClose.addEventListener('click', closeRenameChatModal);
+  renameChatModalBackdrop.addEventListener('click', (e) => {
+    if (e.target === renameChatModalBackdrop) closeRenameChatModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!renameChatModalBackdrop.hidden && e.key === 'Escape') closeRenameChatModal();
+  });
+
+  // Create project modal: opened from 2 entry points — the Projects view's
+  // "New project" button and the sidebar's "+" on the Projects nav item
+  // (see the wiring for each further down). One shared instance, not one
+  // per entry point — only one can be open at a time anyway. `onCreate`
+  // (optional) lets whichever entry point opened it react to the new
+  // project once it exists; neither current entry point needs it
+  // (createProject() already refreshes the Projects view on its own) — it
+  // stayed on openCreateProjectModal's signature since a third entry point
+  // (the chat's context selector) used it before being removed, and may
+  // come back.
+  const createProjectModalBackdrop = document.getElementById('createProjectModalBackdrop');
+  const createProjectNameInput = document.getElementById('createProjectNameInput');
+  const createProjectDescInput = document.getElementById('createProjectDescInput');
+  const createProjectSubmitBtn = document.getElementById('createProjectSubmitBtn');
+  const createProjectCancelBtn = document.getElementById('createProjectCancelBtn');
+  const createProjectModalClose = document.getElementById('createProjectModalClose');
+  let createProjectOnCreate = null;
+  let createProjectSelectedIcon = 'folder';
+
+  // ---------- Project icon picker ----------
+  // Icon-only version of the reference (Notion's project icon+color
+  // picker) — no color row, by explicit request. Curated set first (so the
+  // first screen is useful), then the rest of the full Lucide library
+  // (the same package this whole prototype already uses via data-lucide)
+  // alphabetically — read straight off `lucide.icons` instead of
+  // hand-maintaining a second copy of "every icon name." Paginated, 30 at
+  // a time with a shimmer skeleton while "loading" the next batch on
+  // scroll, instead of rendering the whole library at once — see
+  // renderCreateProjectIconGrid/loadMoreCreateProjectIcons.
+  const CREATE_PROJECT_ICON_DEFAULTS = [
+    'folder', 'dollar-sign', 'book', 'graduation-cap', 'pencil', 'pen-tool',
+    'braces', 'terminal', 'music', 'palette', 'scissors', 'stethoscope',
+    'heart', 'flower', 'briefcase', 'bar-chart-3', 'dumbbell', 'file-text',
+    'scale', 'globe', 'plane', 'wrench', 'paw-print', 'flask-conical',
+    'brain', 'gift', 'coffee', 'rocket', 'shield', 'lightbulb',
+    'clipboard-list', 'database', 'server', 'cloud', 'lock', 'key',
+    'camera', 'star', 'flag', 'target', 'calendar', 'users', 'package',
+    'truck', 'home', 'bookmark', 'layers', 'compass', 'anchor',
+  ];
+  const CREATE_PROJECT_ICON_PAGE_SIZE = 30;
+  let createProjectAllIconNames = null; // lazy + cached, see getAllLucideIconNames()
+  let createProjectOrderedIconNames = null; // curated defaults + rest of the library — see getOrderedIconNames()
+  let createProjectIconPage = 1; // how many PAGE_SIZE batches are currently rendered
+  let createProjectIconLoadingMore = false;
+
+  function pascalToKebab(name) {
+    return name
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+      .toLowerCase();
+  }
+
+  function getAllLucideIconNames() {
+    if (createProjectAllIconNames) return createProjectAllIconNames;
+    if (!window.lucide || !window.lucide.icons) return CREATE_PROJECT_ICON_DEFAULTS;
+    createProjectAllIconNames = Object.keys(window.lucide.icons).map(pascalToKebab).sort();
+    return createProjectAllIconNames;
+  }
+
+  // Curated defaults first, then whatever's left of the full library in
+  // alphabetical order — nothing is hidden behind the curated set, it's
+  // just first; scrolling progressively reveals the rest instead of a hard
+  // cutoff (see loadMoreCreateProjectIcons).
+  function getOrderedIconNames() {
+    if (createProjectOrderedIconNames) return createProjectOrderedIconNames;
+    const all = getAllLucideIconNames();
+    const curatedSet = new Set(CREATE_PROJECT_ICON_DEFAULTS);
+    createProjectOrderedIconNames = [...CREATE_PROJECT_ICON_DEFAULTS, ...all.filter((n) => !curatedSet.has(n))];
+    return createProjectOrderedIconNames;
+  }
+
+  function getFilteredIconNames() {
+    const term = createProjectIconSearchInput.value.trim().toLowerCase();
+    const source = getOrderedIconNames();
+    return term ? source.filter((n) => n.includes(term)) : source;
+  }
+
+  const createProjectIconTrigger = document.getElementById('createProjectIconTrigger');
+  const createProjectIconPopover = document.getElementById('createProjectIconPopover');
+  const createProjectIconSearchInput = document.getElementById('createProjectIconSearchInput');
+  const createProjectIconGrid = document.getElementById('createProjectIconGrid');
+  const createProjectIconDoneBtn = document.getElementById('createProjectIconDoneBtn');
+
+  function setCreateProjectIcon(name) {
+    createProjectSelectedIcon = name;
+    createProjectIconTrigger.innerHTML = `<i data-lucide="${name}"></i>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // `reset` (default true) drops back to page 1 — used on open and on
+  // every search keystroke. Loading more (see loadMoreCreateProjectIcons)
+  // and refreshing the is-selected highlight after picking an icon both
+  // call this with `reset: false` so they don't lose scroll depth.
+  function renderCreateProjectIconGrid(reset = true) {
+    if (reset) createProjectIconPage = 1;
+    const names = getFilteredIconNames();
+    const visible = names.slice(0, createProjectIconPage * CREATE_PROJECT_ICON_PAGE_SIZE);
+    createProjectIconGrid.innerHTML = visible.length
+      ? visible.map((name) => `
+          <button type="button" class="create-project-icon-option${name === createProjectSelectedIcon ? ' is-selected' : ''}" data-icon-name="${name}" aria-label="${name}">
+            <i data-lucide="${name}"></i>
+          </button>`).join('')
+      : `<div class="create-project-icon-empty">No icons for "${createProjectIconSearchInput.value.trim()}"</div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // Infinite scroll: near the bottom of the grid, if the current
+  // (possibly search-filtered) list still has more left to show, appends a
+  // row of shimmer skeleton placeholders, waits a beat to read as an
+  // actual "fetch," then swaps them for the next real batch. Guards
+  // against stacking more than one load at a time and against loading
+  // past what's actually left.
+  function loadMoreCreateProjectIcons() {
+    const names = getFilteredIconNames();
+    const shown = createProjectIconPage * CREATE_PROJECT_ICON_PAGE_SIZE;
+    if (createProjectIconLoadingMore || shown >= names.length) return;
+    createProjectIconLoadingMore = true;
+    const skeletonCount = Math.min(CREATE_PROJECT_ICON_PAGE_SIZE, names.length - shown);
+    createProjectIconGrid.insertAdjacentHTML(
+      'beforeend',
+      Array.from({ length: skeletonCount }, () => '<span class="create-project-icon-skeleton"></span>').join('')
+    );
+    setTimeout(() => {
+      createProjectIconPage += 1;
+      const scrollTop = createProjectIconGrid.scrollTop; // the innerHTML replace below resets scroll — restore it after
+      renderCreateProjectIconGrid(false);
+      createProjectIconGrid.scrollTop = scrollTop;
+      createProjectIconLoadingMore = false;
+    }, 500);
+  }
+
+  function openCreateProjectIconPopover() {
+    createProjectIconTrigger.classList.add('is-open');
+    createProjectIconPopover.hidden = false;
+    createProjectIconPopover.classList.add('is-open');
+    createProjectIconSearchInput.value = '';
+    renderCreateProjectIconGrid();
+    const rect = createProjectIconTrigger.getBoundingClientRect();
+    const popRect = createProjectIconPopover.getBoundingClientRect();
+    let left = rect.left;
+    if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - 8 - popRect.width;
+    let top = rect.bottom + 6;
+    if (top + popRect.height > window.innerHeight - 8) top = rect.top - popRect.height - 6;
+    createProjectIconPopover.style.left = `${Math.max(8, Math.round(left))}px`;
+    createProjectIconPopover.style.top = `${Math.max(8, Math.round(top))}px`;
+    setTimeout(() => createProjectIconSearchInput.focus(), 30);
+  }
+
+  function closeCreateProjectIconPopover() {
+    createProjectIconTrigger.classList.remove('is-open');
+    createProjectIconPopover.classList.remove('is-open');
+    createProjectIconPopover.hidden = true;
+  }
+
+  createProjectIconTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (createProjectIconPopover.classList.contains('is-open')) closeCreateProjectIconPopover();
+    else openCreateProjectIconPopover();
+  });
+  createProjectIconSearchInput.addEventListener('click', (e) => e.stopPropagation());
+  createProjectIconSearchInput.addEventListener('input', () => renderCreateProjectIconGrid());
+  createProjectIconGrid.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const option = e.target.closest('[data-icon-name]');
+    if (!option) return;
+    setCreateProjectIcon(option.dataset.iconName);
+    renderCreateProjectIconGrid(false); // refresh is-selected highlight without losing scroll depth — stays open, Done (or clicking away) closes it
+  });
+  // Pagination trigger — scrolling near the bottom of the grid itself
+  // loads more (see loadMoreCreateProjectIcons). Unrelated to the
+  // document-level scroll listener below; this one only fires for scrolls
+  // of the grid.
+  createProjectIconGrid.addEventListener('scroll', () => {
+    const el = createProjectIconGrid;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 32) loadMoreCreateProjectIcons();
+  });
+  createProjectIconDoneBtn.addEventListener('click', (e) => { e.stopPropagation(); closeCreateProjectIconPopover(); });
+  document.addEventListener('click', closeCreateProjectIconPopover);
+  // Bug fix: `scroll` doesn't bubble, but a capture-phase listener on
+  // `document` still intercepts it on the way down to whatever descendant
+  // actually fired it — including the icon grid's own internal scroll,
+  // which was closing this popover the instant someone tried to scroll
+  // through the icons. Ignore scrolls whose target is (or is inside) the
+  // grid itself; an outer-page scroll should still auto-close it, since
+  // this popover's position:fixed coordinates would otherwise go stale.
+  document.addEventListener('scroll', (e) => {
+    if (e.target && createProjectIconGrid.contains(e.target)) return;
+    closeCreateProjectIconPopover();
+  }, true);
+  window.addEventListener('resize', closeCreateProjectIconPopover);
+
+  function openCreateProjectModal(onCreate) {
+    createProjectOnCreate = typeof onCreate === 'function' ? onCreate : null;
+    createProjectNameInput.value = '';
+    createProjectDescInput.value = '';
+    createProjectSubmitBtn.disabled = true;
+    closeCreateProjectIconPopover();
+    setCreateProjectIcon('folder');
+    createProjectModalBackdrop.hidden = false;
+    requestAnimationFrame(() => createProjectModalBackdrop.classList.add('is-open'));
+    setTimeout(() => createProjectNameInput.focus(), 50);
+  }
+
+  function closeCreateProjectModal() {
+    createProjectModalBackdrop.classList.remove('is-open');
+    closeCreateProjectIconPopover();
+    setTimeout(() => { createProjectModalBackdrop.hidden = true; }, 200);
+    createProjectOnCreate = null;
+  }
+
+  function submitCreateProjectModal() {
+    if (createProjectSubmitBtn.disabled) return;
+    const project = createProject({ name: createProjectNameInput.value, description: createProjectDescInput.value, icon: createProjectSelectedIcon });
+    const onCreate = createProjectOnCreate;
+    closeCreateProjectModal();
+    if (onCreate) onCreate(project);
+  }
+
+  // Only the name is required — the description is a guiding question, not
+  // a mandatory field (a project's still a project without an articulated
+  // goal yet, that's a reasonable thing to fill in later).
+  createProjectNameInput.addEventListener('input', () => {
+    createProjectSubmitBtn.disabled = !createProjectNameInput.value.trim();
+  });
+  createProjectNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitCreateProjectModal(); }
+  });
+  createProjectSubmitBtn.addEventListener('click', submitCreateProjectModal);
+  createProjectCancelBtn.addEventListener('click', closeCreateProjectModal);
+  createProjectModalClose.addEventListener('click', closeCreateProjectModal);
+  createProjectModalBackdrop.addEventListener('click', (e) => {
+    if (e.target === createProjectModalBackdrop) closeCreateProjectModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (createProjectModalBackdrop.hidden) return;
+    if (e.key !== 'Escape') return;
+    // Escape closes whichever layer is on top first — the icon popover if
+    // it's open, the whole modal otherwise. Two Escapes to fully back out,
+    // same as any nested popover-inside-a-dialog pattern.
+    if (createProjectIconPopover.classList.contains('is-open')) closeCreateProjectIconPopover();
+    else closeCreateProjectModal();
+  });
+
+  // Delete project confirmation modal: opened only from "Delete project"
+  // in an archived card/row's ellipsis (see projectActionsMenuMarkup +
+  // wireProjectActionsDelegation). Same backdrop + scale-in pattern as the
+  // other project modals, own class family since this one is a
+  // destructive confirm, not a form or placeholder.
+  const deleteProjectModalBackdrop = document.getElementById('deleteProjectModalBackdrop');
+  const deleteProjectModalMessage = document.getElementById('deleteProjectModalMessage');
+  const deleteProjectModalClose = document.getElementById('deleteProjectModalClose');
+  const deleteProjectCancelBtn = document.getElementById('deleteProjectCancelBtn');
+  const deleteProjectConfirmBtn = document.getElementById('deleteProjectConfirmBtn');
+  let projectPendingDelete = null;
+  let projectPendingDeleteTile = null;
+
+  function openDeleteProjectModal(project, tileEl) {
+    if (!project) return;
+    projectPendingDelete = project;
+    projectPendingDeleteTile = tileEl || null;
+    deleteProjectModalMessage.innerHTML = `Are you sure you want to delete <strong>${project.name}</strong>? This action can't be undone.`;
+    deleteProjectModalBackdrop.hidden = false;
+    requestAnimationFrame(() => deleteProjectModalBackdrop.classList.add('is-open'));
+  }
+
+  function closeDeleteProjectModal() {
+    deleteProjectModalBackdrop.classList.remove('is-open');
+    setTimeout(() => { deleteProjectModalBackdrop.hidden = true; }, 200);
+    projectPendingDelete = null;
+    projectPendingDeleteTile = null;
+  }
+
+  deleteProjectConfirmBtn.addEventListener('click', () => {
+    if (!projectPendingDelete) return;
+    deleteProject(projectPendingDelete.id, projectPendingDeleteTile);
+    closeDeleteProjectModal();
+  });
+  deleteProjectCancelBtn.addEventListener('click', closeDeleteProjectModal);
+  deleteProjectModalClose.addEventListener('click', closeDeleteProjectModal);
+  deleteProjectModalBackdrop.addEventListener('click', (e) => {
+    if (e.target === deleteProjectModalBackdrop) closeDeleteProjectModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!deleteProjectModalBackdrop.hidden && e.key === 'Escape') closeDeleteProjectModal();
+  });
+
+  // Entry point 1/3: the Projects view's own "New project" button.
+  document.getElementById('newProjectViewBtn').addEventListener('click', () => openCreateProjectModal());
+
+  // Entry point 2/3: the sidebar's "+" on the Projects nav item (hover-reveal,
+  // see docs/sidebar.md). shell.js's initNavActive() already ignores clicks
+  // on .nav-item-add so this doesn't also trigger a nav section change —
+  // stopPropagation here is just an extra guard against anything else
+  // listening on document for clicks (e.g. closeAllProjectActionMenus()).
+  const sidebarNewProjectBtn = document.querySelector('.nav-item[data-nav="projects"] .nav-item-add');
+  if (sidebarNewProjectBtn) {
+    sidebarNewProjectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCreateProjectModal();
+    });
   }
 
   // Event delegation on the two static containers (#projectsGrid/#projectsList)
@@ -2733,6 +4347,21 @@
         // below still run either way; this only stops the click from
         // escaping the container.
         if (e.target.closest('.project-actions-menu')) e.stopPropagation();
+        const editDetailBtn = e.target.closest('[data-edit-detail]');
+        if (editDetailBtn) {
+          e.stopPropagation();
+          closeAllProjectActionMenus();
+          openProjectEditModal(findProjectById(editDetailBtn.dataset.editDetail));
+          return;
+        }
+        const deleteBtn = e.target.closest('[data-delete-project]');
+        if (deleteBtn) {
+          e.stopPropagation();
+          closeAllProjectActionMenus();
+          const tileEl = deleteBtn.closest('.project-card, .project-list-row');
+          openDeleteProjectModal(findProjectById(deleteBtn.dataset.deleteProject), tileEl);
+          return;
+        }
         const pinBtn = e.target.closest('[data-pin-toggle]');
         if (pinBtn) {
           e.stopPropagation();
@@ -2799,6 +4428,50 @@
       });
     });
     document.addEventListener('click', () => closeAllProjectActionMenus());
+  }
+
+  // Sidebar's Pinned ellipsis (Unpin/Invite members/Archive/Edit detail):
+  // shell.js's initSidebarProjectActions() owns ONLY that popover's own
+  // interaction (open/close/position as a portal) — by explicit
+  // instruction, the actual project actions stay owned here, next to
+  // toggleProjectPinned/archiveProject/openProjectEditModal, so the
+  // sidebar's ellipsis and this view's ellipsis always call the exact same
+  // logic instead of drifting into two separate implementations of "the
+  // same action." Attached directly on each .sidebar-project-actions-menu
+  // (not delegated from document) so it fires regardless of shell.js's own
+  // click handler on that same element calling stopPropagation — two
+  // listeners on the same element both still run, propagation only affects
+  // bubbling to ancestors like document.
+  //
+  // "Invite members" has no wiring yet: the sidebar's popover is 4 flat
+  // buttons, it doesn't have the second inline view (.project-invite-view)
+  // this view's popover uses for the actual email form — see
+  // docs/sidebar.md → Pendiente/abierto. Stays a visual no-op (shell.js
+  // still closes the popover) until that UI exists there too.
+  // Extracted so a menu created later (see ensureSidebarPinnedItem's
+  // dynamic ellipsis) can get the exact same action wiring as the 3
+  // wired at page load, instead of duplicating this switch a second time.
+  function wireSidebarActionsMenuBehavior(menu) {
+    const id = menu.dataset.sidebarActionsMenu;
+    menu.addEventListener('click', (e) => {
+      const actionBtn = e.target.closest('[data-sidebar-action]');
+      if (!actionBtn) return;
+      switch (actionBtn.dataset.sidebarAction) {
+        case 'unpin':
+          toggleProjectPinned(id);
+          break;
+        case 'archive':
+          archiveProject(id);
+          break;
+        case 'edit':
+          openProjectEditModal(findProjectById(id));
+          break;
+      }
+    });
+  }
+
+  function wireSidebarProjectActionsBehavior() {
+    document.querySelectorAll('.sidebar-project-actions-menu').forEach(wireSidebarActionsMenuBehavior);
   }
 
   function initProjectsView() {
@@ -2876,13 +4549,467 @@
     // own "New project" option and the sidebar's "+" on Projects: no real
     // creation flow exists yet in this prototype.
     wireProjectActionsDelegation();
+    wireSidebarProjectActionsBehavior();
     renderProjectsFilterMenu();
     updateProjectsFilterButton();
     applyProjectsFilters();
   }
   initProjectsView();
 
+  // ---------- Chats and Tasks view (sidebar nav "Chats and Tasks") ----------
+  // System-wide list of every chat, whatever it's attached to (a Project,
+  // an App, an Agent, or nothing at all) — see docs/chats-and-tasks.md.
+  // Consolidates the 6 chat names that already existed scattered across
+  // the sidebar's Pinned/Recent (static markup) and SEARCH_DATA.chats
+  // (flat, no context) into one array that actually carries a `context`,
+  // same move PROJECTS_DATA already made for the 3 mock projects. Two new
+  // chats (google-drive-sync-check, period-close-agent-review) were added
+  // purely so App-context and Agent-context rows have at least one real
+  // example — every other name here already existed somewhere else in the
+  // prototype.
+  const CHATS_DATA = [
+    { id: 'july-period-close', name: 'July period close', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '2 days ago', archived: false, pinned: false },
+    { id: 'nequi-source-differences', name: 'Nequi source differences', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '3 days ago', archived: false, pinned: false },
+    { id: 'manual-entries-review', name: 'Manual entries review', context: { type: 'project', id: 'q2-journal-entry-audit' }, createdAt: '1 week ago', archived: false, pinned: false },
+    { id: 'base-vs-optimistic-scenario', name: 'Base vs. optimistic scenario', context: { type: 'project', id: 'q3-treasury-forecast' }, createdAt: '2 weeks ago', archived: false, pinned: false },
+    { id: 'google-drive-sync-check', name: 'Google Drive sync check', context: { type: 'app', id: 'google-drive' }, createdAt: '4 days ago', archived: false, pinned: false },
+    { id: 'period-close-agent-review', name: 'Period close agent review', context: { type: 'agent', id: 'period-close-assistant' }, createdAt: '5 days ago', archived: false, pinned: false },
+    { id: 'how-do-i-build-a-reconciliation-rule', name: 'How do I build a reconciliation rule?', context: null, createdAt: '1 week ago', archived: false, pinned: false },
+    { id: 'this-weeks-anomaly-summary', name: "This week's anomaly summary", context: null, createdAt: '2 weeks ago', archived: false, pinned: false },
+  ];
+  let chatsSearchTerm = '';
+  let chatsSelectMode = false;
+  let chatsSelectedIds = new Set();
+
+  function findChatById(id) {
+    return CHATS_DATA.find((c) => c.id === id);
+  }
+
+  // Slugifies into an id, disambiguating with -2/-3/... on collision —
+  // same convention as generateProjectId.
+  function generateChatId(name) {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chat';
+    let id = base;
+    let n = 2;
+    while (findChatById(id)) { id = `${base}-${n}`; n++; }
+    return id;
+  }
+
+  // Starting a new conversation (startChat) registers it here so it shows
+  // up in the two places a real new chat should: the sidebar's Recent list
+  // (prepended, newest first — plain markup, same as the rest of Recent,
+  // not wired to any click/pin behavior yet) and CHATS_DATA, the single
+  // source of truth the Chats and Tasks view reads from. Context comes
+  // from whatever was attached in the empty-state composer's selector
+  // before the first message (contextState.empty.selected), same
+  // { type, id } shape CHATS_DATA already uses elsewhere.
+  function registerNewChat(title) {
+    const selected = contextState.empty && contextState.empty.selected;
+    const chat = {
+      id: generateChatId(title),
+      name: title,
+      context: selected ? { type: selected.type, id: selected.id } : null,
+      createdAt: 'Just now',
+      archived: false,
+      pinned: false,
+    };
+    CHATS_DATA.unshift(chat);
+
+    const recentList = document.getElementById('sidebarRecentList');
+    if (recentList) {
+      const li = document.createElement('li');
+      li.innerHTML = `<a class="chat-row" href="#">${title}</a>`;
+      recentList.prepend(li);
+    }
+
+    // Only re-render if the Chats and Tasks view happens to already be
+    // open — if it isn't, CHATS_DATA is already the source of truth it'll
+    // read from next time it's entered, no render to force nobody sees.
+    if (chatsView && !chatsView.hidden) applyChatsFilters();
+  }
+
+  function getFilteredChats() {
+    const term = chatsSearchTerm.trim().toLowerCase();
+    return CHATS_DATA.filter((c) => !c.archived).filter((c) => !term || c.name.toLowerCase().includes(term));
+  }
+
+  // Same icon+label pairing already used for the chat thread header's
+  // breadcrumb crumb (#chatThreadProjectItem) — just inline in the row
+  // instead of a header crumb. No context renders nothing, not a
+  // placeholder dash: a standalone chat isn't a broken state.
+  function chatContextMarkup(chat) {
+    if (!chat.context) return '<div class="chat-list-row-context"></div>';
+    const item = findPanelItem(chat.context.type, chat.context.id);
+    if (!item) return '<div class="chat-list-row-context"></div>';
+    return `
+      <div class="chat-list-row-context has-context">
+        <i data-lucide="${iconForItem(chat.context.type, item)}"></i>
+        <span>${item.name}</span>
+      </div>`;
+  }
+
+  function chatActionsMenuMarkup(c) {
+    return `
+      <div class="chat-actions-menu" data-chat-actions-menu="${c.id}">
+        <button type="button" class="composer-menu-option" data-chat-pin-toggle="${c.id}">
+          <span class="opt-icon"><i data-lucide="${c.pinned ? 'pin-off' : 'pin'}"></i></span>
+          <span class="opt-body"><span class="opt-title">${c.pinned ? 'Unpin chat' : 'Pin chat'}</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-chat-rename="${c.id}">
+          <span class="opt-icon"><i data-lucide="pencil"></i></span>
+          <span class="opt-body"><span class="opt-title">Rename chat</span></span>
+        </button>
+      </div>`;
+  }
+
+  // Opens the rename modal (see openRenameChatModal, defined with the rest
+  // of the modal wiring above) — a single function so the Chats view's own
+  // ellipsis and the sidebar's Pinned ellipsis (see below) never drift
+  // into two separate implementations, same criterion the Projects view
+  // already applies to its own actions.
+  function renameChat(id) {
+    openRenameChatModal(id);
+  }
+
+  // ---------- Sidebar Pinned: dynamic chat rows ----------
+  // Pinning a chat from this view's ellipsis mirrors it into the sidebar's
+  // Pinned list, same principle as toggleProjectPinned/ensureSidebarPinnedItem
+  // above — but every pinned chat needs its <li> + portal popover created
+  // fresh here, since (unlike the 3 hand-written projects) no chat has any
+  // static markup in the sidebar to begin with. Appended into the SAME
+  // <ul class="project-list"> the projects live in — Pinned is one curated
+  // list the user builds, not a separate "pinned chats" list bolted on
+  // next to it.
+  function findSidebarPinnedChatItem(id) {
+    return document.querySelector(`.sidebar-pinned-chat-item[data-chat-id="${id}"]`);
+  }
+
+  function closeAllSidebarPinnedChatActionMenus() {
+    document.querySelectorAll('.sidebar-pinned-chat-actions-menu.is-open').forEach((m) => m.classList.remove('is-open'));
+    document.querySelectorAll('.sidebar-pinned-chat-actions-btn.is-open').forEach((b) => b.classList.remove('is-open'));
+  }
+
+  // Same portal-popover mechanics as wireDynamicSidebarActionsTrigger
+  // below (position:fixed from getBoundingClientRect, opens to the
+  // trigger's right with a left-flip fallback) — kept as its own function
+  // rather than shared, since that one's close-all is hardcoded to
+  // .sidebar-project-actions-* class names; same "never share a name
+  // across independent components" rule as everywhere else in this file.
+  function wireSidebarPinnedChatActionsTrigger(trigger, menu) {
+    const POPOVER_GAP = 6;
+    const VIEWPORT_MARGIN = 8;
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = menu.classList.contains('is-open');
+      closeAllSidebarPinnedChatActionMenus();
+      if (isOpen) return;
+      menu.classList.add('is-open');
+      trigger.classList.add('is-open');
+      const rect = trigger.getBoundingClientRect();
+      let left = rect.right + POPOVER_GAP;
+      let top = rect.top;
+      const menuRect = menu.getBoundingClientRect();
+      if (left + menuRect.width > window.innerWidth - VIEWPORT_MARGIN) left = rect.left - menuRect.width - POPOVER_GAP;
+      if (top + menuRect.height > window.innerHeight - VIEWPORT_MARGIN) top = window.innerHeight - VIEWPORT_MARGIN - menuRect.height;
+      top = Math.max(VIEWPORT_MARGIN, top);
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+    });
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.closest('[data-sidebar-chat-action]')) closeAllSidebarPinnedChatActionMenus();
+    });
+  }
+
+  function sidebarPinnedChatActionsMenuMarkup(id) {
+    return `
+      <div class="sidebar-pinned-chat-actions-menu" data-sidebar-chat-actions-menu="${id}">
+        <button type="button" class="composer-menu-option" data-sidebar-chat-action="unpin">
+          <span class="opt-icon"><i data-lucide="pin-off"></i></span>
+          <span class="opt-body"><span class="opt-title">Unpin chat</span></span>
+        </button>
+        <button type="button" class="composer-menu-option" data-sidebar-chat-action="rename">
+          <span class="opt-icon"><i data-lucide="pencil"></i></span>
+          <span class="opt-body"><span class="opt-title">Rename chat</span></span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Always reads "Unpin chat" (never "Pin chat") — a menu only exists here
+  // once a chat is already in the Pinned list, so there's no ambiguity to
+  // resolve like the main ellipsis has.
+  function wireSidebarPinnedChatActionsBehavior(menu) {
+    const id = menu.dataset.sidebarChatActionsMenu;
+    menu.addEventListener('click', (e) => {
+      const actionBtn = e.target.closest('[data-sidebar-chat-action]');
+      if (!actionBtn) return;
+      switch (actionBtn.dataset.sidebarChatAction) {
+        case 'unpin':
+          toggleChatPinned(id);
+          break;
+        case 'rename':
+          renameChat(id);
+          break;
+      }
+    });
+  }
+
+  // Creates the <li> + its portal popover the first time a chat is pinned.
+  // No expand/collapse affordance (chats have no nested sub-items to
+  // reveal, unlike projects) — a plain non-toggling button, same "click
+  // does nothing real" convention as the rest of this prototype.
+  function ensureSidebarPinnedChatItem(chat) {
+    const existing = findSidebarPinnedChatItem(chat.id);
+    if (existing) return existing;
+    const list = document.querySelector('.sidebar-section .project-list');
+    if (!list) return null;
+    const li = document.createElement('li');
+    li.className = 'sidebar-pinned-chat-item';
+    li.dataset.chatId = chat.id;
+    li.innerHTML = `
+      <div class="sidebar-pinned-chat-row-wrap">
+        <button type="button" class="sidebar-pinned-chat-row">
+          <i data-lucide="message-circle-more" class="sidebar-pinned-chat-icon"></i>
+          <span class="sidebar-pinned-chat-name">${chat.name}</span>
+        </button>
+        <div class="sidebar-pinned-chat-actions-wrap">
+          <button type="button" class="sidebar-pinned-chat-actions-btn" data-sidebar-chat-actions-trigger="${chat.id}" aria-label="Chat actions">
+            <i data-lucide="more-vertical"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(li);
+
+    // Portal, same reasoning as the project popovers: .sidebar-section's
+    // overflow would clip it if it stayed nested — appended as a plain
+    // sibling of .app-shell near the end of <body>.
+    document.body.insertAdjacentHTML('beforeend', sidebarPinnedChatActionsMenuMarkup(chat.id));
+    const menu = document.querySelector(`.sidebar-pinned-chat-actions-menu[data-sidebar-chat-actions-menu="${chat.id}"]`);
+    const trigger = li.querySelector('[data-sidebar-chat-actions-trigger]');
+    if (menu && trigger) {
+      wireSidebarPinnedChatActionsTrigger(trigger, menu);
+      wireSidebarPinnedChatActionsBehavior(menu);
+    }
+
+    if (window.lucide) lucide.createIcons();
+    return li;
+  }
+
+  document.addEventListener('click', closeAllSidebarPinnedChatActionMenus);
+  document.addEventListener('scroll', closeAllSidebarPinnedChatActionMenus, true);
+  window.addEventListener('resize', closeAllSidebarPinnedChatActionMenus);
+
+  // Pin/unpin: toggles the mock .pinned flag and mirrors it onto the
+  // sidebar's Pinned list — the entry point for both this view's ellipsis
+  // AND the sidebar's own ellipsis (wireSidebarPinnedChatActionsBehavior
+  // above calls this too), so the two never drift into two separate
+  // implementations of "the same action" — same principle already
+  // applied to toggleProjectPinned.
+  function toggleChatPinned(id) {
+    const chat = findChatById(id);
+    if (!chat) return;
+    chat.pinned = !chat.pinned;
+    const sidebarItem = chat.pinned ? ensureSidebarPinnedChatItem(chat) : findSidebarPinnedChatItem(chat.id);
+    if (sidebarItem) sidebarItem.hidden = !chat.pinned;
+    applyChatsFilters();
+  }
+
+  function renderChatsList(chats) {
+    const list = document.getElementById('chatsList');
+    list.hidden = false; // un-hide from whatever showChatsSkeleton() set while "loading"
+    list.classList.toggle('is-select-mode', chatsSelectMode);
+    list.innerHTML = chats.map((c) => `
+      <div class="chat-list-row${chatsSelectedIds.has(c.id) ? ' is-selected' : ''}" data-chat-id="${c.id}">
+        <span class="chat-list-row-check"><i data-lucide="check"></i></span>
+        <i data-lucide="message-circle-more" class="chat-list-row-icon"></i>
+        <span class="chat-list-row-name">${c.name}</span>
+        ${chatContextMarkup(c)}
+        <span class="chat-list-row-date">${c.createdAt}</span>
+        <div class="chat-list-row-actions-wrap">
+          <button type="button" class="chat-list-row-actions-btn" data-chat-actions-trigger="${c.id}" aria-label="Chat actions">
+            <i data-lucide="more-vertical"></i>
+          </button>
+          ${chatActionsMenuMarkup(c)}
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('chatsEmpty').hidden = chats.length > 0;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function applyChatsFilters() {
+    renderChatsList(getFilteredChats());
+  }
+
+  // Loading skeleton — same simulated "under request" delay as Projects
+  // (queryProjectsWithLoading): shown on section entry and on every search
+  // re-query, never on Select/Archive (those don't refetch anything, same
+  // criterion Projects already established for Pin/Unpin/Archive there).
+  function showChatsSkeleton() {
+    document.getElementById('chatsSkeletonList').hidden = false;
+    document.getElementById('chatsList').hidden = true;
+    document.getElementById('chatsEmpty').hidden = true;
+  }
+  function hideChatsSkeleton() {
+    document.getElementById('chatsSkeletonList').hidden = true;
+  }
+
+  // Single timer so a new query (e.g. typing again right after entering
+  // the section) cancels whichever mock fetch was still "in flight",
+  // instead of both landing and racing each other.
+  let chatsQueryTimer = null;
+  function queryChatsWithLoading(delay) {
+    showChatsSkeleton();
+    clearTimeout(chatsQueryTimer);
+    chatsQueryTimer = setTimeout(() => {
+      hideChatsSkeleton();
+      applyChatsFilters();
+    }, delay);
+  }
+
+  // Section entry gets the longer "first load" delay (700ms); re-queries
+  // from typing get the shorter one (400ms) — same distinction Projects
+  // already uses for the same reason.
+  function loadChatsView() {
+    queryChatsWithLoading(700);
+  }
+
+  function updateChatsSelectUI() {
+    document.getElementById('chatsHeaderDefault').hidden = chatsSelectMode;
+    document.getElementById('chatsHeaderSelect').hidden = !chatsSelectMode;
+    const count = chatsSelectedIds.size;
+    document.getElementById('chatsSelectCount').textContent = `${count} selected`;
+    document.getElementById('chatsArchiveBtn').disabled = count === 0;
+  }
+
+  function setChatsSelectMode(on) {
+    chatsSelectMode = on;
+    if (!on) chatsSelectedIds.clear();
+    updateChatsSelectUI();
+    applyChatsFilters();
+  }
+
+  function toggleChatSelected(id) {
+    if (chatsSelectedIds.has(id)) chatsSelectedIds.delete(id); else chatsSelectedIds.add(id);
+    updateChatsSelectUI();
+    applyChatsFilters();
+  }
+
+  // Archive is the only bulk action for now (explicit: no delete, no move
+  // to project) — removes the selected chats from this list. Archiving a
+  // pinned chat also drops it from the sidebar's Pinned list (same
+  // criterion as Projects' own Archive). No "Archived" view to see them
+  // again afterwards, same gap already accepted for Projects' own Archive
+  // (see docs/home.md).
+  function archiveSelectedChats() {
+    if (!chatsSelectedIds.size) return;
+    CHATS_DATA.forEach((c) => {
+      if (!chatsSelectedIds.has(c.id)) return;
+      c.archived = true;
+      const sidebarItem = findSidebarPinnedChatItem(c.id);
+      if (sidebarItem) sidebarItem.hidden = true;
+    });
+    setChatsSelectMode(false);
+  }
+
+  function closeAllChatActionMenus() {
+    document.querySelectorAll('.chat-actions-menu.is-open').forEach((m) => m.classList.remove('is-open'));
+    document.querySelectorAll('.chat-list-row-actions-btn.is-open').forEach((b) => b.classList.remove('is-open'));
+  }
+
+  // Delegated (rows re-render on every filter/select change), same
+  // reasoning as wireProjectActionsDelegation above.
+  function wireChatsListDelegation() {
+    const list = document.getElementById('chatsList');
+    list.addEventListener('click', (e) => {
+      const actionsTrigger = e.target.closest('[data-chat-actions-trigger]');
+      if (actionsTrigger) {
+        e.stopPropagation();
+        const id = actionsTrigger.dataset.chatActionsTrigger;
+        const menu = list.querySelector(`.chat-actions-menu[data-chat-actions-menu="${id}"]`);
+        if (!menu) return;
+        const willOpen = !menu.classList.contains('is-open');
+        closeAllChatActionMenus();
+        menu.classList.toggle('is-open', willOpen);
+        actionsTrigger.classList.toggle('is-open', willOpen);
+        return;
+      }
+      const pinBtn = e.target.closest('[data-chat-pin-toggle]');
+      if (pinBtn) {
+        e.stopPropagation();
+        closeAllChatActionMenus();
+        toggleChatPinned(pinBtn.dataset.chatPinToggle);
+        return;
+      }
+      // "Rename chat" is visible and openable but deliberately does
+      // nothing yet — no modal, no inline field — per explicit
+      // instruction; it only closes the popover, same placeholder
+      // criterion as other not-yet-wired actions in this prototype.
+      const renameBtn = e.target.closest('[data-chat-rename]');
+      if (renameBtn) {
+        e.stopPropagation();
+        renameChat(renameBtn.dataset.chatRename);
+        closeAllChatActionMenus();
+        return;
+      }
+      if (e.target.closest('.chat-actions-menu')) { e.stopPropagation(); return; }
+      if (!chatsSelectMode) return;
+      const row = e.target.closest('.chat-list-row');
+      if (row) toggleChatSelected(row.dataset.chatId);
+    });
+    document.addEventListener('click', () => closeAllChatActionMenus());
+  }
+
+  function initChatsView() {
+    const searchToggle = document.getElementById('chatsSearchToggle');
+    const searchInline = document.getElementById('chatsSearchInline');
+    const searchInput = document.getElementById('chatsSearchInput');
+    const searchClear = document.getElementById('chatsSearchClear');
+    function openChatsSearch() {
+      searchToggle.hidden = true;
+      searchInline.classList.add('is-open');
+      searchInput.focus();
+    }
+    function closeChatsSearch() {
+      searchInline.classList.remove('is-open');
+      searchToggle.hidden = false;
+      searchInput.value = '';
+      chatsSearchTerm = '';
+      applyChatsFilters();
+    }
+    searchToggle.addEventListener('click', openChatsSearch);
+    searchClear.addEventListener('click', closeChatsSearch);
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChatsSearch(); });
+    // Debounced like Projects' own search: the term updates on every
+    // keystroke (nothing typed is ever lost), but the skeleton + re-render
+    // only fire once typing pauses for 300ms.
+    let chatsSearchDebounce = null;
+    searchInput.addEventListener('input', (e) => {
+      chatsSearchTerm = e.target.value;
+      clearTimeout(chatsSearchDebounce);
+      chatsSearchDebounce = setTimeout(() => queryChatsWithLoading(400), 300);
+    });
+
+    document.getElementById('chatsSelectToggleBtn').addEventListener('click', () => setChatsSelectMode(true));
+    document.getElementById('chatsSelectCancelBtn').addEventListener('click', () => setChatsSelectMode(false));
+    document.getElementById('chatsArchiveBtn').addEventListener('click', archiveSelectedChats);
+
+    // "New Chat" here is the same action as the sidebar's — reuses its
+    // click handlers wholesale (reset to empty state, nav active state,
+    // etc.) instead of re-implementing any of it.
+    document.getElementById('chatsNewChatBtn').addEventListener('click', () => {
+      document.getElementById('newChatBtn').click();
+    });
+
+    wireChatsListDelegation();
+    updateChatsSelectUI();
+  }
+  initChatsView();
+
   const projectsView = document.getElementById('projectsView');
+  const chatsView = document.getElementById('chatsView');
 
   window.onNavSectionChange = function (section) {
     if (section === 'new-chat') return; // handled by its own click handler below, not a section view.
@@ -2894,8 +5021,22 @@
       chatPanelExpandToggle.hidden = true;
       setPanelExpanded(false);
       if (sectionEmptyEl) sectionEmptyEl.hidden = true;
+      chatsView.hidden = true;
       projectsView.hidden = false;
       loadProjectsView();
+      return;
+    }
+    if (section === 'chats-tasks') {
+      chatThread.hidden = true;
+      chatEmpty.hidden = true;
+      chatPanelToggle.hidden = true;
+      chatPanelExpandToggle.hidden = true;
+      setPanelExpanded(false);
+      if (sectionEmptyEl) sectionEmptyEl.hidden = true;
+      projectsView.hidden = true;
+      chatsView.hidden = false;
+      setChatsSelectMode(false); // fresh state every time the section is (re)entered
+      loadChatsView();
       return;
     }
     const copy = sectionCopy[section];
@@ -2906,6 +5047,7 @@
     chatPanelExpandToggle.hidden = true;
     setPanelExpanded(false);
     projectsView.hidden = true;
+    chatsView.hidden = true;
     let empty = sectionEmptyEl;
     if (!empty) {
       empty = document.createElement('div');
@@ -2926,6 +5068,7 @@
     const empty = document.getElementById('sectionEmpty');
     if (empty) empty.hidden = true;
     projectsView.hidden = true;
+    chatsView.hidden = true;
     chatEmpty.hidden = false;
   });
 

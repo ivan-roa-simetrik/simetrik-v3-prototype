@@ -46,38 +46,68 @@ function initSectionCollapse() {
 }
 
 // Per-project ellipsis in the sidebar's Pinned section: opens a popover with
-// Unpin/Invite members/Archive/Edit info. Scoped to each .project-item via
-// .closest() (not by project id) because none of these actions are wired to
+// Unpin/Invite members/Archive/Edit info. None of these actions are wired to
 // real behavior yet — they're placeholders added ahead of defining what each
-// one actually triggers (see docs/sidebar.md → Pendiente/abierto). Static
-// markup (not re-rendered like the Projects view's cards), so plain
-// addEventListener per element is enough — no delegation needed.
+// one actually triggers (see docs/sidebar.md → Pendiente/abierto).
+//
+// The popover itself is a portal: it lives as a sibling of .app-shell near
+// the end of <body> (matched to its trigger via data-sidebar-actions-menu /
+// data-sidebar-actions-trigger, same project id), NOT nested inside the
+// Pinned list. The Pinned list sits inside three nested overflow-clipping
+// ancestors (.sidebar-section's own scroll, plus .sidebar-section-body/
+// -body-inner's overflow:hidden for the collapse animation) — an
+// overflow!=visible ancestor clips a descendant popover no matter what
+// position value it uses, so portaling out of that subtree is the only
+// reliable fix. Opens to the trigger's right (not below it), computed from
+// getBoundingClientRect() since `position: fixed` needs real coordinates
+// once the element isn't nested where CSS could anchor it with top/right.
 function initSidebarProjectActions() {
-  const menus = Array.from(document.querySelectorAll('.sidebar-project-actions-menu'));
-  if (!menus.length) return;
+  const triggers = Array.from(document.querySelectorAll('[data-sidebar-actions-trigger]'));
+  if (!triggers.length) return;
+
+  const POPOVER_GAP = 6; // space between the trigger's right edge and the popover
+  const VIEWPORT_MARGIN = 8; // never render flush against the window edge
 
   function closeAllSidebarActionMenus() {
     document.querySelectorAll('.sidebar-project-actions-menu.is-open').forEach((menu) => menu.classList.remove('is-open'));
     document.querySelectorAll('.sidebar-project-actions-btn.is-open').forEach((btn) => btn.classList.remove('is-open'));
   }
 
-  menus.forEach((menu) => {
-    const wrap = menu.closest('.sidebar-project-actions-wrap');
-    const trigger = wrap && wrap.querySelector('.sidebar-project-actions-btn');
-    if (!trigger) return;
+  function openSidebarActionMenu(trigger, menu) {
+    closeAllSidebarActionMenus();
+    menu.classList.add('is-open');
+    trigger.classList.add('is-open');
+
+    const rect = trigger.getBoundingClientRect();
+    let left = rect.right + POPOVER_GAP;
+    let top = rect.top;
+
+    // Clamp against the viewport, not against the sidebar — the popover
+    // lives at <body> level now, so nothing about the sidebar's own width
+    // constrains it, only the actual window edges do.
+    const menuRect = menu.getBoundingClientRect(); // safe to measure now, display:block already applied via .is-open
+    if (left + menuRect.width > window.innerWidth - VIEWPORT_MARGIN) {
+      left = rect.left - menuRect.width - POPOVER_GAP; // not enough room to the right — flip to the left of the trigger instead
+    }
+    if (top + menuRect.height > window.innerHeight - VIEWPORT_MARGIN) {
+      top = window.innerHeight - VIEWPORT_MARGIN - menuRect.height;
+    }
+    top = Math.max(VIEWPORT_MARGIN, top);
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  }
+
+  triggers.forEach((trigger) => {
+    const id = trigger.getAttribute('data-sidebar-actions-trigger');
+    const menu = document.querySelector(`.sidebar-project-actions-menu[data-sidebar-actions-menu="${id}"]`);
+    if (!menu) return;
 
     trigger.addEventListener('click', (e) => {
-      // .project-row lives next to this button (not around it, to keep
-      // markup valid — no nested <button>s), so this isn't strictly needed
-      // for the expand toggle, but it stops the click from immediately
-      // re-closing the menu via the document listener below.
-      e.stopPropagation();
+      e.stopPropagation(); // stop this from immediately re-closing via the document listener below
       const isOpen = menu.classList.contains('is-open');
       closeAllSidebarActionMenus();
-      if (!isOpen) {
-        menu.classList.add('is-open');
-        trigger.classList.add('is-open');
-      }
+      if (!isOpen) openSidebarActionMenu(trigger, menu);
     });
 
     // Clicking an option doesn't do anything real yet — just closes the
@@ -89,6 +119,14 @@ function initSidebarProjectActions() {
   });
 
   document.addEventListener('click', closeAllSidebarActionMenus);
+  // The popover's position is a one-time snapshot of the trigger's
+  // coordinates — if the Pinned list (or the page) scrolls or the window
+  // resizes, that snapshot goes stale. Closing is simpler and safer here
+  // than re-tracking position live for a menu whose actions are all no-ops
+  // anyway. `true` = capture phase, since scroll doesn't bubble but this
+  // still needs to hear about scrolls from inside .sidebar-section.
+  document.addEventListener('scroll', closeAllSidebarActionMenus, true);
+  window.addEventListener('resize', closeAllSidebarActionMenus);
 }
 
 function initNavActive() {

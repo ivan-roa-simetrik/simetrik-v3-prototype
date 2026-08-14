@@ -227,6 +227,42 @@ Se construyó una vista de detalle propia por proyecto (clic en el cuerpo de una
 
 Queda esta nota en vez de borrar el registro por completo, siguiendo la misma convención que ya usa `login.md` para pasadas revertidas — así no se repite el mismo camino sin querer más adelante.
 
+## Clic en una card/fila: abre el chat del proyecto (2026-08-14)
+
+Reemplazo real de lo anterior — clickear el cuerpo de una card/fila (no su elipsis) ya no lleva a una página de detalle, abre **el chat propio de ese proyecto**. Secuencia pedida explícitamente por el usuario, aclarada con una pregunta de por medio (ver `openProjectChat()`):
+
+1. **Colapsa el sidebar de navegación** si estaba expandido (`#sidebar.is-collapsed` — mismo mecanismo que ya usa el botón real, idempotente si ya estaba colapsado).
+2. **Entra directo al hilo de chat con cero mensajes**, no a la pantalla de saludo completa (`#chatEmpty`) — decisión tomada tras una ronda de aclaración: generalizar el mecanismo de 370px+panel (`has-panel`, hoy exclusivo de `#chatThread`) para que también aplicara sobre `#chatEmpty` hubiera significado tocar bastante código ya afinado (ver `chat-side-panel.md`, varios bugs ya encontrados/corregidos ahí). En cambio, se construyó un saludo propio y más angosto **dentro** de `#chatThread`.
+3. **El panel lateral derecho se abre solo**, con este proyecto ya cargado como su único tab — mismo efecto que si el usuario lo hubiera elegido a mano desde el picker "What do you want to open?" del panel.
+
+### El saludo angosto (`#chatThreadGreeting`)
+
+Pedido explícito, con una segunda ronda de precisión sobre qué mantener y qué no:
+
+- **Mantiene**: el ícono del agente (más chico, 32px vs. 48px del saludo completo) y el titular animado "What do you want to build?" con su mismo comportamiento — shine letra por letra + ciclo de palabras (build/audit/operate). `initGreetingShine()` se generalizó para aceptar un id de headline en vez de tener `#chatGreetingHeadline` hardcodeado, y ahora se llama dos veces (una por cada headline) — evita una segunda copia de esa lógica que se hubiera desincronizado.
+- **Tipografía más chica**: `16px` (vs. `26px` del saludo completo) — pensado para el ancho angosto de 370px.
+- **No incluye**: la barra gris de selector de proyecto (igual de invisible que siempre en el composer docked — ya estaba en `display: none` por CSS, no hubo que tocar nada ahí) ni los suggestion chips — el contexto de proyecto ya está establecido por cómo se llegó acá, así que volver a preguntar "select a project" no aplica.
+- **Subtítulo propio, no el genérico de `#chatEmpty`** (pasada de refinamiento, mismo día): en vez de "Tell me the financial scenario…", `#chatThreadGreetingSubtitle` dice `"Ask me to dig into a specific part of {nombre del proyecto}."` — pedido explícito del usuario, invita a algo concreto sobre *ese* proyecto en particular, en vez de un texto genérico que no lo menciona. Se setea en `openProjectChat()`, junto con el resto del contenido del saludo.
+- **El campo de texto es el composer docked de siempre** (`#dockedInput`), sin ningún campo nuevo — "comprimido" ya lo describe bien: es exactamente el mismo composer que aparece una vez el hilo tiene mensajes.
+- **Bug corregido: el brillo del titular no se veía.** La animación letra por letra (`@keyframes letterShine`) estaba scopeada al selector `.chat-empty h1 .glow-letter` — como el titular angosto es un `<h2>` dentro de `.chat-thread-greeting`, no de `.chat-empty`, `initGreetingShine()` generaba los `<span class="glow-letter">` correctamente pero la regla CSS nunca los matcheaba, así que nunca animaban. Fix: el selector ahora cubre ambos (`.chat-empty h1 .glow-letter, .chat-thread-greeting h2 .glow-letter`).
+
+### Primer mensaje real: mismo comportamiento que "inicializar un chat"
+
+`sendFromDocked()` ahora detecta si `#chatMessages` está vacío (cero mensajes) y, si es así, llama a `startChat(text)` en vez de `continueChat(text)` — el primer mensaje tipeado en este flujo dispara el mismo título derivado, `registerNewChat()`, y la respuesta canned "completa" (900ms + resumen de reconciliación), no el "Done, updated." más corto de un follow-up. `startChat()` también oculta `#chatThreadGreeting`/muestra `#chatMessages` de nuevo — no-ops inofensivos en el flujo normal (saludo completo → primer mensaje), donde ninguno de los dos estaba tocado.
+
+### Header del hilo: "{Proyecto} / New chat"
+
+`contextState.empty.selected` se setea directamente al abrir (mismo campo que ya usa el selector de contexto real, sin pasar por `selectContext()` porque ese trigger UI no existe en este flujo) — `updateChatThreadHeader()` y `registerNewChat()` ya leen de ahí, así que el breadcrumb y el chat registrado en Recent quedan asociados al proyecto correcto sin lógica nueva. Llamado con `firstPrompt` vacío, el label del chat cae en "New chat" (mismo fallback que ya tenía `deriveChatTitle('')`).
+
+### El tab del proyecto en el panel: textura de mapa
+
+`renderPanelTabContent()` agrega `.panel-tab-content--map` cuando el tab activo es de tipo `project` — fondo con grid de puntos (`radial-gradient` repetido, técnica típica de canvas/whiteboard) para leerse como una vista de mapa/flow, no como el texto plano placeholder que sigue usando Apps/Agents. **El contenido real de qué va dentro de esa vista sigue sin definir** — el usuario aclaró explícitamente que esto es solo la textura de fondo, el contenido viene en una pasada posterior.
+
+### Pendiente / abierto
+
+- **Contenido real del tab de proyecto**: por ahora solo tiene la textura de mapa + el texto placeholder de siempre ("Project view — {nombre}") encima. Qué va efectivamente dentro (¿un builder visual? ¿un dashboard?) queda para la próxima instrucción del usuario.
+- Mismo mecanismo de un solo tab: `resetPanelTabs()` se llama antes de abrir, así que si el panel ya tenía otros tabs abiertos (de una sesión de chat anterior), se pierden — coherente con "empezar un chat nuevo para este proyecto", pero vale confirmarlo si alguna vez se quiere que convivan.
+
 ## Archivos relacionados
 
 - `flows/home/index.html` — markup + JS del home completo

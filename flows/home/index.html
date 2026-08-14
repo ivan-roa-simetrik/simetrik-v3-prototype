@@ -40,7 +40,12 @@
      ease-in-out on both edges so it reads as a smooth glow, not a flicker
      — then the sweep sits still (full --color-ink) for a ~3s pause before
      it plays again. */
-  .chat-empty h1 .glow-letter {
+  /* Also covers .chat-thread-greeting's own h2 (2026-08-14 bug fix) — the
+     selector was scoped only to .chat-empty's h1, so the narrow greeting's
+     headline (built by reusing the same initGreetingShine()/.glow-letter
+     markup, see openProjectChat) generated the spans correctly but never
+     actually animated, since this rule never matched them. */
+  .chat-empty h1 .glow-letter, .chat-thread-greeting h2 .glow-letter {
     display: inline-block;
     animation: letterShine 5.2s ease-in-out infinite;
   }
@@ -59,6 +64,19 @@
   /* Agent icon above the greeting */
   .chat-agent-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
   .chat-agent-icon { width: 48px; height: 48px; object-fit: contain; }
+
+  /* Narrow echo of .chat-empty's greeting, shown inside .chat-thread-main
+     when a chat opens straight into the thread view with no messages yet
+     (see openProjectChat) — same icon + animated headline, smaller
+     typography to fit the 370px column, no subhead/project bar/chips. */
+  .chat-thread-greeting {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 16px; text-align: center;
+  }
+  .chat-thread-greeting-icon-wrap { width: 40px; height: 40px; }
+  .chat-thread-greeting-icon-wrap .chat-agent-icon { width: 32px; height: 32px; }
+  .chat-thread-greeting h2 { font-size: 16px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
+  .chat-thread-greeting p { font-size: 13px; color: var(--color-ink-soft); max-width: 300px; }
 
   .chat-input-shell {
     width: 100%; max-width: 620px; background: var(--color-surface);
@@ -317,6 +335,44 @@
     flex: 0 0 0%; opacity: 0; border-right-color: transparent; pointer-events: none;
   }
 
+  /* Drag-to-resize the chat column. Only shown while the panel is open and
+     not in expanded/focus mode — dragging a 0-width column does nothing.
+     Sits between .chat-thread-main and .chat-side-panel as its own flex
+     item, but width:10px is cancelled out by margin:0 -5px (10 + -5 + -5 =
+     0) so it contributes zero width to the row — neither neighbor is
+     pushed, and no divider line sits there while idle. The negative
+     margins pull it 5px into each neighbor, giving the cursor a real
+     10px-wide hit area to land on without it ever being visible or taking
+     layout space. */
+  .chat-resize-handle {
+    flex-shrink: 0; width: 10px; margin: 0 -5px; position: relative; z-index: 6;
+    cursor: col-resize; background: transparent; display: none;
+  }
+  .chat-thread.has-panel:not(.is-panel-expanded) .chat-resize-handle { display: block; }
+  /* The visible 4×50 grip mark is a real child, not the handle's own
+     ::before — a real element gets its own independent :hover, scoped to
+     just its 4×50 box, which is what lets data-tooltip live here instead
+     of on the full-height/10px-wide parent. Put the tooltip on the parent
+     and it fires anywhere along the whole invisible drag strip; putting it
+     here means it only shows when the cursor is actually over the grip
+     mark itself (bug fix, 2026-08-14). The grip mark still shows on hover
+     anywhere on the wider parent strip (not just its own hover) so the
+     "you can drag here" affordance isn't limited to a 50px-tall sliver —
+     only the tooltip is that strict. */
+  .chat-resize-handle-grip {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 4px; height: 50px; border-radius: 2px; background: transparent;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .chat-resize-handle:hover .chat-resize-handle-grip,
+  .chat-resize-handle.is-dragging .chat-resize-handle-grip { background: rgba(85, 85, 95, 0.78); } /* --color-ink-soft, lightened — a touch softer than the full-strength token */
+  /* While actively dragging, kill text selection + force the resize
+     cursor everywhere (not just over the thin handle), same trick every
+     resizable-pane implementation uses so a fast mouse doesn't "lose" the
+     handle mid-drag and select the chat's own text instead. */
+  body.is-resizing-chat-column { cursor: col-resize; user-select: none; }
+  body.is-resizing-chat-column * { cursor: col-resize !important; }
+
   /* Side panel content: an "open picker" (nothing open yet — asks what to
      open) and a tabbed view (>=1 tab open), mutually exclusive via
      [hidden]. Map isn't a third pickable option here — opening a Project
@@ -485,6 +541,15 @@
   .panel-tab-add-btn:hover { background: var(--color-surface); color: var(--color-ink); }
   .panel-tab-add-btn svg, .panel-tab-add-btn i { width: 15px; height: 15px; }
   .panel-tab-content { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; color: var(--color-ink-faint); }
+  /* Project tab reads as a canvas/map, not a plain text panel — dot-grid
+     texture (same technique flow/whiteboard tools use for their canvas
+     background), evoking "a map view" ahead of any real content being
+     defined for what actually lives inside it. */
+  .panel-tab-content--map {
+    background-color: var(--color-surface);
+    background-image: radial-gradient(var(--color-border-strong) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
 
   /* Chat thread header: chat icon + name, or (when a project was picked
      before starting) project icon + project name / chat icon + chat name. */
@@ -494,16 +559,96 @@
      padding-right: 92px clears .chat-panel-actions (two 28px buttons + 8px
      gap, offset right:20px from the panel edge, plus buffer). */
   .chat-thread-header {
-    display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 92px 0 20px;
+    position: relative;
+    display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 128px 0 20px;
     border-bottom: 1px solid var(--color-border); flex-shrink: 0;
   }
-  .chat-thread-header-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  /* overflow: hidden here is load-bearing, not decorative — without it, a
+     long chat name could visually spill past this item's own shrunk box
+     instead of being clipped by its span's ellipsis. (The header's own
+     icon buttons are position: absolute, not flex items in this row
+     anymore — see .chat-thread-header-icon-btn — so this is purely about
+     the text itself staying tidy, not about protecting their position.) */
+  .chat-thread-header-item { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
   .chat-thread-header-item span {
     font-size: 13px; font-weight: 500; color: var(--color-ink-soft);
+    /* min-width: 0 is the actual fix (bug found 2026-08-14): a flex item's
+       default min-width is auto, which for white-space: nowrap text
+       resolves to the text's full, unwrapped width — so text-overflow:
+       ellipsis below never actually had room to kick in, no matter how
+       long the chat name got. Overriding it to 0 is what lets this span
+       shrink below its content's natural size and actually truncate. */
+    min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chat-thread-header-item svg, .chat-thread-header-item i { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
   .chat-thread-header-sep { font-size: 13px; color: var(--color-ink-faint); flex-shrink: 0; }
+  /* Bug fix (2026-08-14): margin-left: auto inside the header's own flex
+     row was still, in practice, at the mercy of its siblings' flex-shrink
+     math — reliable in theory, but the user kept seeing it drift off the
+     right edge. Taken out of flow entirely instead: position: absolute
+     relative to .chat-thread-header (now position: relative), pinned at a
+     fixed offset that never depends on how long the project/chat names
+     are or how the row's other flex items behave — the header's
+     padding-right (128px) keeps the text content clear of both regardless
+     of their exact offsets. Shared base class, two positioned variants:
+     history stays at the user's own confirmed right: 10px; new-chat sits
+     immediately to its left (28px width + 8px gap = 46px). */
+  .chat-thread-header-icon-btn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 28px; height: 28px; border-radius: var(--radius-sm); border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-faint); cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .chat-thread-header-icon-btn:hover, .chat-thread-header-icon-btn.is-open { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .chat-thread-header-icon-btn svg, .chat-thread-header-icon-btn i { width: 16px; height: 16px; }
+  .chat-thread-header-icon-btn--history { right: 10px; }
+  .chat-thread-header-icon-btn--new-chat { right: 46px; }
+  /* Bug fix (2026-08-14): right:10px/46px only stays clear of
+     .chat-panel-actions while the header is narrowed to the 370px docked
+     column (.has-panel). Click "Hide panel" and .chat-thread-main (and
+     this header inside it) snaps back to full width — but right:Xpx is
+     measured from the header's own right edge, which is now the pane's
+     right edge too, so these icons land directly under chatPanelToggle/
+     chatPanelExpandToggle instead of tucked safely inside the narrow
+     column. Reuse the same 92px reserve .panel-tabs-bar already carves out
+     for the same wrapper (two 28px buttons + 8px gap, right:20px offset,
+     plus buffer — see .panel-tabs-bar comment above) so these two icons
+     shift clear of it whenever the header isn't docked narrow. */
+  .chat-thread:not(.has-panel) .chat-thread-header-icon-btn--history { right: 102px; }
+  .chat-thread:not(.has-panel) .chat-thread-header-icon-btn--new-chat { right: 138px; }
+
+  /* ---------- Project chats popover ---------- */
+  .chat-history-popover {
+    position: fixed; z-index: 220; width: 300px;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); display: none; flex-direction: column; overflow: hidden;
+  }
+  .chat-history-popover.is-open { display: flex; }
+  .chat-history-search {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+  }
+  .chat-history-search i, .chat-history-search svg { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chat-history-search input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 13px; color: var(--color-ink); font-family: inherit;
+  }
+  .chat-history-search input::placeholder { color: var(--color-ink-faint); }
+  .chat-history-subtitle {
+    padding: 10px 12px 4px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+    color: var(--color-ink-faint); flex-shrink: 0;
+  }
+  .chat-history-list { padding: 4px 8px 8px; max-height: 280px; overflow-y: auto; }
+  .chat-history-item {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; border-radius: var(--radius-sm);
+    border: none; background: transparent; cursor: pointer; text-align: left; font-size: 13px; color: var(--color-ink);
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .chat-history-item:hover { background: var(--color-surface-sunken); }
+  .chat-history-item i, .chat-history-item svg { width: 15px; height: 15px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .chat-history-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-history-empty { padding: 20px 8px; text-align: center; font-size: 12.5px; color: var(--color-ink-faint); }
   /* Belongs to the view (.chat-pane), not the chat column — stays fixed
      top-right of the whole panel regardless of has-panel/collapse state.
      top:11px centers it on the same 50px-tall header row as the sidebar
@@ -708,6 +853,7 @@
     min-height: 124px;
     border: 1px solid var(--color-border); border-radius: var(--radius-md);
     padding: 16px 16px 4px; background: var(--color-surface);
+    cursor: pointer; /* opens the project's own chat, see openProjectChat */
     transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
   }
   /* Hover gives feedback via shadow/border only — background stays white/
@@ -775,6 +921,7 @@
      The actions ellipsis fading in is the only hover feedback. */
   .project-list-row {
     display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-surface);
+    cursor: pointer; /* opens the project's own chat, see openProjectChat */
     transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
   }
   .project-list-row + .project-list-row { border-top: 1px solid var(--color-border); }
@@ -1693,8 +1840,45 @@
             <i data-lucide="message-circle-more"></i>
             <span id="chatThreadChatLabel"></span>
           </div>
+          <!-- Both only shown when the active chat is attached to a project
+               (see updateChatThreadHeader) — a plain chat with no project
+               (started from "New Chat", not from a project's card) gets
+               neither. Positioned absolute (.chat-thread-header-icon-btn),
+               not flex items in this row, so they stay pinned to fixed
+               spots regardless of how long the project/chat names get.
+               tooltip-end (bug fix 2026-08-14): both sit right at the edge
+               of the 370px column when has-panel is active — the default
+               centered .tooltip-bottom would run past that edge and get
+               clipped by .chat-thread-main's own overflow: hidden;
+               tooltip-end right-aligns them instead, same fix already used
+               by the Hide panel/Expand buttons in the same corner. -->
+          <button type="button" class="chat-thread-header-icon-btn chat-thread-header-icon-btn--new-chat tooltip-bottom tooltip-end" id="chatNewProjectChatBtn" aria-label="New chat" data-tooltip="New chat" hidden>
+            <i data-lucide="message-circle-plus"></i>
+          </button>
+          <button type="button" class="chat-thread-header-icon-btn chat-thread-header-icon-btn--history tooltip-bottom tooltip-end" id="chatHistoryToggle" aria-label="Project chats" data-tooltip="Project chats" hidden>
+            <i data-lucide="rotate-ccw-clock"></i>
+          </button>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
+        <!-- Shown instead of #chatMessages when a chat starts already inside
+             the thread view with zero messages yet (see openProjectChat) —
+             a narrower, smaller-type echo of #chatEmpty's own greeting
+             (agent icon + animated headline, same shine/word-cycle
+             behavior), without the project-select bar or suggestion chips:
+             at 370px there isn't room for either, and the project context
+             here is already established (that's the whole point of
+             entering this way), so re-asking "select a project" doesn't
+             apply. Its own subtitle names the project directly instead
+             (set in openProjectChat, not #chatEmpty's generic subhead).
+             Hidden again by startChat() the moment a first message
+             actually gets sent. -->
+        <div class="chat-thread-greeting" id="chatThreadGreeting" hidden>
+          <div class="chat-agent-icon-wrap chat-thread-greeting-icon-wrap">
+            <img src="../../assets/img/simetrik-agent-icon.png" alt="" class="chat-agent-icon" />
+          </div>
+          <h2 id="chatThreadGreetingHeadline" aria-label="What do you want to build today?">What do you want to build today?</h2>
+          <p id="chatThreadGreetingSubtitle"></p>
+        </div>
         <div class="project-select-wrap project-select-wrap--docked">
           <div class="composer-dropdown project-select-dropdown">
             <div class="project-select-bar" data-project-bar="docked">
@@ -1797,6 +1981,11 @@
         </div>
         </div>
       </div>
+      </div>
+      <!-- Drag to resize the chat column while the side panel is open —
+           hidden otherwise (see .chat-resize-handle in <style>). -->
+      <div class="chat-resize-handle" id="chatResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize chat">
+        <span class="chat-resize-handle-grip" data-tooltip="Arrastra para redimensionar"></span>
       </div>
       <!-- Side panel: opened via the panel-right toggle in the chat header.
            Two states, mutually exclusive via [hidden]: the open picker
@@ -2134,6 +2323,21 @@
   <button type="button" class="create-project-icon-done" id="createProjectIconDoneBtn">Done</button>
 </div>
 
+<!-- Project chats popover: opened from the chat thread header's history
+     icon (#chatHistoryToggle, only visible while the active chat is
+     attached to a project). Rendered as a sibling of .app-shell, same
+     portal reasoning as every other popover here — .chat-thread-main has
+     overflow:hidden, so a popover nested inside the header could get
+     clipped instead of floating over the column's own edges. -->
+<div class="chat-history-popover" id="chatHistoryPopover" hidden>
+  <div class="chat-history-search">
+    <i data-lucide="search"></i>
+    <input type="text" id="chatHistorySearchInput" placeholder="Search chats" autocomplete="off" />
+  </div>
+  <div class="chat-history-subtitle">Project chats</div>
+  <div class="chat-history-list" id="chatHistoryList"></div>
+</div>
+
 <!-- Delete project confirmation modal: opened from "Delete project" in an
      archived card/row's ellipsis (see openDeleteProjectModal). Same
      backdrop/scale-in shell as the other project modals, its own class
@@ -2244,10 +2448,27 @@
   </button>
 </div>
 
+<!-- Collapsed-sidebar Pinned popover: opens to the right of the Pinned
+     section's icon when the sidebar is at 52px (see
+     initSidebarCollapsedPinnedPopover in shell.js). Portal for the same
+     reason as the sidebar-project-actions-menu popovers above — the Pinned
+     header lives inside .sidebar-section, which clips overflow for its own
+     scroll, so nothing nested there can render outside it regardless of
+     position:fixed/absolute. Content is built entirely in JS from the live
+     Pinned list; the two elements below are just the static shell. -->
+<div class="sidebar-pinned-popover" id="sidebarPinnedPopover">
+  <div class="sidebar-pinned-popover-search">
+    <i data-lucide="search"></i>
+    <input type="text" id="sidebarPinnedPopoverSearch" placeholder="Search pinned" />
+  </div>
+  <div class="sidebar-pinned-popover-results" id="sidebarPinnedPopoverResults"></div>
+</div>
+
 <script src="../../shared/shell.js"></script>
 <script>
   const chatEmpty = document.getElementById('chatEmpty');
   const chatThread = document.getElementById('chatThread');
+  const chatThreadMain = document.getElementById('chatThreadMain');
   const chatMessages = document.getElementById('chatMessages');
   const chatPane = document.getElementById('chatPane');
 
@@ -2260,8 +2481,13 @@
   // touched again, so their shine keeps running uninterrupted — only
   // .greeting-swap-word's own letters get replaced (with a quick fade)
   // every few seconds, cycling through "build" / "audit" / "operate".
-  (function initGreetingShine() {
-    const headline = document.getElementById('chatGreetingHeadline');
+  //
+  // Parameterized by headline id (not just #chatGreetingHeadline) so the
+  // narrower echo of this same headline inside #chatThreadGreeting (see
+  // openProjectChat) gets the exact same shine/word-cycle behavior instead
+  // of a second, drifting copy of this logic.
+  function initGreetingShine(headlineId) {
+    const headline = document.getElementById(headlineId);
     if (!headline) return;
     const PREFIX = 'What do you want to ';
     const SUFFIX = ' today?';
@@ -2311,7 +2537,9 @@
       wordIndex = (wordIndex + 1) % WORDS.length;
       renderWord(WORDS[wordIndex], { fade: true });
     }, wordDisplayMs);
-  })();
+  }
+  initGreetingShine('chatGreetingHeadline');
+  initGreetingShine('chatThreadGreetingHeadline');
 
   // ---------- Composer: mode/model dropdowns + voice dictation ----------
   // First version per the flows/build reference: full toolbar (Add context,
@@ -2639,6 +2867,17 @@
       projectItem.hidden = true;
       sep.hidden = true;
     }
+
+    // "Project chats" and the in-place "New chat" reset only apply to a
+    // chat that actually has a project attached (i.e. one opened via
+    // openProjectChat) — a plain chat started from the sidebar's "New
+    // Chat" with no project selected gets neither, same scoping as the
+    // project crumb right above.
+    const isProjectChat = !!(selected && selected.type === 'project');
+    const historyBtn = document.getElementById('chatHistoryToggle');
+    if (historyBtn) historyBtn.hidden = !isProjectChat;
+    const newChatBtn = document.getElementById('chatNewProjectChatBtn');
+    if (newChatBtn) newChatBtn.hidden = !isProjectChat;
   }
 
   function startChat(firstPrompt) {
@@ -2646,8 +2885,38 @@
     chatThread.hidden = false;
     chatPanelToggle.hidden = false;
     chatPanelExpandToggle.hidden = false;
+    // Harmless no-ops in the normal empty-state → first message flow
+    // (chatMessages was never hidden, chatThreadGreeting was never shown
+    // there) — only actually does something when the first message came
+    // from openProjectChat's greeting instead (see sendFromDocked).
+    chatMessages.hidden = false;
+    const threadGreeting = document.getElementById('chatThreadGreeting');
+    if (threadGreeting) threadGreeting.hidden = true;
     updateChatThreadHeader(firstPrompt);
     registerNewChat(deriveChatTitle(firstPrompt));
+    // Starting a chat with a Project attached as context behaves like
+    // opening that project directly (see openProjectChat): the
+    // conversation collapses to 370px and the project's own Map view
+    // opens in the side panel automatically — same effect as picking it
+    // from the panel's own "What do you want to open?" picker. Apps/
+    // Agents (or no context at all) keep the plain full-width chat,
+    // unaffected — this is specifically a Project behavior.
+    const startContext = contextState.empty && contextState.empty.selected;
+    if (startContext && startContext.type === 'project') {
+      // Match openProjectChat's layout exactly, not just the panel bit —
+      // otherwise the sidebar stays expanded (260px vs its 52px collapsed
+      // rail), which eats ~208px of clearance between this header's own
+      // icons (New chat / Project chats, right:46px/right:10px) and
+      // .chat-panel-actions (Expand/Hide panel, anchored to the pane's
+      // right edge) and crowds the two icon groups together.
+      const sidebarEl = document.getElementById('sidebar');
+      if (sidebarEl) sidebarEl.classList.add('is-collapsed');
+      document.querySelectorAll('.nav-item[data-nav]').forEach((n) => n.classList.remove('is-active'));
+      const newChatNavItem = document.querySelector('.nav-item[data-nav="new-chat"]');
+      if (newChatNavItem) newChatNavItem.classList.add('is-active');
+      resetPanelTabs();
+      openPanelTab('project', startContext.id);
+    }
     addMessage('user', firstPrompt);
     showTyping();
     setTimeout(() => {
@@ -2664,6 +2933,117 @@
       addMessage('ai', 'Done, updated.');
     }, 800);
   }
+
+  // Switches the thread to an existing chat picked from the project chats
+  // popover (see chatHistoryList's click handler further down). There's no
+  // real per-chat message history stored anywhere in this prototype —
+  // CHATS_DATA only ever carried name/context/date — so this recreates a
+  // plausible finished exchange instead of leaving the thread empty: the
+  // chat's own name stands in for the user's original prompt, followed by
+  // the same canned reply every chat in this prototype gets. No typing
+  // indicator — this is a conversation that already happened, not one
+  // being typed live. Stays within the same project context (the crumb/
+  // header history button don't change), only the chat label + messages do.
+  function openExistingChat(chat) {
+    if (!chat) return;
+    chatMessages.hidden = false;
+    const threadGreeting = document.getElementById('chatThreadGreeting');
+    if (threadGreeting) threadGreeting.hidden = true;
+    chatMessages.innerHTML = '';
+    addMessage('user', chat.name);
+    addMessage('ai', "I put together a LATAM bank reconciliation summary for July using the sources you already had connected. Let me know what you'd like to adjust.");
+    document.getElementById('chatThreadChatLabel').textContent = chat.name;
+  }
+
+  // ---------- Project chats popover ----------
+  // Opened from the chat thread header's history icon (#chatHistoryToggle,
+  // only visible while the active chat is attached to a project — see
+  // updateChatThreadHeader). Portal, same reasoning as every other popover
+  // in this file: .chat-thread-main has overflow:hidden.
+  const chatHistoryToggle = document.getElementById('chatHistoryToggle');
+  const chatHistoryPopover = document.getElementById('chatHistoryPopover');
+  const chatHistorySearchInput = document.getElementById('chatHistorySearchInput');
+  const chatHistoryList = document.getElementById('chatHistoryList');
+
+  function renderChatHistoryList() {
+    const selected = contextState.empty && contextState.empty.selected;
+    // Defensive fallback — #chatHistoryToggle is hidden whenever there's no
+    // project attached (see updateChatThreadHeader), so this shouldn't be
+    // reachable in practice, but keeps the popover honest if it ever is.
+    if (!selected || selected.type !== 'project') {
+      chatHistoryList.innerHTML = '<div class="chat-history-empty">This chat isn\'t attached to a project.</div>';
+      return;
+    }
+    const term = chatHistorySearchInput.value.trim().toLowerCase();
+    const chats = CHATS_DATA
+      .filter((c) => !c.archived && c.context && c.context.type === 'project' && c.context.id === selected.id)
+      .filter((c) => !term || c.name.toLowerCase().includes(term));
+    chatHistoryList.innerHTML = chats.length
+      ? chats.map((c) => `
+          <button type="button" class="chat-history-item" data-chat-history-id="${c.id}">
+            <i data-lucide="message-circle-more"></i>
+            <span>${c.name}</span>
+          </button>`).join('')
+      : `<div class="chat-history-empty">No chats yet for this project.</div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openChatHistoryPopover() {
+    chatHistoryToggle.classList.add('is-open');
+    chatHistoryPopover.hidden = false;
+    chatHistoryPopover.classList.add('is-open');
+    chatHistorySearchInput.value = '';
+    renderChatHistoryList();
+    const rect = chatHistoryToggle.getBoundingClientRect();
+    const popRect = chatHistoryPopover.getBoundingClientRect();
+    let left = rect.right - popRect.width;
+    if (left < 8) left = 8;
+    let top = rect.bottom + 6;
+    if (top + popRect.height > window.innerHeight - 8) top = rect.top - popRect.height - 6;
+    chatHistoryPopover.style.left = `${Math.max(8, Math.round(left))}px`;
+    chatHistoryPopover.style.top = `${Math.max(8, Math.round(top))}px`;
+    setTimeout(() => chatHistorySearchInput.focus(), 30);
+  }
+
+  function closeChatHistoryPopover() {
+    chatHistoryToggle.classList.remove('is-open');
+    chatHistoryPopover.classList.remove('is-open');
+    chatHistoryPopover.hidden = true;
+  }
+
+  chatHistoryToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (chatHistoryPopover.classList.contains('is-open')) closeChatHistoryPopover();
+    else openChatHistoryPopover();
+  });
+  chatHistorySearchInput.addEventListener('click', (e) => e.stopPropagation());
+  chatHistorySearchInput.addEventListener('input', renderChatHistoryList);
+  chatHistoryList.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const item = e.target.closest('[data-chat-history-id]');
+    if (!item) return;
+    openExistingChat(findChatById(item.dataset.chatHistoryId));
+    closeChatHistoryPopover();
+  });
+  document.addEventListener('click', closeChatHistoryPopover);
+  document.addEventListener('scroll', closeChatHistoryPopover, true);
+  window.addEventListener('resize', closeChatHistoryPopover);
+
+  // "New chat" icon next to Project chats (2026-08-14): starts a fresh
+  // conversation without leaving the project workspace — the 370px column,
+  // the side panel's project tab, and the sidebar's collapsed state all
+  // stay exactly as they were, only the thread itself resets to its own
+  // greeting (see showProjectChatGreeting). Different from the sidebar's
+  // real "New Chat" button, which exits the project entirely back to the
+  // full-width empty state.
+  document.getElementById('chatNewProjectChatBtn').addEventListener('click', () => {
+    const selected = contextState.empty && contextState.empty.selected;
+    if (!selected || selected.type !== 'project') return;
+    const project = findProjectById(selected.id);
+    if (!project) return;
+    showProjectChatGreeting(project);
+    updateChatThreadHeader(); // chat label back to "New chat" — project crumb is untouched, contextState.empty.selected didn't change
+  });
 
   // Empty state: first message
   const emptyInput = document.getElementById('emptyInput');
@@ -2690,7 +3070,13 @@
     if (!text) return;
     dockedInput.value = '';
     updateSendButtonIcon(dockedInput, dockedSendBtn);
-    continueChat(text);
+    // A chat opened via openProjectChat lands directly in the thread view
+    // with zero messages (its own greeting shown instead) — the first
+    // thing typed there comes through this docked composer, not
+    // #emptyInput, so it needs the same "first message" treatment
+    // (title/registerNewChat/canned intro reply) startChat() already does,
+    // instead of the plain "Done, updated." follow-up reply.
+    if (chatMessages.children.length === 0) startChat(text); else continueChat(text);
   }
   dockedSendBtn.addEventListener('click', sendFromDocked);
   dockedInput.addEventListener('keydown', (e) => {
@@ -2711,6 +3097,7 @@
     setPanelExpanded(false);
     resetPanelTabs();
     clearContext('empty');
+    resetChatColumnWidth();
   });
 
   // Right side panel: collapses the conversation column to 370px and opens
@@ -2728,7 +3115,59 @@
     // left to expand) — fold it back and restore the sidebar rather than
     // leaving it force-collapsed with no visible reason why.
     if (!isOpen && chatThread.classList.contains('is-panel-expanded')) setPanelExpanded(false);
+    // Closing also drops any manual width the user dragged — reopening
+    // (or the next chat) starts fresh from the 370px default rather than
+    // remembering a one-off drag from a previous session.
+    if (!isOpen) resetChatColumnWidth();
   });
+
+  // ---------- Chat column resize (drag) ----------
+  // Only draggable while the panel is open and not in expanded/focus mode
+  // (chatThreadMain is 0-width there, nothing to grab). Minimum 370px is
+  // the same floor the panel toggle itself opens to; the max keeps
+  // .chat-side-panel from ever being squeezed to nothing. Dragging sets an
+  // inline flex-basis, which wins over the CSS class's own 370px rule by
+  // specificity — cleared back to '' by resetChatColumnWidth() so the
+  // class rule (and its smooth open/close transition) takes back over
+  // clean the next time the panel opens.
+  const CHAT_MIN_WIDTH = 370;
+  let chatColumnWidth = CHAT_MIN_WIDTH;
+  const chatResizeHandle = document.getElementById('chatResizeHandle');
+
+  function resetChatColumnWidth() {
+    chatColumnWidth = CHAT_MIN_WIDTH;
+    chatThreadMain.style.flexBasis = '';
+  }
+
+  if (chatResizeHandle) {
+    chatResizeHandle.addEventListener('mousedown', (e) => {
+      if (!chatThread.classList.contains('has-panel') || chatThread.classList.contains('is-panel-expanded')) return;
+      e.preventDefault();
+      chatResizeHandle.classList.add('is-dragging');
+      document.body.classList.add('is-resizing-chat-column');
+      const startX = e.clientX;
+      const startWidth = chatThreadMain.getBoundingClientRect().width;
+      const prevTransition = chatThreadMain.style.transition;
+      chatThreadMain.style.transition = 'none';
+
+      function onMove(moveEvent) {
+        const delta = moveEvent.clientX - startX;
+        const paneWidth = chatPane.getBoundingClientRect().width;
+        const maxWidth = Math.max(CHAT_MIN_WIDTH, paneWidth - 280);
+        chatColumnWidth = Math.min(maxWidth, Math.max(CHAT_MIN_WIDTH, Math.round(startWidth + delta)));
+        chatThreadMain.style.flexBasis = `${chatColumnWidth}px`;
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        chatResizeHandle.classList.remove('is-dragging');
+        document.body.classList.remove('is-resizing-chat-column');
+        chatThreadMain.style.transition = prevTransition;
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
 
   // "Expand" / "Restore width": focus mode for the side panel. Collapses
   // the conversation column away (.is-panel-expanded, see <style>) so the
@@ -3157,6 +3596,12 @@
   const PANEL_TAB_CONTENT_LABELS = { project: 'Project view', app: 'App view', agent: 'Agent view' };
   function renderPanelTabContent() {
     const tab = panelTabsState.find((t) => t.key === panelActiveKey);
+    // A Project tab reads as a canvas/map (dot-grid texture, see
+    // .panel-tab-content--map) — the closest thing this prototype has
+    // today to "the flow/map view" the user referenced, before any real
+    // content is defined for what lives inside it (see docs/home.md).
+    // Apps/Agents keep the plain placeholder text treatment.
+    panelTabContent.classList.toggle('panel-tab-content--map', !!tab && tab.type === 'project');
     if (!tab) { panelTabContent.textContent = ''; return; }
     panelTabContent.textContent = `${PANEL_TAB_CONTENT_LABELS[tab.type]} — ${tab.name}`;
   }
@@ -3225,6 +3670,76 @@
   wirePanelOpenScope('menu');
   renderPanelOpenResults('picker');
   renderPanelOpenResults('menu');
+
+  // Clicking a project's card/row (see wireProjectActionsDelegation) opens
+  // its own fresh chat instead of a separate detail page (that was tried
+  // and reverted the same day — see docs/home.md). Sequence, per explicit
+  // spec from the user:
+  // 1. Collapse the left nav sidebar if it's expanded.
+  // 2. Land directly in the thread view with zero messages — its own
+  //    smaller greeting (#chatThreadGreeting) instead of #chatEmpty's full
+  //    one, docked composer ready for the first message.
+  // 3. Immediately open the side panel with this project's own tab already
+  //    selected (has-panel, 370px) — "as if the user had opened it" from
+  //    the panel's own picker, not a manual extra step.
+  // Resets the thread's own greeting (icon + animated headline + project-
+  // specific subtitle), clears any messages, and empties the docked
+  // composer — shared between opening a project's chat for the first time
+  // (openProjectChat) and starting a fresh one mid-conversation without
+  // leaving the project workspace (#chatNewProjectChatBtn, see below).
+  // Doesn't touch the project context, the side panel, or the sidebar
+  // collapse state — those stay exactly as they were.
+  function showProjectChatGreeting(project) {
+    chatMessages.innerHTML = '';
+    chatMessages.hidden = true;
+    document.getElementById('chatThreadGreeting').hidden = false;
+    // Names the project directly instead of #chatEmpty's generic subhead —
+    // invites analyzing something specific in it, since that's the whole
+    // reason this chat exists.
+    document.getElementById('chatThreadGreetingSubtitle').textContent =
+      `Ask me to dig into a specific part of ${project.name}.`;
+    dockedInput.value = '';
+    updateSendButtonIcon(dockedInput, dockedSendBtn);
+  }
+
+  function openProjectChat(project) {
+    if (!project) return;
+
+    const sidebarEl = document.getElementById('sidebar');
+    if (sidebarEl) sidebarEl.classList.add('is-collapsed'); // idempotent — already-collapsed is a no-op
+
+    const sectionEmptyEl = document.getElementById('sectionEmpty');
+    if (sectionEmptyEl) sectionEmptyEl.hidden = true;
+    projectsView.hidden = true;
+    chatsView.hidden = true;
+
+    chatEmpty.hidden = true;
+    chatThread.hidden = false;
+    showProjectChatGreeting(project);
+    chatPanelToggle.hidden = false;
+    chatPanelExpandToggle.hidden = false;
+
+    // Same context-attachment mechanism the empty-state composer's project
+    // selector already uses — registerNewChat()/updateChatThreadHeader()
+    // both read contextState.empty.selected, so setting it directly here
+    // (instead of via selectContext(), which also touches trigger UI that
+    // doesn't exist in this flow) is what makes the breadcrumb read
+    // "{Project} / New chat".
+    contextState.empty.selected = { type: 'project', id: project.id, name: project.name };
+    updateChatThreadHeader();
+
+    // Reset any previous tabs, then open exactly this project — same
+    // effect as picking it from the panel's own "What do you want to
+    // open?" picker, which is also what flips on has-panel (370px + panel).
+    resetPanelTabs();
+    openPanelTab('project', project.id);
+
+    // Reads as "you started a new chat" for the sidebar's nav active-state
+    // system — same one the real New Chat button drives.
+    document.querySelectorAll('.nav-item[data-nav]').forEach((n) => n.classList.remove('is-active'));
+    const newChatNavItem = document.querySelector('.nav-item[data-nav="new-chat"]');
+    if (newChatNavItem) newChatNavItem.classList.add('is-active');
+  }
 
   // Full-panel picker + tabs bar: not a .composer-menu, so clicks bubble
   // here undisturbed.
@@ -3679,11 +4194,9 @@
     `;
   }
 
-  // Cards/rows themselves are still static tiles — no project has a real
-  // detail view behind it yet, so clicking the card body intentionally
-  // does nothing, no disabled/opacity treatment either (same criterion
-  // already used for the non-navigating chat rows in Pinned/Recent and
-  // the Search results). Only the actions menu is interactive.
+  // Cards/rows themselves open the project's own chat on click (see
+  // openProjectChat + the click delegation in wireProjectActionsDelegation)
+  // — only the actions menu used to be interactive here.
   function renderProjectsGrid(projects) {
     document.getElementById('projectsGrid').innerHTML = projects.map((p) => `
       <div class="project-card" data-project-id="${p.id}">
@@ -4418,6 +4931,17 @@
           inviteSend.textContent = 'Invite sent';
           setTimeout(() => closeAllProjectActionMenus(), 900);
           return;
+        }
+        // Card/row body itself: open this project's own chat (see
+        // openProjectChat). Guarded against the actions popover — a click
+        // inside it that doesn't match any of the specific data-* checks
+        // above (blank padding, the invite hint text...) would otherwise
+        // fall through to here unmatched and get misread as "open chat."
+        if (e.target.closest('.project-actions-menu')) return;
+        const tile = e.target.closest('.project-card, .project-list-row');
+        if (tile) {
+          const project = findProjectById(tile.dataset.projectId);
+          if (project) openProjectChat(project);
         }
       });
       container.addEventListener('input', (e) => {

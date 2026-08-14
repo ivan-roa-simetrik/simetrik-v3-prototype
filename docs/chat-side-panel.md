@@ -46,6 +46,7 @@ No es un sidebar de navegación (ese es `docs/sidebar.md`, un componente complet
 - Estilo del ícono del toggle: siempre gris tenue (`--color-ink-faint`), abierto o cerrado — no se pinta de azul primario al activarse, para no competir visualmente con el resto de la UI.
 - Tooltip: "Show panel" / "Hide panel" según el estado, alineado al borde derecho del botón (`.tooltip-end`) para no salirse de la pantalla estando en la esquina.
 - Fondo del panel: `--color-sidebar-bg` (el mismo gris del sidebar de navegación, no blanco).
+- **Segunda forma de abrirse, programática (2026-08-14).** Hasta ahora el panel solo se abría por interacción directa del usuario (botón, o elegir algo del picker). `openProjectChat()` (ver `home.md`) lo abre automáticamente al clickear una card/fila en la vista Projects — llama a `resetPanelTabs()` + `openPanelTab('project', id)` directamente, el mismo camino interno que ya usa el picker manual, no una ruta nueva. El tab de tipo Project que se abre así gana además una textura de fondo tipo mapa (`.panel-tab-content--map`) que los tabs de App/Agent no tienen.
 
 ### Expand / Restore width: modo foco
 

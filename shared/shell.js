@@ -3,6 +3,12 @@
   Compartido entre flujos (home, y futuros: agents, apps).
 */
 
+// Set by initSidebarCollapsedPinnedPopover() below — initSidebarCollapse()
+// calls it (if defined by the time a click actually happens) so expanding
+// the sidebar never leaves the collapsed-only Pinned popover floating next
+// to a header that just moved/disappeared.
+let closeSidebarPinnedPopover = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) lucide.createIcons();
 
@@ -11,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavActive();
   initSectionCollapse();
   initSidebarProjectActions();
+  initSidebarCollapsedPinnedPopover();
 });
 
 function initSidebarCollapse() {
@@ -21,6 +28,7 @@ function initSidebarCollapse() {
 
   function toggleSidebar() {
     sidebar.classList.toggle('is-collapsed');
+    if (closeSidebarPinnedPopover) closeSidebarPinnedPopover();
   }
 
   if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebar);
@@ -37,12 +45,212 @@ function initProjectExpand() {
 }
 
 function initSectionCollapse() {
+  const sidebar = document.getElementById('sidebar');
   document.querySelectorAll('.sidebar-section-header').forEach((header) => {
     header.addEventListener('click', () => {
+      // Collapsed sidebar: the Pinned header opens a popover instead (see
+      // initSidebarCollapsedPinnedPopover below), not the normal
+      // expand/collapse toggle — toggling .is-expanded here too would
+      // silently flip the section's own expand state on every click,
+      // surprising the user with a collapsed Pinned section once they
+      // expand the sidebar again.
+      const isCollapsedPinnedHeader = sidebar
+        && sidebar.classList.contains('is-collapsed')
+        && header.getAttribute('aria-label') === 'Pinned';
+      if (isCollapsedPinnedHeader) return;
       const section = header.closest('.sidebar-section--collapsible');
       if (section) section.classList.toggle('is-expanded');
     });
   });
+}
+
+// Collapsed sidebar: clicking the Pinned section's icon opens a portal
+// popover to its right, listing every pinned project (+ its chats nested
+// directly underneath, no extra expand click) and every standalone pinned
+// chat, with a live search filter. Pinned's own list is unreadable at
+// 52px (no room for a nested tree) — this gives collapsed users the same
+// access without forcing the whole sidebar back open.
+//
+// Reads the live DOM of the Pinned list on every open/keystroke instead of
+// keeping a second copy of the data — that list is already the single
+// source of truth other features (Projects view, Chats and Tasks) write
+// into via ensureSidebarPinnedItem/ensureSidebarPinnedChatItem, so cloning
+// their rendered output here can't drift the way a second hardcoded list
+// would (this codebase has hit that exact "two mock lists disagree" bug
+// more than once — see docs/home.md and docs/sidebar.md).
+function initSidebarCollapsedPinnedPopover() {
+  const sidebar = document.getElementById('sidebar');
+  const pinnedHeader = document.querySelector('.sidebar-section-header[aria-label="Pinned"]');
+  const popover = document.getElementById('sidebarPinnedPopover');
+  const searchInput = document.getElementById('sidebarPinnedPopoverSearch');
+  const results = document.getElementById('sidebarPinnedPopoverResults');
+  if (!sidebar || !pinnedHeader || !popover || !searchInput || !results) return;
+
+  const VIEWPORT_MARGIN = 8;
+  const POPOVER_GAP = 6;
+
+  // Walks the actual <ul class="project-list"> markup rather than assuming
+  // shape — .project-item (project + its nested .chat-row chats) and
+  // .sidebar-pinned-chat-item (a chat pinned on its own, no project) are
+  // the two row types that mechanism produces; `hidden` rows (unpinned/
+  // archived) are skipped, same as the sidebar itself already does visually.
+  // Also captures each project's current .is-expanded state, used to seed
+  // the popover's own open/close state the same as the real row shows.
+  function readPinnedEntries() {
+    const list = pinnedHeader.closest('.sidebar-section')?.querySelector('.project-list');
+    if (!list) return [];
+    const entries = [];
+    Array.from(list.children).forEach((li) => {
+      if (li.hidden) return;
+      if (li.classList.contains('project-item')) {
+        const name = li.querySelector('.project-name')?.textContent.trim();
+        if (!name) return;
+        const chats = Array.from(li.querySelectorAll('.chat-sublist .chat-row')).map((a) => a.textContent.trim());
+        entries.push({ type: 'project', name, chats, expanded: li.classList.contains('is-expanded') });
+      } else if (li.classList.contains('sidebar-pinned-chat-item')) {
+        const name = li.querySelector('.sidebar-pinned-chat-name')?.textContent.trim();
+        if (!name) return;
+        entries.push({ type: 'chat', name });
+      }
+    });
+    return entries;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Which projects are open in THIS popover — separate from (but seeded
+  // from) the real sidebar's own .is-expanded, see openPopover(). Purely
+  // local to the popover session; toggling here never writes back to the
+  // real Pinned row.
+  let expandedProjects = new Set();
+
+  // Reuses the real sidebar's own classes (.project-item/.project-row-wrap/
+  // .project-row/.folder-icon/.chat-sublist/.chat-row for projects,
+  // .sidebar-pinned-chat-row-wrap/-row/-icon/-name for standalone chats)
+  // instead of inventing parallel ones — that's what makes open/close and
+  // hover behave *exactly* like the real Pinned rows (same crossfade, same
+  // unified hover-the-whole-row treatment) for free, with zero drift risk.
+  // The one thing intentionally NOT reused is .sidebar-project-actions-*
+  // (the ellipsis) — this popover is a read/select shortcut, not a place to
+  // manage projects.
+  function renderResults(term) {
+    const q = term.trim().toLowerCase();
+    const entries = readPinnedEntries();
+    let html = '';
+    entries.forEach((entry) => {
+      if (entry.type === 'chat') {
+        if (q && !entry.name.toLowerCase().includes(q)) return;
+        html += `<div class="sidebar-pinned-chat-row-wrap">
+          <button type="button" class="sidebar-pinned-chat-row">
+            <i data-lucide="message-circle-more" class="sidebar-pinned-chat-icon"></i>
+            <span class="sidebar-pinned-chat-name">${escapeHtml(entry.name)}</span>
+          </button>
+        </div>`;
+        return;
+      }
+      const projectMatches = !q || entry.name.toLowerCase().includes(q);
+      const matchingChats = projectMatches ? entry.chats : entry.chats.filter((c) => c.toLowerCase().includes(q));
+      if (!projectMatches && !matchingChats.length) return;
+      // While searching, a project with only some matching chats shows
+      // those results directly (no point making the user also click to
+      // expand something they just searched for) — otherwise honor
+      // whatever this popover session has open/closed.
+      const isExpanded = q ? true : expandedProjects.has(entry.name);
+      html += `<li class="project-item${isExpanded ? ' is-expanded' : ''}" data-pinned-popover-project="${escapeHtml(entry.name)}">
+        <div class="project-row-wrap">
+          <button type="button" class="project-row">
+            <span class="folder-icon">
+              <i data-lucide="folder" class="folder-icon-closed"></i>
+              <i data-lucide="folder-open" class="folder-icon-open"></i>
+            </span>
+            <span class="project-name">${escapeHtml(entry.name)}</span>
+          </button>
+        </div>
+        <div class="chat-sublist"><div class="chat-sublist-inner">
+          ${matchingChats.map((c) => `<a class="chat-row" href="#">${escapeHtml(c)}</a>`).join('')}
+        </div></div>
+      </li>`;
+    });
+    results.innerHTML = html ? `<ul class="project-list">${html}</ul>` : '<div class="sidebar-pinned-popover-empty">No pinned items match your search.</div>';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function closePopover() {
+    popover.classList.remove('is-open');
+  }
+  closeSidebarPinnedPopover = closePopover;
+
+  function openPopover() {
+    searchInput.value = '';
+    // Fresh snapshot of the real sidebar's open/closed projects every time
+    // the popover opens, so it starts looking like the Pinned section
+    // actually does right now — toggling inside the popover afterward only
+    // affects this local Set, never writes back to the real row.
+    expandedProjects = new Set(readPinnedEntries().filter((e) => e.type === 'project' && e.expanded).map((e) => e.name));
+    renderResults('');
+    popover.classList.add('is-open');
+
+    const rect = pinnedHeader.getBoundingClientRect();
+    let left = rect.right + POPOVER_GAP;
+    let top = rect.top;
+    const popRect = popover.getBoundingClientRect(); // safe to measure now, display:flex already applied via .is-open
+    if (left + popRect.width > window.innerWidth - VIEWPORT_MARGIN) {
+      left = rect.left - popRect.width - POPOVER_GAP; // not enough room to the right — flip to the left instead
+    }
+    if (top + popRect.height > window.innerHeight - VIEWPORT_MARGIN) {
+      top = window.innerHeight - VIEWPORT_MARGIN - popRect.height;
+    }
+    top = Math.max(VIEWPORT_MARGIN, top);
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    searchInput.focus();
+  }
+
+  pinnedHeader.addEventListener('click', (e) => {
+    if (!sidebar.classList.contains('is-collapsed')) return; // expanded: let the normal section toggle above handle it
+    e.stopPropagation();
+    const isOpen = popover.classList.contains('is-open');
+    closePopover();
+    if (!isOpen) openPopover();
+  });
+
+  popover.addEventListener('click', (e) => e.stopPropagation());
+
+  // Two different behaviors inside the results, matching the real Pinned
+  // section exactly: clicking a project's .project-row only opens/closes
+  // its chats (same as the real row — never navigates, never closes
+  // anything above it); clicking an actual chat (nested under a project,
+  // or a standalone pinned one) is the real "selection" — same no-op-on-
+  // select convention already used by the Search modal and the chat side
+  // panel's open picker (nothing in this prototype has a real destination
+  // behind it yet), so it just closes the popover.
+  results.addEventListener('click', (e) => {
+    const projectRow = e.target.closest('.project-row');
+    if (projectRow) {
+      const item = projectRow.closest('.project-item');
+      const name = item?.dataset.pinnedPopoverProject;
+      if (name) {
+        if (expandedProjects.has(name)) expandedProjects.delete(name);
+        else expandedProjects.add(name);
+      }
+      item?.classList.toggle('is-expanded');
+      return;
+    }
+    if (e.target.closest('.chat-row')) { e.preventDefault(); closePopover(); return; }
+    if (e.target.closest('.sidebar-pinned-chat-row')) closePopover();
+  });
+
+  searchInput.addEventListener('input', () => renderResults(searchInput.value));
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closePopover(); searchInput.blur(); }
+  });
+
+  document.addEventListener('click', closePopover);
+  document.addEventListener('scroll', closePopover, true);
+  window.addEventListener('resize', closePopover);
 }
 
 // Per-project ellipsis in the sidebar's Pinned section: opens a popover with

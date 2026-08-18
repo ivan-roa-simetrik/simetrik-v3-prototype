@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="shared/tokens.css" />
 <style>
   /* ---------- Login layout ----------
@@ -91,6 +92,7 @@
   .login-footnote { font-size: 12.5px; color: var(--color-ink-faint); max-width: 360px; }
   .login-footnote a { color: var(--color-ink-soft); font-weight: 600; }
   .login-footnote a:hover { color: var(--color-primary-ink); }
+  .login-error { font-size: 13px; color: #d92d20; margin-top: -6px; }
 
   /* ---------- Right: value prop panel (dark, deliberate Ley 6 exception) ---------- */
   .login-value {
@@ -283,18 +285,20 @@
       <form id="loginForm" style="display:flex; flex-direction:column; gap:16px;">
         <div class="field">
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" placeholder="you@simetrik.com" value="demo@simetrik.com" required />
+          <input type="email" id="email" name="email" placeholder="you@simetrik.com" required />
         </div>
 
         <div class="field">
           <label for="password">Password</label>
           <div class="field-password-wrap">
-            <input type="password" id="password" name="password" placeholder="••••••••" value="demo1234" required />
+            <input type="password" id="password" name="password" placeholder="••••••••" required />
             <button type="button" class="icon-btn field-password-toggle" id="togglePassword" title="Show password">
               <i data-lucide="eye"></i>
             </button>
           </div>
         </div>
+
+        <div class="login-error" id="loginError" hidden></div>
 
         <button type="submit" class="btn-signin" id="loginSubmit">
           <span class="spinner"></span>
@@ -372,6 +376,8 @@
 
 </div>
 
+<script src="shared/supabase-config.js"></script>
+<script src="shared/auth.js"></script>
 <script src="shared/shell.js"></script>
 <script>
   const togglePassword = document.getElementById('togglePassword');
@@ -383,21 +389,54 @@
     lucide.createIcons();
   });
 
-  const form = document.getElementById('loginForm');
-  const submitBtn = document.getElementById('loginSubmit');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (submitBtn.classList.contains('is-loading')) return;
-    submitBtn.classList.add('is-loading');
-    submitBtn.disabled = true;
-    setTimeout(() => {
-      window.location.href = 'flows/home/index.html';
-    }, 650);
+  const client = getSupabaseClient();
+  const HOME_PATH = 'flows/home/index.html';
+
+  // Already logged in (existing session) — skip the login screen entirely.
+  client.auth.getSession().then(({ data }) => {
+    if (data.session) window.location.href = HOME_PATH;
   });
 
-  document.getElementById('googleBtn').addEventListener('click', () => {
-    submitBtn.dispatchEvent(new Event('click'));
-    form.requestSubmit();
+  const form = document.getElementById('loginForm');
+  const submitBtn = document.getElementById('loginSubmit');
+  const loginError = document.getElementById('loginError');
+
+  function setLoading(isLoading) {
+    submitBtn.classList.toggle('is-loading', isLoading);
+    submitBtn.disabled = isLoading;
+  }
+
+  function showError(message) {
+    loginError.textContent = message;
+    loginError.hidden = false;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (submitBtn.classList.contains('is-loading')) return;
+    loginError.hidden = true;
+    setLoading(true);
+
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const { error } = await client.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      setLoading(false);
+      showError(error.message === 'Invalid login credentials'
+        ? 'Incorrect email or password.'
+        : error.message);
+      return;
+    }
+    window.location.href = HOME_PATH;
+  });
+
+  document.getElementById('googleBtn').addEventListener('click', async () => {
+    loginError.hidden = true;
+    await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: new URL(HOME_PATH, window.location.href).href },
+    });
   });
 
   // ---------- Mockup demo loop: typed prompt -> pipeline steps light up -> agent response badges ----------

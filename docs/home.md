@@ -275,35 +275,12 @@ Pedido explícito, con una segunda ronda de precisión sobre qué mantener y qu�
 
 `renderPanelTabContent()` agrega `.panel-tab-content--map` cuando el tab activo es de tipo `project` — fondo con grid de puntos (`radial-gradient` repetido, técnica típica de canvas/whiteboard) para leerse como una vista de mapa/flow, no como el texto plano placeholder que sigue usando Apps/Agents.
 
-### Project View Map — Fase 0 (2026-08-14, pasada siguiente)
+### Project View Map — ver `map.md`
 
-El contenido real de ese tab arrancó a construirse en fases, siguiendo un análisis previo de referentes (`mock-v3/flows/build`, `mock-v3/flows2/home`) cruzado con la arquitectura real de Simetrik V3 — documento completo en el artifact "Planos del Mapa" de esa sesión. Tres decisiones de producto ya tomadas antes de tocar código: (1) el modelo de nodos del mapa — **ver `project-map.md`**, documento propio dado que la definición pasó por varias correcciones y no cabía bien acá, (2) el detalle de un nodo vive en un drawer inferior no-modal (no en un panel lateral), (3) el mapa arranca vacío y es el primer mensaje del chat del proyecto el que lo construye — nada de mock data sembrada.
-
-**Fase 0 = el empty state real**, reemplazando el placeholder de texto (`"Project view — {nombre}"`) que esta sección describía hasta ahora. `renderProjectMapTab()` (nueva, llamada desde `renderPanelTabContent()` solo para `tab.type === 'project'`) escribe el mismo lenguaje visual que ya usan las secciones vacías de Apps/Agents (`.section-empty`: ícono en círculo + título + body), sobre la retícula de puntos que este mismo tab ya tenía. Copy: *"This project doesn't have nodes yet"* / *"Describe what you want to reconcile in the chat and I'll build the map for you."* — ancla el "cómo se construye" (hablándole al agente) desde el primer texto que alguien ve acá, coherente con que el chat de ese mismo proyecto queda visible al lado (370px) en todo momento.
-
-No se tocó nada del mecanismo de tabs (abrir/cerrar/dedupe, `openProjectChat`, el toggle de `.panel-tab-content--map`) — Fase 0 es puramente el contenido de ese contenedor.
-
-### Project View Map — Fase 1: navegación del canvas (2026-08-14, misma sesión)
-
-Primer recorte de Fase 1 (el listado completo de funcionalidades del mapa vive en el artifact "Planos del Mapa"): solo la categoría "Navegación del canvas", todavía sin nodos — eso es la siguiente pasada.
-
-- **La retícula de puntos se mudó de contenedor.** Hasta Fase 0, el fondo de puntos (`background-image` del `radial-gradient`) vivía directo en `.panel-tab-content--map`, fijo. Ahora vive en `.project-map-zoom-content`, la capa que sí se panea/zoomea — decisión deliberada y distinta de cómo lo hace el mock de referencia (ahí el fondo queda fijo y solo el contenido de los nodos se mueve): acá, sin nodos todavía, la retícula **es** el único contenido visible, así que tiene que ser lo que se mueve para que pan/zoom se sientan reales en vez de invisibles.
-- **`.project-map-zoom-content` es deliberadamente enorme** (`inset: -2000px`, ~4000px de lado, simétrico) — así un arrastre nunca se queda sin grilla que revelar, y el `transform-origin` por defecto (centro) alcanza para que el zoom quede anclado al centro del panel sin matemática extra.
-- **Pan**: arrastre con el botón izquierdo sobre el canvas (`initProjectMapCanvas`), traduce `.project-map-zoom-content` en píxeles crudos de pantalla — funciona igual a cualquier nivel de zoom porque `translate()` va *antes* que `scale()` en el mismo `transform` (se compone después del escalado, en el espacio del padre).
-- **Zoom**: botones +/− y rueda/trackpad, rango 0.6×–1.2× en pasos de 0.1 (mismos valores que el mock de referencia). Sin anclaje al cursor todavía — el zoom siempre ancla al centro del panel; anclarlo al puntero es una mejora de una pasada futura, no crítica mientras no haya nodos que "apuntar".
-- **Fit to view**: hoy es sinónimo de "volver a la vista de reposo" (`pan 0,0, zoom 1×`) porque no hay nodos contra los cuales calcular un encuadre real — mismo botón que la Fase 2 va a reescribir con lógica real de bounding-box.
-- **El empty state de Fase 0 no desapareció** — se movió a `.project-map-empty`, un overlay `position:absolute` con `pointer-events:none` que flota sobre el canvas real en vez de reemplazarlo. Ese `pointer-events:none` es funcional, no cosmético: sin él, el overlay se comería el drag del pan y el click de los botones de zoom que quedan debajo.
-- **No se implementó**: anclaje del zoom al cursor, encuadre inicial contra nodos reales (no hay nodos), ni el "salto a nodo" que usaría un futuro modo Audit — los tres dependen de que existan nodos o de una fase que todavía no toca (ver Fase 3/backlog del artifact).
-- Verificado por trazado de código + chequeo de sintaxis del `<script>`; sin confirmación visual en navegador (la extensión de Chrome no estaba conectada en la sesión).
-
-#### Ajuste: controles de navegación solo visibles con nodos (2026-08-14, pasada siguiente)
-
-Pedido explícito del usuario: los botones de zoom in/out/fit no debían verse mientras el mapa está vacío, solo una vez que hay nodos creados. `renderProjectMapTab()` ahora computa `tieneNodos = projectMapNodeCount(tab.id) > 0` y solo incluye el bloque `.project-map-controls` en el `innerHTML` cuando es `true` — no es un `hidden`/`display:none` sobre los botones ya renderizados, directamente no se emiten. `projectMapNodeCount()` es un stub que hoy siempre devuelve `0` (no existe modelo de nodos real todavía, eso es Fase 2) — vive como función propia, no como un `0` inline, para que Fase 2 solo tenga que cambiar qué lee esta función y no cada lugar que pregunte "¿este proyecto tiene nodos?". `initProjectMapCanvas()` ya tenía sus tres botones detrás de `if (zoomInBtn)`/`if (zoomOutBtn)`/`if (fitBtn)` desde Fase 1 (defensa contra que el DOM no los tenga), así que no hizo falta tocar esa función para que siga funcionando con los botones ausentes. **Pan (arrastre) y zoom con rueda siguen funcionando igual, con o sin nodos** — son gestos sobre el canvas mismo, no elementos de UI, y el pedido fue específicamente sobre visibilidad de los controles, no sobre deshabilitar la navegación en sí.
+El contenido real de ese tab (canvas con pan/zoom, los 3 tipos de nodo, sus estados, aristas y handles) creció lo suficiente como para tener su propio archivo, mismo criterio que ya se aplicó con `chat-side-panel.md` — **ver [`map.md`](./map.md)** para el detalle completo, fase por fase, y [`project-map.md`](./project-map.md) para el modelo conceptual de nodos.
 
 ### Pendiente / abierto
 
-- **Resto de Fase 1**: los nodos y edges reales (ver `project-map.md` para el modelo — Integración/Dataset/Function), el drawer inferior de detalle, y que el primer mensaje del chat del proyecto dispare el reveal animado — hoy el canvas se puede navegar pero sigue vacío, y con eso los controles de zoom se quedan sin mostrarse hasta que exista al menos un nodo.
-- **Pan/zoom no persisten entre re-renders del tab**: `renderProjectMapTab()` reconstruye el `innerHTML` completo cada vez que se vuelve a este tab (p. ej. después de mirar un tab de App y volver), así que la vista vuelve a su posición de reposo — mismo criterio de "no persiste" ya aceptado para el drag de nodos en la referencia real.
 - Mismo mecanismo de un solo tab: `resetPanelTabs()` se llama antes de abrir, así que si el panel ya tenía otros tabs abiertos (de una sesión de chat anterior), se pierden — coherente con "empezar un chat nuevo para este proyecto", pero vale confirmarlo si alguna vez se quiere que convivan.
 
 ## Apps (2026-08-14)
@@ -365,4 +342,5 @@ Modal propio (`#appEditModalBackdrop`, `openAppEditModal`/`saveAppEdit`), mismo 
 - `flows/home/index.html` — markup + JS del home completo
 - `shared/tokens.css` — estilos de shell (sidebar) reutilizados acá
 - `shared/shell.js` — collapse de sidebar, expand de proyectos
-- `project-map.md` — modelo conceptual de los nodos del Project View Map (Integración/Dataset/Function) — leer antes de construir la Fase 2 (nodos + edges reales)
+- `map.md` — la pantalla del Project View Map completa (canvas, nodos, estados, aristas), fase por fase
+- `project-map.md` — modelo conceptual de los nodos del Project View Map (Integración/Dataset/Function)

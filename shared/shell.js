@@ -3,11 +3,13 @@
   Compartido entre flujos (home, y futuros: agents, apps).
 */
 
-// Set by initSidebarCollapsedPinnedPopover() below — initSidebarCollapse()
-// calls it (if defined by the time a click actually happens) so expanding
-// the sidebar never leaves the collapsed-only Pinned popover floating next
-// to a header that just moved/disappeared.
+// Set by initSidebarCollapsedPinnedPopover()/initSidebarCollapsedRecentPopover()
+// below — initSidebarCollapse() calls both (if defined by the time a click
+// actually happens) so expanding the sidebar never leaves either
+// collapsed-only popover floating next to a header that just moved/
+// disappeared.
 let closeSidebarPinnedPopover = null;
+let closeSidebarRecentPopover = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) lucide.createIcons();
@@ -18,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSectionCollapse();
   initSidebarProjectActions();
   initSidebarCollapsedPinnedPopover();
+  initSidebarCollapsedRecentPopover();
 });
 
 function initSidebarCollapse() {
@@ -29,6 +32,7 @@ function initSidebarCollapse() {
   function toggleSidebar() {
     sidebar.classList.toggle('is-collapsed');
     if (closeSidebarPinnedPopover) closeSidebarPinnedPopover();
+    if (closeSidebarRecentPopover) closeSidebarRecentPopover();
   }
 
   if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebar);
@@ -63,16 +67,18 @@ function initSectionCollapse() {
   const sidebar = document.getElementById('sidebar');
   document.querySelectorAll('.sidebar-section-header').forEach((header) => {
     header.addEventListener('click', () => {
-      // Collapsed sidebar: the Pinned header opens a popover instead (see
-      // initSidebarCollapsedPinnedPopover below), not the normal
+      // Collapsed sidebar: Pinned and Recent headers open their own popover
+      // instead (see initSidebarCollapsedPinnedPopover/
+      // initSidebarCollapsedRecentPopover below), not the normal
       // expand/collapse toggle — toggling .is-expanded here too would
       // silently flip the section's own expand state on every click,
-      // surprising the user with a collapsed Pinned section once they
-      // expand the sidebar again.
-      const isCollapsedPinnedHeader = sidebar
+      // surprising the user with a collapsed section once they expand the
+      // sidebar again.
+      const label = header.getAttribute('aria-label');
+      const isCollapsedPopoverHeader = sidebar
         && sidebar.classList.contains('is-collapsed')
-        && header.getAttribute('aria-label') === 'Pinned';
-      if (isCollapsedPinnedHeader) return;
+        && (label === 'Pinned' || label === 'Recent');
+      if (isCollapsedPopoverHeader) return;
       const section = header.closest('.sidebar-section--collapsible');
       if (section) section.classList.toggle('is-expanded');
     });
@@ -298,6 +304,126 @@ function initSidebarCollapsedPinnedPopover() {
   // fired by descendants, including the popover's own scrollable content,
   // not just the Pinned list's scroll it was meant to catch. Only close for
   // scrolls whose target is actually outside the popover.
+  document.addEventListener('scroll', (e) => {
+    if (popover.contains(e.target)) return;
+    closePopover();
+  }, true);
+  window.addEventListener('resize', closePopover);
+}
+
+// Collapsed sidebar: clicking the Recent section's icon opens a portal
+// popover to its right, same mechanism as initSidebarCollapsedPinnedPopover
+// above (search + list, min/max-height, scroll-safe close, defensive
+// reposition) but simpler — Recent's own list (#sidebarRecentList) is flat,
+// no projects to group under, so it only ever renders plain .chat-row items.
+// Reads that live list on every open/keystroke instead of keeping a second
+// copy, same reasoning as Pinned's popover: #sidebarRecentList is already
+// the source of truth new chats get prepended into.
+function initSidebarCollapsedRecentPopover() {
+  const sidebar = document.getElementById('sidebar');
+  const recentHeader = document.querySelector('.sidebar-section-header[aria-label="Recent"]');
+  const recentList = document.getElementById('sidebarRecentList');
+  const popover = document.getElementById('sidebarRecentPopover');
+  const searchInput = document.getElementById('sidebarRecentPopoverSearch');
+  const results = document.getElementById('sidebarRecentPopoverResults');
+  if (!sidebar || !recentHeader || !recentList || !popover || !searchInput || !results) return;
+
+  const VIEWPORT_MARGIN = 8;
+  const POPOVER_GAP = 6;
+
+  function readRecentEntries() {
+    return Array.from(recentList.children)
+      .filter((li) => !li.hidden)
+      .map((li) => li.querySelector('.chat-row')?.textContent.trim())
+      .filter(Boolean);
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // .chat-row--icon (2026-08-14): every row here opens a Chat, always — same
+  // reasoning as the real Recent list in the sidebar (see docs/sidebar.md),
+  // mirrored here so the popover matches it instead of falling back to
+  // plain text once the real list grew an icon.
+  function renderResults(term) {
+    const q = term.trim().toLowerCase();
+    const entries = readRecentEntries().filter((name) => !q || name.toLowerCase().includes(q));
+    results.innerHTML = entries.length
+      ? entries.map((name) => `<a class="chat-row chat-row--icon" href="#"><i data-lucide="message-circle-more"></i><span class="chat-row-label">${escapeHtml(name)}</span></a>`).join('')
+      : '<div class="sidebar-recent-popover-empty">No recent chats match your search.</div>';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function closePopover() {
+    popover.classList.remove('is-open');
+  }
+  closeSidebarRecentPopover = closePopover;
+
+  // Same defensive reposition as Pinned's popover — height tracks content
+  // (min 200px / max 300px), so a search term that matches fewer/more
+  // results can change the box's height after it already opened.
+  function repositionPopover() {
+    if (!popover.classList.contains('is-open')) return;
+    const rect = popover.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - VIEWPORT_MARGIN) {
+      const top = Math.max(VIEWPORT_MARGIN, window.innerHeight - VIEWPORT_MARGIN - rect.height);
+      popover.style.top = `${Math.round(top)}px`;
+    }
+  }
+
+  function openPopover() {
+    searchInput.value = '';
+    renderResults('');
+    popover.classList.add('is-open');
+
+    const rect = recentHeader.getBoundingClientRect();
+    let left = rect.right + POPOVER_GAP;
+    let top = rect.top;
+    const popRect = popover.getBoundingClientRect(); // safe to measure now, display:flex already applied via .is-open
+    if (left + popRect.width > window.innerWidth - VIEWPORT_MARGIN) {
+      left = rect.left - popRect.width - POPOVER_GAP; // not enough room to the right — flip to the left instead
+    }
+    if (top + popRect.height > window.innerHeight - VIEWPORT_MARGIN) {
+      top = window.innerHeight - VIEWPORT_MARGIN - popRect.height;
+    }
+    top = Math.max(VIEWPORT_MARGIN, top);
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    searchInput.focus();
+  }
+
+  recentHeader.addEventListener('click', (e) => {
+    if (!sidebar.classList.contains('is-collapsed')) return; // expanded: let the normal section toggle above handle it
+    e.stopPropagation();
+    const isOpen = popover.classList.contains('is-open');
+    closePopover();
+    if (!isOpen) openPopover();
+  });
+
+  popover.addEventListener('click', (e) => e.stopPropagation());
+
+  // Selecting a chat doesn't navigate anywhere real yet — same no-op-on-
+  // select convention as Pinned's popover, the Search modal, and the chat
+  // side panel's open picker (nothing in this prototype has a real
+  // destination behind it yet). Just closes the popover.
+  results.addEventListener('click', (e) => {
+    if (e.target.closest('.chat-row')) { e.preventDefault(); closePopover(); }
+  });
+
+  searchInput.addEventListener('input', () => {
+    renderResults(searchInput.value);
+    repositionPopover(); // filtering can grow the box (e.g. clearing the term) past where it fit before
+  });
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closePopover(); searchInput.blur(); }
+  });
+
+  document.addEventListener('click', closePopover);
+  // Same scroll-safe fix as Pinned's popover: only close for scrolls whose
+  // target is actually outside the popover, so scrolling its own results
+  // list doesn't close it.
   document.addEventListener('scroll', (e) => {
     if (popover.contains(e.target)) return;
     closePopover();

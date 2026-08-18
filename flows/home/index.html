@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="../../shared/tokens.css" />
 <style>
   /* ---------- Home-specific layout: main area, chat ---------- */
@@ -248,6 +249,13 @@
     transition: background var(--dur-fast) var(--ease-out);
   }
   .composer-menu-option:hover { background: var(--color-surface-sunken); }
+  /* Disabled state (2026-08-18) — first consumer: #searchFilterClear, only
+     enabled once at least one filter is actually active. Same opacity/
+     cursor idiom already used by .btn-primary[disabled]; :hover's own
+     background is skipped for disabled options so hovering doesn't imply
+     it's clickable. */
+  .composer-menu-option[disabled] { opacity: .5; cursor: not-allowed; }
+  .composer-menu-option[disabled]:hover { background: transparent; }
   .composer-menu-option .opt-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--color-ink-faint); display: flex; margin-top: 2px; }
   .composer-menu-option .opt-icon svg, .composer-menu-option .opt-icon i { width: 16px; height: 16px; }
   .opt-icon-img { width: 14px; height: 14px; object-fit: contain; }
@@ -434,6 +442,23 @@
   .panel-open-item-icon svg, .panel-open-item-icon i { width: 16px; height: 16px; }
   .panel-open-item-name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* Loading skeleton: shown briefly every time these results would come
+     from a "fetch" (panel/popover opening fresh, search, filter tab) —
+     same convention as the Projects/Apps/Chats views' own skeletons
+     (shares their global skeletonShimmer keyframe + shimmer gradient
+     formula, own element classes so this never depends on their
+     .project-skeleton-*/.app-skeleton-* rules). Sized/padded exactly like
+     .panel-open-item so the skeleton→content swap doesn't jump. */
+  .panel-open-skeleton-item { pointer-events: none; }
+  .panel-open-skeleton-icon, .panel-open-skeleton-line {
+    display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .panel-open-skeleton-icon { width: 16px; height: 16px; }
+  .panel-open-skeleton-line { height: 12px; border-radius: 4px; }
+
   /* "+" popover: same search+tabs+results, narrower column since it's a
      dropdown rather than the full panel. Alignment starts at the trigger's
      left edge (align-start) — right early on, since the "+" sits near the
@@ -576,7 +601,15 @@
      of grid to reveal, short of an implausible amount of panning. */
   .project-map-zoom-content {
     position: absolute; inset: -2000px;
-    background-image: radial-gradient(var(--color-border-strong) 1px, transparent 1px);
+    /* Radio 1.3px — más chico que el 1.8px del ajuste anterior (pedido
+       explícito), todavía por encima del 1px original: a `PROJECT_MAP_ZOOM_MIN`
+       (0.6×) sigue dejando ~0.78px reales, visible sin ser tan grande como
+       antes al 100%/120%.
+       Color: `rgba(23,23,31,.08)` (ink a 8% de opacidad), no un token de
+       borde — ningún `--color-border*` de la paleta es más claro que
+       `--color-border` (ya se había probado), así que para bajar más el
+       contraste hace falta opacidad, no un color distinto. */
+    background-image: radial-gradient(rgba(23,23,31,.08) 1.3px, transparent 1.3px);
     background-size: 20px 20px;
     transition: transform var(--dur-fast) var(--ease-out);
   }
@@ -593,6 +626,19 @@
     pointer-events: none;
   }
   .project-map-controls { position: absolute; left: 12px; bottom: 12px; z-index: 1; display: flex; gap: 4px; }
+  /* Entre zoom out y zoom in — mismo alto que los botones (28px) para que
+     lea como parte del mismo grupo, `min-width` fijo para que el bloque
+     no "salte" de ancho al pasar de "60%" a "100%" a "120%". */
+  .project-map-zoom-label {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 38px; height: 28px; padding: 0 6px; flex-shrink: 0;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface);
+    color: var(--color-ink-soft); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  /* Esquina opuesta a los controles de zoom, mismo criterio de visibilidad
+     (solo con nodos — ver renderProjectMapTab). Sin funcionalidad todavía
+     — pedido explícito, "por el momento que no haga nada". */
+  .project-map-filter { position: absolute; top: 12px; right: 12px; z-index: 1; display: flex; gap: 4px; }
   .project-map-control-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; flex-shrink: 0;
@@ -604,6 +650,292 @@
   .project-map-control-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .project-map-control-btn:disabled:hover { background: var(--color-surface); }
   .project-map-control-btn svg, .project-map-control-btn i { width: 14px; height: 14px; }
+
+  /* ---------- Project View Map — Fase 2: nodos ----------
+     Ver docs/map.md para el modelo completo y el historial de decisiones.
+     Ancla el grafo (nodos + aristas) dentro de .project-map-zoom-content
+     en un origen propio y acotado, en vez de las coordenadas -2000..2000
+     de esa capa (pensadas solo para que la retícula de fondo nunca se
+     quede sin grilla) — así los datos de cada nodo usan coordenadas
+     chicas y legibles (x/y desde 0), sin tener que sumarles el offset de
+     la capa por separado en cada lugar que las lea. */
+  /* `left`/`top` reales los fija `renderMapGraph()` en JS, no acá — el
+     tamaño del canvas varía según el ancho del panel (chat colapsado,
+     expandido, distintas resoluciones), así que un valor fijo en CSS
+     quedaría bien centrado solo por casualidad. `0,0` es el fallback si
+     algo impidiera calcularlo. */
+  .project-map-graph { position: absolute; left: 0; top: 0; }
+
+  /* Estructura de 2 capas — referencia visual compartida por el usuario
+     (patrón tipo Zapier/n8n): la card EXTERIOR es gris, con el color de
+     familia solo en el borde; adentro, una card BLANCA propia lleva la
+     identidad real del nodo (ícono + nombre + estado). El header (ícono
+     chico de tipo + etiqueta) va suelto sobre el gris, sin caja propia. */
+  .node-card {
+    position: absolute;
+    width: 208px;
+    /* Gris: --color-surface-sunken → --color-sidebar-bg (fondo del chat,
+       pedido explícito) → --color-bg (pedido explícito, "un poquito más
+       oscuro"). Un escalón, no un salto — `--color-bg` es el siguiente
+       tono más oscuro que ya existe en la paleta, no un valor inventado. */
+    background: var(--color-bg);
+    border: 1.5px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    /* Sin padding acá — pedido explícito: el padding vive en cada sección
+       (header/content/footer) por separado, no en un único valor global.
+       Header y footer lo declaran directo; content (`.node-card-inner`)
+       usa `margin` en vez de heredar el padding del padre, porque la
+       card blanca ya tiene su propio padding interno y no debería sumar
+       dos paddings distintos para el mismo espaciado visual. */
+    display: flex; flex-direction: column; gap: 8px;
+    cursor: pointer;
+    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out),
+      padding var(--dur-base) var(--ease-out), border-radius var(--dur-base) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .node-card:hover { box-shadow: var(--shadow-md); z-index: 3; }
+  .node-card.is-selected { box-shadow: 0 0 0 3px var(--color-primary-tint); }
+
+  /* Borde gris parejo en los 3 tipos (pedido explícito: "remo el border de
+     color que tienen las cartas... todas tienen que quedar con borde
+     gris") — se descartó la versión anterior que coloreaba el borde por
+     familia (azul Integración, violeta Function). El color de familia
+     sigue viviendo en los íconos (header y card blanca), no en el borde.
+     El borde base ya sale gris de `.node-card` (`--color-border-strong`);
+     no hace falta ninguna regla acá, alcanza con NO tener overrides que
+     lo pisen. */
+
+  /* Header: ícono CHICO sin chip de fondo (a diferencia del ícono grande
+     de adentro) + etiqueta de tipo. Sin menú "···" — sacado a pedido
+     explícito. `padding-top` es lo que separa la fila del borde superior
+     de la card ahora que `.node-card` ya no tiene padding propio;
+     `min-height` evita que la fila quede "aplastada" contra esa esquina
+     — sin una altura mínima propia mide solo lo que su contenido más
+     chico pida, y el ícono lee como pegado arriba-izquierda en vez de
+     centrado en su propia franja (bug real, reportado y corregido en el
+     mockup antes de portarlo acá). */
+  .node-card-header { display: flex; align-items: center; gap: 6px; padding: 10px 10px 0; min-height: 20px; }
+  .node-card-header-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .node-card-header-icon svg, .node-card-header-icon i { display: block; width: 13px; height: 13px; }
+  .node-card--integracion .node-card-header-icon { color: var(--color-primary-ink); }
+  .node-card--dataset .node-card-header-icon { color: var(--color-ink-soft); }
+  .node-card--function .node-card-header-icon { color: var(--color-accent-ink); }
+  /* Sentence case ("Integration · inbound", no "INTEGRATION · INBOUND") y
+     justificado a la izquierda — los dos, pedido explícito. `nodeTypeLabel()`
+     ya devuelve el string con esa capitalización exacta (solo la primera
+     letra del label en mayúscula); acá no hace falta `text-transform` para
+     lograrlo, alcanza con NO tener uno que lo pise. */
+  /* font-weight bajado de 700 a 500 — pedido explícito, el texto se veía
+     muy grueso. 700 tiene sentido en `.node-card-name` (es lo primero que
+     hay que leer de la card); acá es una etiqueta secundaria, no necesita
+     competir con eso. */
+  .node-card-header-label {
+    flex: 1; min-width: 0; font-size: 10px; font-weight: 500; text-align: left;
+    color: var(--color-ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Card interior blanca ("content") — la identidad real del nodo.
+     `margin` (no padding heredado del padre, que ya no tiene) es lo que
+     la separa de los bordes de la card gris; su propio `padding` sigue
+     siendo el inset del contenido DENTRO de la card blanca — dos cosas
+     distintas, cada una en su lugar. Margin horizontal: 10px → 2px → 4px
+     (varios pedidos explícitos seguidos).
+     `margin-bottom: 4px` agregado acá (bug real, reportado): el footer
+     (`.node-card-extra`) es el único que aportaba espacio hacia abajo, y
+     solo se renderiza cuando el nodo tiene tags — sin tags (la mayoría de
+     los nodos del demo), esta card quedaba pegada directo contra el
+     borde inferior de la card gris, sin el mismo respiro que ya tenía a
+     los costados. Con el margin acá, el espacio de abajo no depende de
+     si el footer existe o no. */
+  .node-card-inner {
+    background: var(--color-surface); border-radius: var(--radius-sm);
+    /* Padding a la mitad (9px → 4.5px), pedido explícito. */
+    margin: 0 4px 4px; padding: 4.5px; box-shadow: var(--shadow-sm);
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  /* Chip de ícono: mismo gris/oscuro para los 3 tipos (pedido explícito,
+     "tienen que ser de tono gris, con el ícono negro" — el tratamiento que
+     ya tenía Dataset, extendido a Integración y Function). El color de
+     familia por chip coloreado se descarta acá, mismo criterio que ya se
+     aplicó al borde de la card — el ícono en sí (ver nodeContentIcon())
+     es lo que ahora identifica al nodo, no el color del chip. */
+  .node-card-icon {
+    width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: var(--color-surface-sunken); color: var(--color-ink);
+    display: flex; align-items: center; justify-content: center;
+    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out), border-radius var(--dur-base) var(--ease-out);
+  }
+  .node-card-icon svg, .node-card-icon i { width: 14px; height: 14px; }
+  /* Sacado de al lado del nombre en la vista completa (pedido explícito)
+     — pero NO del markup: colapsado (`.node-card.is-compact`, ver más
+     abajo) sigue necesitando este mismo ícono como único contenido del
+     cuadrado chico, así que se oculta acá en vez de borrarse. `gap: 8px`
+     de `.node-card-inner` no deja un hueco vacío porque `display:none`
+     saca el elemento del flujo del flex por completo. */
+  .node-card:not(.is-compact) .node-card-icon { display: none; }
+
+  .node-card-title { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .node-card-name { font-size: 13px; font-weight: 700; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+  .node-card-status {
+    flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  }
+  .node-status-inactivo { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
+  .node-status-encolado { background: var(--color-warning-tint); color: var(--color-warning); }
+  .node-status-corriendo { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .node-status-exito { background: var(--color-success-tint); color: var(--color-success); }
+  .node-status-error { background: var(--color-danger-tint); color: var(--color-danger); }
+
+  /* Dot de estado, esquina superior derecha del header (pedido explícito:
+     "que sea un dot... donde sea el dot" — reemplaza al badge de texto
+     que antes vivía en el content). Reusa las mismas clases `.node-status-*`
+     de arriba por semántica de color, pero como selector compuesto
+     (`.node-dot.node-status-x`) — más específico que `.node-status-x`
+     solo, así que le gana a ese `background` de tinte pálido (pensado
+     para un pill con texto) y pinta un color sólido, que es lo que un
+     punto de 7px necesita para leerse a simple vista. El tooltip nativo
+     (`data-tooltip`, mismo mecanismo `[data-tooltip]::after` que ya usan
+     los controles del canvas) es lo que muestra el estado en texto al
+     hover — pedido explícito, "en el overstate... indique cuál es el
+     estado" — reposicionado arriba y centrado en vez de a la derecha o
+     abajo (ver regla `.node-dot[data-tooltip]::after` más abajo). */
+  /* Tamaño: 7px → 9px → 12px (pedidos explícitos seguidos, "que se vea").
+     Borde blanco bajado a 1px ("más sencillo, más delgado") — separa el
+     color del gris del header sin comerse el punto. Sigue siendo círculo
+     perfecto, el borde es parejo en los 4 lados. */
+  .node-dot { box-sizing: border-box; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 1px solid #fff; }
+  .node-dot.node-status-inactivo { background: var(--color-ink-faint); }
+  .node-dot.node-status-encolado { background: var(--color-warning); }
+  /* Verde puntual (pedido explícito, #01A401) — no `--color-success`, ese
+     token sigue igual para el badge (tooltip en colapsado) y cualquier
+     otro lugar del prototipo que lo use; este verde es solo del dot. */
+  .node-dot.node-status-exito { background: #01A401; }
+  .node-dot.node-status-error { background: var(--color-danger); }
+  /* "Corriendo" no es un dot fijo — pedido explícito: mientras el nodo
+     está en curso, un spinner girando comunica "está pasando algo ahora
+     mismo" de una forma que un punto quieto no puede. `box-sizing:
+     border-box` en la regla base (arriba) es lo que hace que el grosor
+     del borde (2px acá, 1px en el resto) no le sume al tamaño de 12px
+     compartido — sin eso, este dot se vería más grande que los demás.
+     `border-top-color` distinto del resto del anillo es lo que dibuja el
+     arco que gira; el borde blanco de `.node-dot` base queda pisado a
+     propósito, un anillo bicolor no necesita el contraste extra que los
+     dots sólidos sí. */
+  .node-dot.node-status-corriendo {
+    background: transparent;
+    /* 3 lados azules, 1 lado pálido (antes era al revés: 1 azul, 3 pálidos)
+       — pedido explícito, "que la línea azul sea más larga". El lado
+       pálido restante es lo único que sigue marcando que es un anillo
+       girando y no un dot sólido de más. */
+    border: 2px solid var(--color-primary); border-right-color: var(--color-primary-tint);
+    animation: node-dot-spin 0.8s linear infinite;
+  }
+  @keyframes node-dot-spin { to { transform: rotate(360deg); } }
+  /* Respeta la preferencia del sistema — un giro infinito no se apaga
+     solo, así que el usuario que pidió menos movimiento no debería
+     recibirlo igual por default. */
+  @media (prefers-reduced-motion: reduce) {
+    .node-dot.node-status-corriendo { animation: none; border-color: var(--color-primary); }
+  }
+  /* Tooltip arriba y centrado (pedido explícito) — ni el default (a la
+     derecha) ni `.tooltip-bottom` (abajo) del sistema compartido sirven
+     acá, así que se sobreescribe puntual solo para el dot en vez de tocar
+     el mecanismo genérico de `[data-tooltip]` que usa el resto del
+     prototipo. Hereda color/padding/opacity-transition de la regla base. */
+  .node-dot[data-tooltip]::after {
+    left: 50%; top: auto; bottom: calc(100% + 6px); transform: translateX(-50%);
+  }
+
+  /* Zona extra ("footer"), todavía sobre el gris exterior — no adentro de
+     la card blanca. Hoy solo lleva el badge de cantidad de tags, contra
+     el borde derecho (pedido explícito: "en la esquina derecha") —
+     `justify-content: flex-end` en vez de `align-self` en el badge mismo,
+     porque este contenedor ya no apila nada más arriba/abajo (dejó de
+     tener `flex-direction: column`, no le hace falta con un solo hijo).
+     `padding-bottom` es lo que la separa del borde inferior de la card
+     ahora que `.node-card` ya no aporta ese espacio. */
+  .node-card-extra { padding: 0 10px 10px; display: flex; justify-content: flex-end; }
+  /* Badge chico gris — compartido por "N rows" (header, Dataset) y la
+     cantidad de tags (footer). Mismo tono que ya usa `.node-card-icon`
+     de Dataset (`--color-surface-sunken`/`--color-ink-soft`) — pedido
+     explícito: "dejémoslo como batch gris". */
+  .node-meta-badge {
+    display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;
+    font-size: 9px; font-weight: 600; color: var(--color-ink-soft);
+    background: var(--color-surface-sunken); border-radius: 999px; padding: 2px 7px;
+    white-space: nowrap;
+  }
+  .node-meta-badge svg, .node-meta-badge i { width: 9px; height: 9px; }
+  /* font-size bajado de 10.5px a 8.5px (pedido explícito: "que no ocupe
+     tanto espacio") — el ícono se achica en la misma proporción para que
+     siga leyéndose como un bloque, no como dos elementos de tamaños que
+     no combinan. */
+  .node-card-updated { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--color-ink-faint); }
+  .node-card-updated svg, .node-card-updated i { width: 9px; height: 9px; flex-shrink: 0; }
+
+  /* Colapsado: cuadrado redondeado, no círculo — 4 esquinas parejas.
+     Colapsa a solo el ícono de la card blanca interior; header y zona
+     extra desaparecen del todo (no solo se ocultan detrás, dejan de
+     ocupar espacio). */
+  .node-card.is-compact {
+    width: 48px; height: 48px; padding: 0; border-radius: var(--radius-md);
+    align-items: center; justify-content: center;
+  }
+  .node-card.is-compact .node-card-header,
+  .node-card.is-compact .node-card-extra { display: none; }
+  /* `position:absolute; inset:0` en vez de `width/height:100%` — la
+     versión con porcentajes encadenados (card → inner → ícono) se veía
+     desfasada en la práctica pese a ser correcta en teoría (reportado dos
+     veces en el mockup). Anclando directo contra `.node-card` (que ya es
+     `position:absolute`) el ícono ocupa el cuadrado de 48×48 exacto sin
+     pasar por ningún cálculo de porcentaje de flexbox que pueda fallar. */
+  .node-card.is-compact .node-card-inner {
+    position: absolute; inset: 0; margin: 0; padding: 0; background: transparent; box-shadow: none;
+  }
+  .node-card.is-compact .node-card-title,
+  .node-card.is-compact .node-card-status { display: none; }
+  .node-card.is-compact .node-card-icon {
+    position: absolute; inset: 0; width: auto; height: auto; border-radius: inherit;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Colapsado NO muestra el nombre — ni una etiqueta chica debajo. La
+     única forma de leer nombre/estado de un nodo colapsado es este
+     tooltip al hover, mismo lenguaje visual que `.tooltip-bubble` (fondo
+     ink, texto blanco, 6px de radio) en vez de uno nuevo. Solo existe en
+     modo compacto — en modo completo el nombre y el estado ya están a la
+     vista, así que sería redundante. */
+  .node-card-tooltip {
+    display: none; position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+    flex-direction: column; align-items: center; gap: 4px;
+    background: var(--color-ink); color: #fff; padding: 6px 10px; border-radius: 6px;
+    white-space: nowrap; opacity: 0; pointer-events: none; z-index: 10;
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .node-card-tooltip-name { font-size: 12px; font-weight: 600; }
+  .node-card.is-compact .node-card-tooltip { display: flex; }
+  .node-card.is-compact:hover .node-card-tooltip,
+  .node-card.is-compact:focus-visible .node-card-tooltip { opacity: 1; }
+
+  /* Handles — mismo look para entrada y salida (feedback directo, se
+     descartó la variante rellena/hueca por dirección): borde gris,
+     relleno blanco, los dos. */
+  .node-handle {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--color-surface); border: 2px solid var(--color-border-strong);
+    z-index: 2;
+  }
+  .node-handle--in { left: -6px; }
+  .node-handle--out { right: -6px; }
+
+  /* Aristas — mismo trazo que el resto de los diagramas de este
+     prototipo no tiene, así que se define acá; punteada marca "lectura
+     gobernada" (Function) en vez de flujo de datos real. */
+  .project-map-edges { position: absolute; overflow: visible; pointer-events: none; }
+  .node-edge { fill: none; stroke: var(--color-border-strong); stroke-width: 1.5; }
+  .node-edge--governed { stroke-dasharray: 4 3; }
 
   /* Chat thread header: chat icon + name, or (when a project was picked
      before starting) project icon + project name / chat icon + chat name. */
@@ -1861,33 +2193,97 @@
 
   .search-modal-input-row {
     display: flex; align-items: center; gap: 10px; padding: 16px 20px;
-    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+    flex-shrink: 0;
   }
   .search-modal-input-row i, .search-modal-input-row svg { width: 18px; height: 18px; color: var(--color-ink-faint); flex-shrink: 0; }
   .search-modal-input-row input {
     flex: 1; border: none; outline: none; background: transparent;
     font-size: 15px; color: var(--color-ink); font-family: inherit;
   }
-  .search-modal-input-row input::placeholder { color: var(--color-ink-faint); }
+  /* Lighter still (2026-08-18, follow-up request, "igualmente el label del
+     buscador"): same opacity-over-token idiom as .search-group-title right
+     below — --color-ink-faint alone was still the target to dim further,
+     not a new/darker token. */
+  .search-modal-input-row input::placeholder { color: var(--color-ink-faint); opacity: .7; }
+
+  /* Filter by tag (2026-08-18, refined same day, feedback direct): started
+     as a text button ("Filter by tag: value ▾"), same pattern as Projects/
+     Apps — revised to a plain icon button (`settings-2`) since Search is a
+     tighter, icon-led toolbar (search icon, this) rather than a full view
+     header with room for a labeled control. Reuses .icon-btn directly
+     (the header's Search/Close sidebar icons already do) instead of a
+     copied one-off class — .icon-btn is a genuinely generic, shareable
+     primitive with no wiring tied to its class name, unlike .search-tab/
+     .project-row, so there's nothing here to collide with. `.dot` (also
+     already generic, defined for exactly this "has something active" case)
+     shows when 1+ tags are selected, hidden otherwise — see
+     updateSearchFilterButton(). `.composer-menu--filter` still reused
+     as-is for the popover's own width/position. */
+  .search-filter-search {
+    display: flex; align-items: center; gap: 8px; padding: 8px;
+    border-bottom: 1px solid var(--color-border); margin-bottom: 4px;
+  }
+  .search-filter-search i, .search-filter-search svg { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .search-filter-search input {
+    flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+    font-size: 13px; color: var(--color-ink); font-family: inherit;
+  }
+  .search-filter-search input::placeholder { color: var(--color-ink-faint); }
+  /* Visible divider above "Clear filters" — Projects' own version of this
+     popover has an empty <div class="project-select-divider"> with no CSS
+     rule anywhere (dead markup, renders nothing); this one gets an actual
+     border instead of copying that gap. */
+  .search-filter-clear-row { border-top: 1px solid var(--color-border); padding-top: 6px; margin-top: 6px; }
+  /* Fix (2026-08-18, feedback direct): "Clear filters" only had the base
+     .composer-menu-option (padding: 8px 10px, align-items: flex-start —
+     meant for a two-line title+description option), so it rendered
+     noticeably taller/more padded than the compact tag rows above it
+     (those use .composer-menu-option--model). Same override Projects'
+     own filter popover already applies to its own #projectsFilterClear —
+     missed copying it here the first time. */
+  #searchFilterClear { min-height: 32px; padding: 0 8px; align-items: center; }
+  #searchFilterClear .opt-icon { margin-top: 0; }
+  .search-filter-empty { padding: 12px 8px; text-align: center; color: var(--color-ink-faint); font-size: 12.5px; }
 
   .search-modal-tabs {
-    display: flex; gap: 4px; padding: 10px 20px; border-bottom: 1px solid var(--color-border);
+    display: flex; gap: 20px; padding: 0 20px;
     flex-shrink: 0; overflow-x: auto;
   }
+  /* Underline tabs (2026-08-18, explicit request) — replaces the earlier
+     pill/badge treatment (rounded background, no border) with a plain-text
+     tab + a bottom border on the active one, like a conventional tab bar.
+     No shared row divider to align against anymore (removed right above,
+     same request) — the active tab's own border is the only separation
+     between the tabs row and the results below it now. */
   .search-tab {
-    padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
+    padding: 10px 2px; border: none; background: transparent;
+    border-bottom: 2px solid transparent;
     font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
-    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
   }
-  .search-tab:hover { background: var(--color-surface-sunken); }
-  .search-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .search-tab:hover { color: var(--color-ink); }
+  /* --color-ink (not a literal #000) — it's this prototype's near-black
+     text token, already used everywhere something needs to read as "the
+     darkest ink on the page" instead of a one-off hardcoded black. */
+  .search-tab.is-active { color: var(--color-ink); border-bottom-color: var(--color-ink); }
 
   .search-modal-results { overflow-y: auto; overflow-x: hidden; padding: 8px 12px 16px; flex: 1; }
   .search-results-group { margin-top: 10px; }
   .search-results-group:first-child { margin-top: 4px; }
+  /* Lighter weight, more visual presence (2026-08-18, explicit request):
+     font-weight down from 700 (bold) to 600 (semibold) — less heavy/thick —
+     compensated with wider letter-spacing so the label still reads as a
+     deliberate category label instead of just "weaker text". Color:
+     briefly bumped to --color-ink-soft in the same pass to compensate
+     further, reverted right after (explicit request) back to
+     --color-ink-faint — light gray, presence carried by weight + tracking
+     alone, not by darkening the color too. Lighter still (2026-08-18,
+     follow-up request): --color-ink-faint is already the lightest "ink"
+     token in shared/tokens.css, so same idiom as .search-result-tags below
+     — dim it further with opacity instead of a one-off hardcoded gray. */
   .search-group-title {
-    font-size: 11px; font-weight: 700; letter-spacing: .02em;
-    color: var(--color-ink-faint); padding: 6px 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    color: var(--color-ink-faint); opacity: .7; padding: 6px 8px;
   }
   .search-result-item {
     display: flex; align-items: center; gap: 10px; width: 100%;
@@ -1895,15 +2291,135 @@
     text-align: left; font-size: 14px; color: var(--color-ink);
     transition: background var(--dur-fast) var(--ease-out);
   }
-  .search-result-item:hover, .search-result-item.is-highlighted { background: var(--color-surface-sunken); }
+  /* Lighter gray (2026-08-18, feedback direct, clarified via follow-up
+     question): --color-bg (#F6F6F9) reads slightly lighter than
+     --color-surface-sunken (#F0F0F4) against this modal's white
+     (--color-surface) background — swapped in directly, no new token
+     needed, it already exists in shared/tokens.css. */
+  .search-result-item:hover, .search-result-item.is-highlighted { background: var(--color-bg); }
   .search-result-icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--color-ink-soft); display: flex; }
   .search-result-icon svg, .search-result-icon i { width: 16px; height: 16px; }
   .search-result-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .search-result-kbd {
-    font-size: 11px; font-weight: 600; color: var(--color-ink-soft);
-    background: var(--color-surface-sunken); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+  /* Tags (2026-08-18, explicit request): nested inside .search-result-name
+     itself, not a sibling — keeps "name - tag - tag" as one truncatable
+     text unit sharing the parent's own ellipsis, instead of needing a
+     second flex item to coordinate shrinking with. Muted color only, plain
+     text (no pill/badge background) — explicit request, distinct from the
+     colored .project-tag-pill treatment Projects' own cards use. */
+  /* Lighter than --color-ink-faint itself (2026-08-18, feedback direct) —
+     there's no lighter "ink" token in shared/tokens.css to reach for, so
+     this dims the faint token further with opacity instead of hardcoding a
+     one-off gray, same idiom already used elsewhere in this file for "same
+     color, lighter" (e.g. .folder-icon's opacity: .75). */
+  .search-result-tags { color: var(--color-ink-faint); opacity: .7; }
+  /* "Press Enter to select" hint (2026-08-18, explicit request; replaces the
+     old decorative ⌘1/⌘2 kbds some rows used to show unconditionally) —
+     every result row gets this, but it only becomes visible on
+     keyboard-highlight. --color-surface (white), not --color-surface-sunken,
+     because the row itself turns --color-surface-sunken on that same
+     highlight — same tint would make the kbd blend in and disappear right
+     when it's meant to show. */
+  .search-result-enter-kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 5px; flex-shrink: 0;
+    font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--color-surface); color: var(--color-ink-soft);
+    border: 1px solid var(--color-border-strong); border-radius: 4px;
+    opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
   }
+  /* Fix (2026-08-18, feedback direct): dropped plain mouse :hover from the
+     trigger — the hint is a keyboard-navigation affordance ("press Enter to
+     select the one currently highlighted by ↑/↓"), not a generic hover
+     reveal. A mouse click already selects directly on its own, so showing
+     "press Enter" there was misleading; now only .is-highlighted
+     (the class updateSearchHighlight() sets while navigating with arrows)
+     shows it. The row's own background tint still reacts to both hover and
+     highlight (.search-result-item:hover, .is-highlighted, unchanged above)
+     — only this kbd hint narrowed to keyboard-only. */
+  .search-result-item.is-highlighted .search-result-enter-kbd {
+    opacity: 1;
+  }
+  /* Fix, second attempt (2026-08-18, feedback direct twice): the "↵" glyph
+     (U+21B5) kept reading off-center even after a manual translateX nudge —
+     a blind pixel guess without a live browser to verify against, which
+     evidently didn't land right. Root cause either way is font-metrics
+     (the character's own ink isn't centered within its advance width in
+     most typefaces), not this codebase's flex-centering — but rather than
+     keep guessing nudge values with no way to check the result, switched
+     the glyph itself out for a real icon: Lucide's `corner-down-left`
+     (visually the same "return" arrow), rendered as SVG with a real
+     viewBox — geometrically centered by construction, not subject to
+     font/glyph rendering quirks at all. Only "↵" specifically was swapped;
+     the footer's `↑`/`↓` stay plain-text glyphs (never reported as off).
+     This is a deliberate, narrow exception to "kbd hints are plain Unicode
+     text, never an embedded icon" (see ⌘K/⌘J/⌘B elsewhere in this file) —
+     made only because the text glyph demonstrably couldn't be fixed
+     reliably without live verification, not a preference. */
+  .kbd-glyph-enter { width: 11px; height: 11px; display: block; }
   .search-empty { padding: 32px 16px; text-align: center; color: var(--color-ink-faint); font-size: 13.5px; }
+
+  /* Footer hint bar (2026-08-18, explicit request): "↑↓ Move" / "↵ Select",
+     same command-palette convention as Linear/Raycast/GitHub's own search.
+     Gray tone (--color-surface-sunken) to read as a secondary strip, not
+     more content — border-top is its only separator now that the input/
+     tabs dividers above were removed, so this is the one dividing line
+     left in the whole modal. Kbd chips use --color-surface (same reasoning
+     as .search-result-enter-kbd below) because they need to visually pop
+     as "keys" against this bar's own gray background — same tint would
+     make them invisible. Text glyphs (↑ ↓ ↵),
+     not embedded icon components, inside <kbd> — matches how every other
+     kbd hint in this file works (⌘K, ⌘J, ⌘B), never an <i data-lucide>
+     nested inside a kbd. */
+  .search-modal-footer {
+    display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+    padding: 8px 20px; background: var(--color-surface-sunken);
+    border-top: 1px solid var(--color-border);
+  }
+  .search-modal-hint { display: flex; align-items: center; gap: 6px; }
+  /* Esc/Cancel pushed to the right edge (2026-08-18, explicit request) —
+     Move/Select stay left as navigation hints, Cancel reads as the
+     dismiss action and sits opposite them. :last-child instead of a new
+     modifier class: the footer only ever renders these 3 static hints and
+     Esc/Cancel is always last in the markup. */
+  .search-modal-hint:last-child { margin-left: auto; }
+  .search-modal-hint kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 5px;
+    font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--color-surface); color: var(--color-ink-soft);
+    border: 1px solid var(--color-border-strong); border-radius: 4px;
+  }
+  .search-modal-hint-label {
+    /* Sentence case (2026-08-18, feedback direct): first letter capitalized
+       only, not full uppercase — text-transform: uppercase removed here.
+       "Move"/"Select" in the markup already read correctly on their own. */
+    font-size: 11px; font-weight: 700; letter-spacing: .03em;
+    color: var(--color-ink-faint);
+  }
+
+  /* Loading skeleton (2026-08-14): shown briefly every time results would
+     come from a "fetch" — opening the modal fresh, typing, switching tabs —
+     same convention as Projects/Apps/Chats/the chat panel's own skeletons
+     (shares the global skeletonShimmer keyframe + shimmer gradient
+     formula). Deliberately its OWN class, not also .search-result-item —
+     Search has real keyboard nav (↑/↓/Enter) and a click-to-select handler
+     that both query .search-result-item; sharing that class would make a
+     skeleton row arrow-key-highlightable or "selectable" while it's still
+     just a shimmering placeholder. Sized/padded to match .search-result-item
+     anyway so the skeleton→content swap doesn't jump. */
+  .search-skeleton-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 8px; border-radius: var(--radius-sm);
+    pointer-events: none;
+  }
+  .search-skeleton-icon, .search-skeleton-line {
+    display: inline-block; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border) 37%, var(--color-surface-sunken) 63%);
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+  }
+  .search-skeleton-icon { width: 16px; height: 16px; }
+  .search-skeleton-line { height: 12px; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -2063,8 +2579,8 @@
       </button>
       <div class="sidebar-section-body"><div class="sidebar-section-body-inner">
       <ul id="sidebarRecentList">
-        <li><a class="chat-row" href="#">How do I build a reconciliation rule?</a></li>
-        <li><a class="chat-row" href="#">This week's anomaly summary</a></li>
+        <li><a class="chat-row chat-row--icon" href="#"><i data-lucide="message-circle-more"></i><span class="chat-row-label">How do I build a reconciliation rule?</span></a></li>
+        <li><a class="chat-row chat-row--icon" href="#"><i data-lucide="message-circle-more"></i><span class="chat-row-label">This week's anomaly summary</span></a></li>
       </ul>
       </div></div>
     </div>
@@ -2378,7 +2894,7 @@
       <!-- Drag to resize the chat column while the side panel is open —
            hidden otherwise (see .chat-resize-handle in <style>). -->
       <div class="chat-resize-handle" id="chatResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize chat">
-        <span class="chat-resize-handle-grip" data-tooltip="Arrastra para redimensionar"></span>
+        <span class="chat-resize-handle-grip" data-tooltip="Drag to resize"></span>
       </div>
       <!-- Side panel: opened via the panel-right toggle in the chat header.
            Two states, mutually exclusive via [hidden]: the open picker
@@ -2738,6 +3254,33 @@
     <div class="search-modal-input-row">
       <i data-lucide="search"></i>
       <input type="text" id="searchModalInput" placeholder="Search chats, projects, apps, agents…" />
+      <div class="composer-dropdown">
+        <!-- tooltip-end (fix, 2026-08-18, feedback direct): this button sits
+             at the far-right edge of .search-modal-input-row, itself inside
+             .search-modal (overflow: hidden) — a centered .tooltip-bottom
+             tooltip ran past the modal's right edge and got clipped. Same
+             fix already used elsewhere for this exact shape of bug
+             (chatNewProjectChatBtn, chatHistoryToggle, the Project Map's
+             far-right controls): right-align the tooltip to the button's own
+             right edge instead of centering it. -->
+        <button type="button" class="icon-btn tooltip-bottom tooltip-end" id="searchFilterBtn" data-menu-trigger="search-filter" aria-label="Filter by tag" data-tooltip="Filter by tag">
+          <i data-lucide="settings-2"></i>
+          <span class="dot" id="searchFilterDot" hidden></span>
+        </button>
+        <div class="composer-menu composer-menu--filter" id="searchFilterMenu" data-menu="search-filter">
+          <div class="search-filter-search">
+            <i data-lucide="search"></i>
+            <input type="text" id="searchFilterSearchInput" placeholder="Search tags" />
+          </div>
+          <div class="composer-menu-list" id="searchFilterList"></div>
+          <div class="composer-menu-list search-filter-clear-row">
+            <button type="button" class="composer-menu-option" id="searchFilterClear">
+              <span class="opt-icon"><i data-lucide="x"></i></span>
+              <span class="opt-body"><span class="opt-title">Clear filters</span></span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="search-modal-tabs">
       <button class="search-tab is-active" data-tab="all">All</button>
@@ -2747,6 +3290,11 @@
       <button class="search-tab" data-tab="agents">Agents</button>
     </div>
     <div class="search-modal-results" id="searchModalResults"></div>
+    <div class="search-modal-footer">
+      <span class="search-modal-hint"><kbd>↑</kbd><kbd>↓</kbd><span class="search-modal-hint-label">Move</span></span>
+      <span class="search-modal-hint"><kbd><i data-lucide="corner-down-left" class="kbd-glyph-enter"></i></kbd><span class="search-modal-hint-label">Select</span></span>
+      <span class="search-modal-hint"><kbd>Esc</kbd><span class="search-modal-hint-label">Cancel</span></span>
+    </div>
   </div>
 </div>
 
@@ -2947,6 +3495,10 @@
      inline `position:fixed` styles computed from the trigger's
      getBoundingClientRect(). Actions are no-ops for now — see docs/sidebar.md. -->
 <div class="sidebar-project-actions-menu" data-sidebar-actions-menu="latam-bank-reconciliation">
+  <button type="button" class="composer-menu-option" data-sidebar-action="goto">
+    <span class="opt-icon"><i data-lucide="arrow-up-right"></i></span>
+    <span class="opt-body"><span class="opt-title">Go to project</span></span>
+  </button>
   <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
     <span class="opt-icon"><i data-lucide="pin-off"></i></span>
     <span class="opt-body"><span class="opt-title">Unpin project</span></span>
@@ -2965,6 +3517,10 @@
   </button>
 </div>
 <div class="sidebar-project-actions-menu" data-sidebar-actions-menu="q2-journal-entry-audit">
+  <button type="button" class="composer-menu-option" data-sidebar-action="goto">
+    <span class="opt-icon"><i data-lucide="arrow-up-right"></i></span>
+    <span class="opt-body"><span class="opt-title">Go to project</span></span>
+  </button>
   <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
     <span class="opt-icon"><i data-lucide="pin-off"></i></span>
     <span class="opt-body"><span class="opt-title">Unpin project</span></span>
@@ -2983,6 +3539,10 @@
   </button>
 </div>
 <div class="sidebar-project-actions-menu" data-sidebar-actions-menu="q3-treasury-forecast">
+  <button type="button" class="composer-menu-option" data-sidebar-action="goto">
+    <span class="opt-icon"><i data-lucide="arrow-up-right"></i></span>
+    <span class="opt-body"><span class="opt-title">Go to project</span></span>
+  </button>
   <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
     <span class="opt-icon"><i data-lucide="pin-off"></i></span>
     <span class="opt-body"><span class="opt-title">Unpin project</span></span>
@@ -3017,8 +3577,184 @@
   <div class="sidebar-pinned-popover-results" id="sidebarPinnedPopoverResults"></div>
 </div>
 
+<!-- Collapsed-sidebar Recent popover: same idea/mechanism as the Pinned one
+     right above (see initSidebarCollapsedRecentPopover in shell.js) — own
+     classes/ids copied 1:1 rather than reused, same "never share a class
+     name across independent components" rule already applied throughout
+     this file. Recent's own list (#sidebarRecentList) is flat (no nested
+     projects), so its popover only ever renders plain .chat-row items. -->
+<div class="sidebar-recent-popover" id="sidebarRecentPopover">
+  <div class="sidebar-recent-popover-search">
+    <i data-lucide="search"></i>
+    <input type="text" id="sidebarRecentPopoverSearch" placeholder="Search recent" />
+  </div>
+  <div class="sidebar-recent-popover-results" id="sidebarRecentPopoverResults"></div>
+</div>
+
+<script src="../../shared/supabase-config.js"></script>
+<script src="../../shared/auth.js"></script>
 <script src="../../shared/shell.js"></script>
 <script>
+  // Guard de sesión: no bloquea el pintado del HTML ya parseado (esto es un
+  // prototipo estático multi-página, no un SPA con router) — la protección
+  // real de los datos es RLS en Supabase, esto es solo UX para no dejar la
+  // pantalla de Home visible sin login. Fire-and-forget: si no hay sesión,
+  // redirige antes de que el usuario llegue a interactuar con nada.
+  const supabaseClient = getSupabaseClient();
+  requireSession('../../index.html');
+
+  // ---------- Fase 1: carga real desde Supabase ----------
+  // PROJECTS_DATA/APPS_DATA/CHATS_DATA/PANEL_AGENTS_DATA arrancan vacíos (ver
+  // sus declaraciones más abajo) y se completan acá — el resto del código de
+  // filtrado/render (getFilteredProjects, applyAppsFilters, etc.) no cambió,
+  // sigue leyendo las mismas 4 variables por nombre. RLS en Supabase ya
+  // scopea todo a la organización del usuario logueado, así que no hace
+  // falta filtrar por organization_id acá — pero tampoco hay selector de
+  // organización en la UI todavía: si el usuario perteneciera a más de una,
+  // hoy se mezclarían sus datos (ver docs/supabase.md → Pendiente).
+  function formatRelativeTime(isoString) {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    const minutes = Math.round(diffMs / 60000);
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    const weeks = Math.round(days / 7);
+    return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  }
+
+  // Fase 2 (2026-08-18): quién está logueado y en qué organización — antes
+  // vivían solo como const locales dentro de bootstrapDataFromSupabase();
+  // ahora se necesitan también en createProject/createApp/registerNewChat
+  // (organization_id es NOT NULL en las 3 tablas, no tiene default: hay que
+  // mandarlo a mano en cada insert) y en cualquier owner_user_id nuevo.
+  let currentUserId = null;
+  let currentOrganizationId = null;
+
+  // owner_user_id -> 'you'/'shared' relativo a quién está mirando, mismo
+  // criterio ya documentado en docs/proyecto.md (el string plano de antes
+  // no era un permiso real, esto tampoco lo es — solo ahora sale de una
+  // columna real en vez de estar hardcodeado por proyecto). Mismo mapeo lo
+  // usan tanto loadProjectsFromSupabase() (fila ya existente) como
+  // createProject() (fila recién insertada) — una sola función para no
+  // duplicar el shape y arriesgar que diverjan.
+  function mapProjectRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      icon: row.icon || 'folder',
+      status: row.status,
+      tags: row.tags || [],
+      pinned: row.pinned,
+      archived: row.archived,
+      owner: row.owner_user_id === currentUserId ? 'you' : 'shared',
+      members: row.members_count,
+      pendingNameFromChat: row.pending_name_from_chat,
+    };
+  }
+
+  function mapAppRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      icon: row.icon || 'layout-grid',
+      projects: (row.apps_projects || []).map((j) => j.project_id),
+      status: row.status,
+      pinned: row.pinned,
+      archived: row.archived,
+      pendingNameFromChat: row.pending_name_from_chat,
+    };
+  }
+
+  // A lo sumo una de las 3 FK no es nula (mismo CHECK que la tabla ya
+  // impone) — reconstruye el { type, id } que el resto del código de Chats
+  // ya espera. Usado por loadChatsFromSupabase() y registerNewChat().
+  function chatContextFromRow(row) {
+    if (row.project_id) return { type: 'project', id: row.project_id };
+    if (row.app_id) return { type: 'app', id: row.app_id };
+    if (row.agent_id) return { type: 'agent', id: row.agent_id };
+    return null;
+  }
+
+  async function loadProjectsFromSupabase() {
+    const { data, error } = await supabaseClient.from('projects').select('*');
+    if (error) { console.error('loadProjectsFromSupabase', error); return; }
+    PROJECTS_DATA.push(...data.map(mapProjectRow));
+  }
+
+  // apps_projects(project_id) es un embed de supabase-js sobre la FK real
+  // (apps_projects.app_id -> apps.id) — trae la junction N:N en la misma
+  // consulta en vez de un segundo roundtrip.
+  async function loadAppsFromSupabase() {
+    const { data, error } = await supabaseClient.from('apps').select('*, apps_projects(project_id)');
+    if (error) { console.error('loadAppsFromSupabase', error); return; }
+    APPS_DATA.push(...data.map(mapAppRow));
+  }
+
+  async function loadAgentsFromSupabase() {
+    const { data, error } = await supabaseClient.from('agents').select('*');
+    if (error) { console.error('loadAgentsFromSupabase', error); return; }
+    PANEL_AGENTS_DATA.push(...data.map((row) => ({ id: row.id, name: row.name })));
+  }
+
+  async function loadChatsFromSupabase() {
+    const { data, error } = await supabaseClient.from('chats').select('*');
+    if (error) { console.error('loadChatsFromSupabase', error); return; }
+    CHATS_DATA.push(...data.map((row) => ({
+      id: row.id,
+      name: row.name,
+      context: chatContextFromRow(row),
+      createdAt: formatRelativeTime(row.created_at),
+      archived: row.archived,
+      pinned: row.pinned,
+    })));
+  }
+
+  // Fire-and-forget: no bloquea el resto del script, que sigue corriendo
+  // síncrono más abajo con los 4 arrays todavía vacíos — initProjectsView()/
+  // initAppsView() (más abajo) pintan un estado vacío momentáneo hasta que
+  // esta promesa resuelve y se vuelve a disparar su render real. Chats y
+  // Agents no necesitan ese segundo disparo: su primer render real ocurre
+  // recién cuando el usuario navega a esa vista, y para entonces esto ya
+  // resolvió (ver docs/supabase.md para el detalle de esta asimetría).
+  (async function bootstrapDataFromSupabase() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUserId = session ? session.user.id : null;
+    // Sin selector de organización en la UI todavía — toma la primera
+    // membresía del usuario (ver docs/supabase.md → Pendiente: si alguna vez
+    // pertenece a más de una organización, esto solo agarra una).
+    if (currentUserId) {
+      const { data: membership, error: membershipError } = await supabaseClient
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', currentUserId)
+        .limit(1)
+        .maybeSingle();
+      if (membershipError) console.error('bootstrapDataFromSupabase (membership)', membershipError);
+      currentOrganizationId = membership ? membership.organization_id : null;
+    }
+    await Promise.all([
+      loadProjectsFromSupabase(),
+      loadAppsFromSupabase(),
+      loadAgentsFromSupabase(),
+      loadChatsFromSupabase(),
+    ]);
+    if (document.getElementById('projectsGrid')) {
+      renderProjectsFilterMenu();
+      updateProjectsFilterButton();
+      applyProjectsFilters();
+    }
+    if (document.getElementById('appsGrid')) {
+      renderAppsFilterMenu();
+      updateAppsFilterButton();
+      applyAppsFilters();
+    }
+  })();
+
   const chatEmpty = document.getElementById('chatEmpty');
   const chatThread = document.getElementById('chatThread');
   const chatThreadMain = document.getElementById('chatThreadMain');
@@ -3401,7 +4137,7 @@
   // usuario", per the explicit request. Same sidebar-sync pattern
   // saveProjectEdit() already uses for a manual rename: look the row up by
   // the OLD name before overwriting it, then push the new name in.
-  function renameProjectFromFirstMessage(project, text) {
+  async function renameProjectFromFirstMessage(project, text) {
     const sidebarItem = findSidebarPinnedItem(project.name);
     project.name = deriveChatTitle(text);
     project.description = (text || '').trim();
@@ -3411,6 +4147,10 @@
       if (nameEl) nameEl.textContent = project.name;
     }
     applyProjectsFilters();
+    const { error } = await supabaseClient.from('projects')
+      .update({ name: project.name, description: project.description, pending_name_from_chat: false })
+      .eq('id', project.id);
+    if (error) console.error('renameProjectFromFirstMessage', error);
   }
 
   function updateChatThreadHeader(firstPrompt) {
@@ -3454,7 +4194,7 @@
     if (newChatBtn) newChatBtn.hidden = !isProjectChat;
   }
 
-  function startChat(firstPrompt) {
+  async function startChat(firstPrompt) {
     chatEmpty.hidden = true;
     chatThread.hidden = false;
     chatPanelToggle.hidden = false;
@@ -3477,19 +4217,19 @@
     if (startContext && startContext.type === 'project') {
       const startProject = findProjectById(startContext.id);
       if (startProject && startProject.pendingNameFromChat) {
-        renameProjectFromFirstMessage(startProject, firstPrompt);
+        await renameProjectFromFirstMessage(startProject, firstPrompt);
         startContext.name = startProject.name; // keep this in-memory selection in sync too
       }
     } else if (startContext && startContext.type === 'app') {
       const startApp = findAppById(startContext.id);
       if (startApp && startApp.pendingNameFromChat) {
-        renameAppFromFirstMessage(startApp, firstPrompt);
+        await renameAppFromFirstMessage(startApp, firstPrompt);
         startContext.name = startApp.name;
       }
     }
 
     updateChatThreadHeader(firstPrompt);
-    registerNewChat(deriveChatTitle(firstPrompt));
+    await registerNewChat(deriveChatTitle(firstPrompt));
     // Starting a chat with a Project or an App attached as context behaves
     // like opening that Project/App directly (see openProjectChat/
     // openAppChat): the conversation collapses to 370px and its own tab
@@ -3716,6 +4456,10 @@
     // (or the next chat) starts fresh from the 370px default rather than
     // remembering a one-off drag from a previous session.
     if (!isOpen) resetChatColumnWidth();
+    // Opening with no tabs yet means the open picker is what's about to
+    // show — simulate its own "fetch" the same way every other section
+    // entry does (see maybeLoadPanelOpenPicker).
+    if (isOpen) maybeLoadPanelOpenPicker();
   });
 
   // ---------- Chat column resize (drag) ----------
@@ -3839,11 +4583,11 @@
   // them by someone else — drives the "All / Created by you / Shared
   // projects" tabs below the header. Mock split: 2 owned, 1 shared, purely
   // to make both filters return something non-empty in the demo.
-  const PROJECTS_DATA = [
-    { id: 'latam-bank-reconciliation', name: 'LATAM Bank Reconciliation', status: 'production', tags: ['source:bank-statement', 'region:LATAM'], pinned: true, archived: false, owner: 'you', members: 10 },
-    { id: 'q2-journal-entry-audit', name: 'Q2 Journal Entry Audit', status: 'production', tags: ['journal-entry', 'period:Q2'], pinned: true, archived: false, owner: 'you', members: 6 },
-    { id: 'q3-treasury-forecast', name: 'Q3 Treasury Forecast', status: 'draft', tags: ['period:Q3'], pinned: true, archived: false, owner: 'shared', members: 5 },
-  ];
+  // Fase 1 (2026-08-18): ya no hardcodeado — se puebla desde Supabase vía
+  // loadProjectsFromSupabase() (ver bootstrapDataFromSupabase() más arriba).
+  // Los 3 proyectos de la demo original viven ahora como seed en
+  // supabase/migrations/0002_projects_apps_agents.sql.
+  let PROJECTS_DATA = [];
   let projectsSearchTerm = '';
   let projectsViewMode = 'grid';
   let projectsActiveTags = new Set();
@@ -3853,6 +4597,10 @@
     return PROJECTS_DATA.find((p) => p.id === id);
   }
 
+  // Sin uso desde Fase 2 (2026-08-18) — createProject() ya no genera el id
+  // en el cliente, lo asigna Supabase al insertar (uuid real). Se deja sin
+  // borrar por si alguna otra pieza necesita un slug legible más adelante.
+  //
   // Slugifies the name into an id, disambiguating with -2/-3/... on
   // collision (two projects can share a display name; ids can't).
   function generateProjectId(name) {
@@ -3876,9 +4624,15 @@
   // SEARCH_DATA.projects (Cmd+K's own hand-authored mock, already
   // documented as intentionally decoupled from PROJECTS_DATA). Both are
   // flagged as open gaps in docs/home.md rather than reached into here.
-  function createProject({ name, description, icon, pendingNameFromChat }) {
-    const project = {
-      id: generateProjectId(name),
+  // Fase 2 (2026-08-18): id ya no se genera en el cliente (generateProjectId
+  // queda solo para lo que todavía lo use, ver docs/supabase.md) — Supabase
+  // asigna el uuid real al insertar, y el objeto local se arma con
+  // mapProjectRow() sobre la fila devuelta, mismo mapeo que usa la carga
+  // inicial. owner_user_id sí se manda (el creador real), a diferencia del
+  // seed de la migración 0002 que no lo seteaba para los 3 proyectos demo.
+  async function createProject({ name, description, icon, pendingNameFromChat }) {
+    const { data, error } = await supabaseClient.from('projects').insert({
+      organization_id: currentOrganizationId,
       name: name.trim(),
       description: (description || '').trim(),
       icon: icon || 'folder',
@@ -3886,8 +4640,8 @@
       tags: [],
       pinned: false,
       archived: false,
-      owner: 'you',
-      members: 1, // just the creator so far — no invite flow sets this yet, see docs/home.md
+      owner_user_id: currentUserId,
+      members_count: 1, // just the creator so far — no invite flow sets this yet, see docs/home.md
       // Set only by startNewProjectFlow() — flags a placeholder "New
       // Project" whose real name/description haven't been defined yet, so
       // startChat() knows to derive them from the first message instead of
@@ -3895,8 +4649,10 @@
       // A dedicated flag instead of checking `name === 'New Project'`
       // string-matching, which would misfire if a real project were ever
       // renamed to that exact text by coincidence.
-      pendingNameFromChat: !!pendingNameFromChat,
-    };
+      pending_name_from_chat: !!pendingNameFromChat,
+    }).select().single();
+    if (error) { console.error('createProject', error); return null; }
+    const project = mapProjectRow(data);
     PROJECTS_DATA.push(project);
     applyProjectsFilters();
     return project;
@@ -3986,6 +4742,10 @@
   function sidebarProjectActionsMenuMarkup(id) {
     return `
       <div class="sidebar-project-actions-menu" data-sidebar-actions-menu="${id}">
+        <button type="button" class="composer-menu-option" data-sidebar-action="goto">
+          <span class="opt-icon"><i data-lucide="arrow-up-right"></i></span>
+          <span class="opt-body"><span class="opt-title">Go to project</span></span>
+        </button>
         <button type="button" class="composer-menu-option" data-sidebar-action="unpin">
           <span class="opt-icon"><i data-lucide="pin-off"></i></span>
           <span class="opt-body"><span class="opt-title">Unpin project</span></span>
@@ -4072,46 +4832,18 @@
   //   standalone communication the user can point at whichever project(s)
   //   matter once they're ready, illustrating that an App doesn't need a
   //   project at all to exist.
-  const APPS_DATA = [
-    {
-      id: 'bank-reconciliation-summary',
-      name: 'Bank Reconciliation Summary',
-      description: 'Pulls LATAM Bank Reconciliation data and drafts a period-close reconciliation report — balances, exceptions, and a plain-language summary.',
-      icon: 'file-check',
-      projects: ['latam-bank-reconciliation'],
-      status: 'active',
-      pinned: true,
-      archived: false,
-      pendingNameFromChat: false,
-    },
-    {
-      id: 'quarterly-anomaly-digest',
-      name: 'Quarterly Anomaly Digest',
-      description: 'Cross-checks Q2 Journal Entry Audit and Q3 Treasury Forecast data to flag anomalies worth reviewing before period close.',
-      icon: 'radar',
-      projects: ['q2-journal-entry-audit', 'q3-treasury-forecast'],
-      status: 'active',
-      pinned: false,
-      archived: false,
-      pendingNameFromChat: false,
-    },
-    {
-      id: 'board-update-draft',
-      name: 'Board Update Draft',
-      description: "Drafts a leadership-ready update on financial operations — pick which projects to pull from when you're ready.",
-      icon: 'megaphone',
-      projects: [],
-      status: 'draft',
-      pinned: false,
-      archived: false,
-      pendingNameFromChat: false,
-    },
-  ];
+  // Fase 1 (2026-08-18): ya no hardcodeado — se puebla desde Supabase vía
+  // loadAppsFromSupabase() (ver bootstrapDataFromSupabase() más arriba). Las
+  // 3 apps de la demo original viven ahora como seed en
+  // supabase/migrations/0002_projects_apps_agents.sql.
+  let APPS_DATA = [];
 
   function findAppById(id) {
     return APPS_DATA.find((a) => a.id === id);
   }
 
+  // Sin uso desde Fase 2 (2026-08-18) — mismo motivo que generateProjectId.
+  //
   // Same slugify + -2/-3… disambiguation convention as generateProjectId/
   // generateChatId.
   function generateAppId(name) {
@@ -4128,13 +4860,15 @@
   // shows up in all three without extra wiring. `projects` defaults to []
   // (an App doesn't need one to exist — see docs/apps.md) unless the entry
   // point that calls this already knows which ones to attach.
-  function createApp({ name, description, icon, projects, pendingNameFromChat }) {
-    const app = {
-      id: generateAppId(name),
+  // Fase 2 (2026-08-18): igual que createProject — id lo asigna Supabase, y
+  // los `projects` iniciales (si vinieran) se escriben en la tabla puente
+  // apps_projects en un segundo insert, no como columna propia.
+  async function createApp({ name, description, icon, projects, pendingNameFromChat }) {
+    const { data, error } = await supabaseClient.from('apps').insert({
+      organization_id: currentOrganizationId,
       name: name.trim(),
       description: (description || '').trim(),
       icon: icon || 'layout-grid',
-      projects: projects || [],
       status: 'draft',
       pinned: false,
       archived: false,
@@ -4142,8 +4876,16 @@
       // by startNewAppFlow(), tells startChat() to derive the real name/
       // description from the first message instead of treating this as an
       // ordinary chat under an already-named app.
-      pendingNameFromChat: !!pendingNameFromChat,
-    };
+      pending_name_from_chat: !!pendingNameFromChat,
+    }).select().single();
+    if (error) { console.error('createApp', error); return null; }
+    const projectIds = projects || [];
+    if (projectIds.length) {
+      const { error: linkError } = await supabaseClient.from('apps_projects')
+        .insert(projectIds.map((projectId) => ({ app_id: data.id, project_id: projectId })));
+      if (linkError) console.error('createApp (link projects)', linkError);
+    }
+    const app = mapAppRow({ ...data, apps_projects: projectIds.map((project_id) => ({ project_id })) });
     APPS_DATA.push(app);
     applyAppsFilters();
     return app;
@@ -4156,11 +4898,15 @@
   // same criterion as the Project version. No sidebar sync here (unlike
   // renameProjectFromFirstMessage) — Apps aren't mirrored into the
   // sidebar's Pinned list in this pass, see docs/apps.md → Pendiente.
-  function renameAppFromFirstMessage(app, text) {
+  async function renameAppFromFirstMessage(app, text) {
     app.name = deriveChatTitle(text);
     app.description = (text || '').trim();
     app.pendingNameFromChat = false;
     applyAppsFilters();
+    const { error } = await supabaseClient.from('apps')
+      .update({ name: app.name, description: app.description, pending_name_from_chat: false })
+      .eq('id', app.id);
+    if (error) console.error('renameAppFromFirstMessage', error);
   }
 
   // ---------- Chat side panel: Project/App/Agent picker + tabs ----------
@@ -4172,11 +4918,9 @@
   // the sidebar's Pinned markup). Map isn't listed: opening a Project is
   // what renders that project's map view, there's no separate "Map" entity
   // to pick.
-  const PANEL_AGENTS_DATA = [
-    { id: 'reconciliation-agent', name: 'Reconciliation Agent' },
-    { id: 'anomaly-watcher', name: 'Anomaly Watcher' },
-    { id: 'period-close-assistant', name: 'Period Close Assistant' },
-  ];
+  // Fase 1 (2026-08-18): ya no hardcodeado — se puebla desde Supabase vía
+  // loadAgentsFromSupabase() (ver bootstrapDataFromSupabase() más arriba).
+  let PANEL_AGENTS_DATA = [];
   const PANEL_OPEN_ICONS = { project: 'folder', app: 'layout-grid', agent: 'bot' };
   const PANEL_OPEN_LABELS = { project: 'Projects', app: 'Apps', agent: 'Agents' };
   // APPS_DATA is declared in the Apps view section below (after the
@@ -4246,18 +4990,72 @@
     if (window.lucide) lucide.createIcons();
   }
 
+  // Loading skeleton: same convention as loadProjectsView/
+  // queryProjectsWithLoading — a mock fetch delay every time these results
+  // would come from "the server" (opening fresh, searching, switching the
+  // filter tab), not just the very first render. Widths vary per row so
+  // the shimmer reads as placeholder text, not a repeated identical block.
+  function panelOpenSkeletonMarkup(count) {
+    const widths = ['45%', '65%', '55%'];
+    return Array.from({ length: count }, (_, i) => `
+      <button type="button" class="panel-open-item panel-open-skeleton-item" tabindex="-1" aria-hidden="true">
+        <span class="panel-open-skeleton-icon"></span>
+        <span class="panel-open-skeleton-line" style="width: ${widths[i % widths.length]}"></span>
+      </button>
+    `).join('');
+  }
+
+  function showPanelOpenSkeleton(scopeKey) {
+    panelOpenScopes[scopeKey].results.innerHTML = panelOpenSkeletonMarkup(5);
+  }
+
+  // One timer per scope so a second query (typing again, or switching the
+  // filter tab right after opening) cancels whichever mock fetch was still
+  // "in flight" instead of both landing and racing each other.
+  const panelOpenQueryTimers = { picker: null, menu: null };
+  function queryPanelOpenWithLoading(scopeKey, delay) {
+    showPanelOpenSkeleton(scopeKey);
+    clearTimeout(panelOpenQueryTimers[scopeKey]);
+    panelOpenQueryTimers[scopeKey] = setTimeout(() => {
+      renderPanelOpenResults(scopeKey);
+    }, delay);
+  }
+
   function wirePanelOpenScope(scopeKey) {
     const scope = panelOpenScopes[scopeKey];
     scope.search.addEventListener('input', () => {
       scope.term = scope.search.value;
-      renderPanelOpenResults(scopeKey);
+      queryPanelOpenWithLoading(scopeKey, 400);
     });
     scope.tabsWrap.querySelectorAll('.panel-filter-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
         scope.tab = tab.dataset.filter;
         scope.tabsWrap.querySelectorAll('.panel-filter-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
-        renderPanelOpenResults(scopeKey);
+        queryPanelOpenWithLoading(scopeKey, 400);
       });
+    });
+  }
+
+  // "Section entry" for the picker scope — every time it's about to become
+  // visible again (panel opening fresh, or closing the last tab reveals it
+  // once more) simulates the same 700ms "first load" fetch feel as
+  // loadProjectsView(). Guarded so it never fires while the panel itself
+  // is closed (e.g. mid-reset on "New Chat", where has-panel was already
+  // removed a line earlier — no point loading a skeleton nobody can see).
+  function maybeLoadPanelOpenPicker() {
+    if (panelTabsState.length === 0 && chatThread.classList.contains('has-panel')) {
+      queryPanelOpenWithLoading('picker', 700);
+    }
+  }
+
+  // Same section-entry feel for the "+" popover: fires only when this
+  // click just opened it (not closed it) — the generic [data-menu-trigger]
+  // listener above already toggled .is-open by the time this runs, so
+  // checking the class here reads the post-toggle state.
+  const panelTabAddBtn = document.querySelector('.panel-tab-add-btn');
+  if (panelTabAddBtn) {
+    panelTabAddBtn.addEventListener('click', () => {
+      if (panelOpenMenu.classList.contains('is-open')) queryPanelOpenWithLoading('menu', 700);
     });
   }
 
@@ -4315,51 +5113,293 @@
   // that runs often" in this file, just primitives here rather than
   // objects, so it's tidiness more than a correctness requirement.
   const PROJECT_MAP_ZOOM_MIN = 0.6;
-  const PROJECT_MAP_ZOOM_MAX = 1.2;
+  // Subido de 1.2 a 2 (pedido explícito: "permite que el mapa pueda hacer
+  // más zoom in") — con nodos reales en pantalla (Fase 2), acercarse hasta
+  // el doble tiene sentido para leer el detalle de una card sin acercar
+  // la ventana del navegador.
+  const PROJECT_MAP_ZOOM_MAX = 2;
   const PROJECT_MAP_ZOOM_STEP = 0.1;
+  // Tiene que ser el mismo número que el `inset: -2000px` de
+  // `.project-map-zoom-content` en el CSS — es lo que separa el origen
+  // local de esa capa (0,0) de la esquina del canvas visible. Vive acá
+  // aparte, no repetido en cada lugar que lo necesita, para que un cambio
+  // futuro del inset no pueda desincronizarse silenciosamente de este uso.
+  const PROJECT_MAP_ZOOM_CONTENT_INSET = 2000;
 
-  // How many nodes a project's map currently has. No real node model
-  // exists yet — that's Fase 2 — so every project has zero until then.
-  // Kept as its own function, not an inline `0`, so Fase 2 only has to
-  // change what THIS reads (real node data, once it exists) instead of
-  // every caller that needs to know "does this project have nodes yet".
-  function projectMapNodeCount(_projectId) {
-    return 0;
+  // ---------- Project View Map — Fase 2: nodos ----------
+  // Ver docs/map.md para el modelo completo (tipos, variantes, estados) y
+  // el porqué de cada decisión — este bloque es la implementación, no el
+  // lugar para releer las razones.
+
+  const NODE_STATUS_LABEL = { inactivo: 'Inactive', encolado: 'Queued', corriendo: 'Running', exito: 'Success', error: 'Error' };
+
+  // database-zap y no database liso — pedido explícito, distingue al
+  // Dataset del resto con el mismo golpe de vista que un ícono más
+  // genérico no daba. Este es el ícono del HEADER — genérico por
+  // tipo/dirección, igual para cualquier nodo de ese tipo. El de la card
+  // blanca (content) es otro, ver nodeContentIcon() más abajo.
+  function nodeIconName(n) {
+    if (n.type === 'integracion') return n.direccion === 'salida' ? 'arrow-up-from-line' : 'arrow-down-to-line';
+    if (n.type === 'dataset') return 'database-zap';
+    return 'square-function';
+  }
+  // Ícono de la card blanca (content) — a diferencia del de header, este
+  // es específico del NODO, no del tipo (pedido explícito: "el ícono...
+  // tiene que estar asociado un poco con el proceso que está
+  // internamente"). `n.icon` lo trae cada nodo del grafo (ver
+  // DEMO_MAP_GRAPH); si un nodo no lo trae —el modelo real todavía no
+  // define de dónde saldría este dato— cae de vuelta al genérico por tipo
+  // en vez de romper.
+  function nodeContentIcon(n) {
+    return n.icon || nodeIconName(n);
+  }
+  // Sentence case, no ALL CAPS — pedido explícito: "solo la primera letra
+  // mayúscula". El string ya sale así de acá; el CSS del header
+  // (`.node-card-header-label`) no le aplica ningún `text-transform`
+  // encima que lo pise.
+  function nodeTypeLabel(n) {
+    if (n.type === 'integracion') return `Integration · ${n.direccion === 'salida' ? 'outbound' : 'inbound'}`;
+    if (n.type === 'dataset') return 'Dataset';
+    return 'Function';
   }
 
-  // Project View Map — Fase 1: canvas navigation. Still no nodes (Fase 2+
-  // mounts them into .project-map-zoom-content, the empty <div> below) —
-  // Fase 0's empty state moves inside a new .project-map-empty overlay,
-  // floating on TOP of a real pannable/zoomable canvas instead of being
-  // the entire tab content.
+  // DEMO temporal, no datos reales — pedido explícito de esta pasada:
+  // "vamos trabajando directamente en el mapa... esa primera versión"
+  // (ver el mockup "Nodos del Mapa"). PROJECTS_DATA ahora sale de Supabase
+  // (docs/supabase.md, Fase 1 de esa migración) con ids reales que no
+  // podemos anticipar acá, así que este grafo de ejemplo se muestra en
+  // CUALQUIER proyecto por ahora — no está scopeado a uno en particular.
+  // Es una divergencia deliberada y temporal de la Decisión 3 de
+  // project-map.md ("el mapa arranca vacío"); se cierra cuando el primer
+  // mensaje del chat dispare el reveal real (ver Pendiente en docs/map.md).
+  const DEMO_MAP_GRAPH = {
+    nodes: [
+      { id: 'n1', type: 'integracion', direccion: 'entrada', name: 'Bank statement feed', x: 24,  y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:02', icon: 'landmark' },
+      { id: 'n2', type: 'integracion', direccion: 'entrada', name: 'ERP export feed',     x: 24,  y: 260, status: 'exito', updatedAt: '18/08/2026, 06:05', icon: 'building-2' },
+      { id: 'n3', type: 'dataset',     name: 'ds_bank_transactions', x: 300, y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:07', icon: 'arrow-left-right', rows: 30 },
+      { id: 'n4', type: 'dataset',     name: 'ds_erp_journal',       x: 300, y: 260, status: 'exito', updatedAt: '18/08/2026, 06:08', icon: 'book-text', rows: 24 },
+      { id: 'n5', type: 'dataset',     name: 'ds_reconciliation',    x: 580, y: 150, status: 'corriendo', tags: ['conciliación'], updatedAt: '18/08/2026, 09:14', icon: 'scale', rows: 18 },
+      { id: 'n6', type: 'function',    name: 'Apply manual match',   x: 880, y: 40,  lifecycle: 'Active', updatedAt: '17/08/2026, 18:40', icon: 'hand' },
+      { id: 'n7', type: 'integracion', direccion: 'salida',  name: 'Settlement report',   x: 880, y: 260, status: 'encolado', updatedAt: '18/08/2026, 06:09', icon: 'file-check' },
+    ],
+    edges: [
+      { from: 'n1', to: 'n3' },
+      { from: 'n2', to: 'n4' },
+      { from: 'n3', to: 'n5' },
+      { from: 'n4', to: 'n5' },
+      { from: 'n5', to: 'n7' },
+      { from: 'n5', to: 'n6', governed: true },
+    ],
+  };
+  function buildMapGraph(_projectId) {
+    return DEMO_MAP_GRAPH;
+  }
+
+  // How many nodes a project's map currently has — controla si los
+  // controles de navegación se muestran (ver Fase 1). Ya no es un stub
+  // fijo en 0: lee del mismo grafo que se va a dibujar.
+  function projectMapNodeCount(projectId) {
+    return buildMapGraph(projectId).nodes.length;
+  }
+
+  // Function es el caso raro: lee un Dataset (necesita handle de entrada,
+  // igual que Dataset) pero nunca alimenta el flujo hacia adelante, así
+  // que nunca tiene handle de salida — los dos atajos `!== 'integracion'`
+  // de abajo se lo darían igual solo por no ser Integración si no se
+  // corta ese caso a mano.
+  function nodeHasInHandle(n) { return n.type === 'integracion' ? n.direccion === 'salida' : true; }
+  function nodeHasOutHandle(n) { return n.type === 'integracion' ? n.direccion === 'entrada' : n.type !== 'function'; }
+
+  function buildNodeCardHtml(n) {
+    const statusHtml = n.status ? `<span class="node-card-status node-status-${n.status}">${NODE_STATUS_LABEL[n.status]}</span>` : '';
+    const lifecycleHtml = n.lifecycle ? `<span class="node-card-status node-status-inactivo">${n.lifecycle}</span>` : '';
+    // Dot de estado en el header — reemplaza al badge de texto que antes
+    // vivía en el content (pedido explícito). Mismo criterio de color que
+    // el badge (reusa las clases `.node-status-*` ya existentes, solo que
+    // acá pintan el fondo de un círculo en vez de un pill con texto);
+    // lifecycle (Function) sigue cayendo en el tratamiento neutral
+    // "inactivo", igual que ya hacía el badge. El label real (para el
+    // tooltip) es el mismo texto que antes se leía en el badge.
+    const dotKey = n.status || (n.lifecycle ? 'inactivo' : null);
+    const dotLabel = n.status ? NODE_STATUS_LABEL[n.status] : n.lifecycle;
+    const dotHtml = dotKey
+      ? `<span class="node-dot node-status-${dotKey}" data-tooltip="${dotLabel}"></span>`
+      : '';
+    // Badge de filas — solo Dataset (pedido explícito): "identifica el
+    // número de registros que va a tener ese dataset". Hoy es un número
+    // fijo por nodo (ver DEMO_MAP_GRAPH); el propio usuario aclaró que
+    // esto se tiene que recalcular contra la base de datos real más
+    // adelante — no es scope de esta pasada, solo la superficie visual.
+    const rowsHtml = (n.type === 'dataset' && n.rows != null)
+      ? `<span class="node-meta-badge">${n.rows} rows</span>`
+      : '';
+    // Badge de tags — footer, esquina derecha (pedido explícito). A
+    // diferencia de la lista de tags que se sacó antes de acá, esto no
+    // repite el texto de cada tag — solo la CANTIDAD, con un ícono. Solo
+    // se muestra si el nodo tiene al menos 1 tag (mismo criterio de "no
+    // renderizar una franja vacía" que ya usa el resto de esta card).
+    const tagsCountHtml = (n.tags && n.tags.length)
+      ? `<span class="node-meta-badge"><i data-lucide="tags"></i>${n.tags.length}</span>`
+      : '';
+    // "Last updated" vuelve a la card blanca, debajo del nombre (pedido
+    // explícito) — tercera vuelta de esta misma sesión (content → footer
+    // → content). Queda dentro de `.node-card-title`, así que apila
+    // debajo del nombre con el mismo `gap` que ya tenía esa columna.
+    const updatedHtml = n.updatedAt ? `<div class="node-card-updated"><i data-lucide="clock"></i><span>Last updated ${n.updatedAt}</span></div>` : '';
+    // El footer (`.node-card-extra`) solo lleva el badge de tags por
+    // ahora, alineado a la derecha (`justify-content: flex-end` en el
+    // propio contenedor, ver CSS) — nada más vive acá todavía.
+    const extraHtml = tagsCountHtml ? `<div class="node-card-extra">${tagsCountHtml}</div>` : '';
+    return `
+      <div class="node-card node-card--${n.type}" id="map-${n.id}" data-map-node data-node-id="${n.id}" style="left:${n.x}px; top:${n.y}px;">
+        ${nodeHasInHandle(n) ? '<span class="node-handle node-handle--in"></span>' : ''}
+        ${nodeHasOutHandle(n) ? '<span class="node-handle node-handle--out"></span>' : ''}
+        <div class="node-card-header">
+          <span class="node-card-header-icon"><i data-lucide="${nodeIconName(n)}"></i></span>
+          <span class="node-card-header-label">${nodeTypeLabel(n)}</span>
+          ${rowsHtml}
+          ${dotHtml}
+        </div>
+        <div class="node-card-inner">
+          <span class="node-card-icon"><i data-lucide="${nodeContentIcon(n)}"></i></span>
+          <div class="node-card-title">
+            <span class="node-card-name">${n.name}</span>
+            ${updatedHtml}
+          </div>
+        </div>
+        ${extraHtml}
+        <div class="node-card-tooltip">
+          <span class="node-card-tooltip-name">${n.name}</span>
+          ${statusHtml}${lifecycleHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  // Dibuja el grafo dentro de `.project-map-zoom-content` (la capa que ya
+  // se panea/zoomea desde Fase 1) — nodos y aristas viven en el MISMO
+  // espacio de coordenadas sin transformar entre sí, así que las aristas
+  // se calculan una sola vez con `offsetLeft/offsetTop/offsetWidth/
+  // offsetHeight` (medidas propias del elemento, no afectadas por el
+  // `transform: scale()` del pan/zoom) y no hace falta recalcularlas al
+  // panear o hacer zoom — solo cuando un nodo cambia de tamaño (colapsa o
+  // se expande).
+  function renderMapGraph(zoomContent, graph, canvas) {
+    zoomContent.insertAdjacentHTML('beforeend', `
+      <div class="project-map-graph" data-map-graph>
+        ${graph.nodes.map(buildNodeCardHtml).join('')}
+        <svg class="project-map-edges" data-map-edges>
+          ${graph.edges.map((e, i) => `<path class="node-edge${e.governed ? ' node-edge--governed' : ''}" id="map-edge-${i}"></path>`).join('')}
+        </svg>
+      </div>
+    `);
+
+    const graphEl = zoomContent.querySelector('[data-map-graph]');
+    const svg = zoomContent.querySelector('[data-map-edges]');
+
+    // Centra el grafo bajo el canvas VISIBLE en este render — no un valor
+    // fijo en CSS, que quedaría bien centrado solo por casualidad según el
+    // ancho real del panel (chat colapsado/expandido, distintas
+    // resoluciones). El bounding box sale de medir los nodos ya insertados
+    // (`offsetLeft/Top/Width/Height`, todos en modo completo recién
+    // montados) — no hay que adivinar alturas, que varían según si el nodo
+    // tiene tags o no.
+    const nodeEls = Array.from(graphEl.querySelectorAll('[data-map-node]'));
+    if (canvas && nodeEls.length > 0) {
+      const minX = Math.min(...nodeEls.map((el) => el.offsetLeft));
+      const maxX = Math.max(...nodeEls.map((el) => el.offsetLeft + el.offsetWidth));
+      const minY = Math.min(...nodeEls.map((el) => el.offsetTop));
+      const maxY = Math.max(...nodeEls.map((el) => el.offsetTop + el.offsetHeight));
+      const bboxCenterX = (minX + maxX) / 2;
+      const bboxCenterY = (minY + maxY) / 2;
+      // El origen local de `.project-map-zoom-content` (0,0) cae a
+      // `PROJECT_MAP_ZOOM_CONTENT_INSET` px arriba-izquierda de la
+      // esquina del canvas (por su `inset` negativo) — sumarlo es lo que
+      // convierte "centro del canvas" en la coordenada local correcta.
+      graphEl.style.left = `${canvas.offsetWidth / 2 + PROJECT_MAP_ZOOM_CONTENT_INSET - bboxCenterX}px`;
+      graphEl.style.top = `${canvas.offsetHeight / 2 + PROJECT_MAP_ZOOM_CONTENT_INSET - bboxCenterY}px`;
+    }
+
+    function nodeHandlePoint(nodeId, side) {
+      const el = graphEl.querySelector(`[data-node-id="${nodeId}"]`);
+      const y = el.offsetTop + el.offsetHeight / 2;
+      return { x: side === 'out' ? el.offsetLeft + el.offsetWidth : el.offsetLeft, y };
+    }
+    function redrawMapEdges() {
+      graph.edges.forEach((e, i) => {
+        const p1 = nodeHandlePoint(e.from, 'out');
+        const p2 = nodeHandlePoint(e.to, 'in');
+        const dx = Math.max(40, (p2.x - p1.x) / 2);
+        const d = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`;
+        svg.querySelector(`#map-edge-${i}`).setAttribute('d', d);
+      });
+    }
+    // Sigue la transición CSS (~200ms) del nodo que colapsa/expande, no
+    // solo el estado final — mismo criterio que ya usa el pan/zoom de
+    // Fase 1 para no verse "saltar" al final del cambio.
+    function redrawDuringTransition() {
+      const start = performance.now();
+      function tick(now) {
+        redrawMapEdges();
+        if (now - start < 260) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // Colapsar/expandir un nodo con un click. El menú "···" del header se
+    // sacó (pedido explícito) — ya no hace falta ningún guard acá para
+    // separarlo del resto de la card clickeable.
+    graphEl.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-map-node]');
+      if (!card) return;
+      card.classList.toggle('is-compact');
+      redrawDuringTransition();
+    });
+
+    redrawMapEdges();
+    if (window.lucide) lucide.createIcons();
+    return { redrawMapEdges };
+  }
+
+  // Project View Map — Fase 1 (canvas) + Fase 2 (nodos). El empty state de
+  // Fase 0 (`.project-map-empty`) y el grafo son mutuamente excluyentes —
+  // igual que `.project-map-controls`, solo uno de los dos se emite al
+  // `innerHTML` según `tieneNodos`. Con el grafo de demo actual eso
+  // significa que el empty state nunca se monta hoy; vuelve a aparecer
+  // solo cuando `buildMapGraph()` devuelva de verdad un proyecto sin
+  // nodos.
   function renderProjectMapTab(tab) {
-    // Nav controls (zoom in/out, fit to view) only make sense once there's
-    // something on the map to navigate TO — buttons that manipulate an
-    // admittedly empty canvas read as broken chrome, not as "ready and
-    // waiting". Explicit instruction: visible once nodes exist, not
-    // before. Pan (drag) and wheel-zoom stay available either way — those
-    // are gestures on the canvas itself, not UI elements to hide.
-    const tieneNodos = projectMapNodeCount(tab.id) > 0;
+    // Nav controls (zoom in/out, fit to view) solo tienen sentido si hay
+    // algo que navegar — instrucción explícita: visibles con nodos, no
+    // antes. Pan (drag) y zoom con rueda siguen disponibles siempre, son
+    // gestos sobre el canvas, no elementos de UI.
+    const graph = buildMapGraph(tab.id);
+    const tieneNodos = graph.nodes.length > 0;
     panelTabContent.innerHTML = `
       <div class="project-map-canvas" data-map-canvas>
         <div class="project-map-zoom-content" data-map-zoom-content></div>
+        ${tieneNodos ? '' : `
         <div class="project-map-empty">
           <div class="section-empty panel-map-empty">
             <span class="section-empty-icon"><i data-lucide="network"></i></span>
             <h2>This project doesn't have nodes yet</h2>
             <p>Describe what you want to reconcile in the chat and I'll build the map for you.</p>
           </div>
-        </div>
+        </div>`}
         ${tieneNodos ? `
         <div class="project-map-controls">
           <button type="button" class="project-map-control-btn tooltip-bottom" data-map-zoom-out aria-label="Zoom out" data-tooltip="Zoom out"><i data-lucide="minus"></i></button>
+          <span class="project-map-zoom-label" data-map-zoom-label>100%</span>
           <button type="button" class="project-map-control-btn tooltip-bottom" data-map-zoom-in aria-label="Zoom in" data-tooltip="Zoom in"><i data-lucide="plus"></i></button>
           <button type="button" class="project-map-control-btn tooltip-bottom" data-map-fit aria-label="Fit to view" data-tooltip="Fit to view"><i data-lucide="maximize"></i></button>
+        </div>
+        <div class="project-map-filter">
+          <button type="button" class="project-map-control-btn tooltip-bottom tooltip-end" data-map-filter aria-label="Filter" data-tooltip="Filter"><i data-lucide="filter"></i></button>
         </div>` : ''}
       </div>
     `;
     if (window.lucide) lucide.createIcons();
-    initProjectMapCanvas();
+    initProjectMapCanvas(graph);
   }
 
   // Pan (drag) + zoom (buttons/wheel) for the canvas above. Re-wired from
@@ -4373,13 +5413,16 @@
   // on `document` only between a mousedown and its matching mouseup, and
   // the mousedown listener itself dies with the old canvas element once
   // innerHTML replaces it.
-  function initProjectMapCanvas() {
+  function initProjectMapCanvas(graph) {
     const canvas = panelTabContent.querySelector('[data-map-canvas]');
     const zoomContent = panelTabContent.querySelector('[data-map-zoom-content]');
     const zoomInBtn = panelTabContent.querySelector('[data-map-zoom-in]');
     const zoomOutBtn = panelTabContent.querySelector('[data-map-zoom-out]');
     const fitBtn = panelTabContent.querySelector('[data-map-fit]');
+    const zoomLabel = panelTabContent.querySelector('[data-map-zoom-label]');
     if (!canvas || !zoomContent) return;
+
+    if (graph && graph.nodes.length > 0) renderMapGraph(zoomContent, graph, canvas);
 
     let panX = 0;
     let panY = 0;
@@ -4400,14 +5443,17 @@
       zoom = Math.min(PROJECT_MAP_ZOOM_MAX, Math.max(PROJECT_MAP_ZOOM_MIN, next));
       if (zoomInBtn) zoomInBtn.disabled = zoom >= PROJECT_MAP_ZOOM_MAX;
       if (zoomOutBtn) zoomOutBtn.disabled = zoom <= PROJECT_MAP_ZOOM_MIN;
+      if (zoomLabel) zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
       applyTransform();
     }
 
-    // Pan: drag on the (still empty) canvas. Fase 2+, once real nodes
-    // exist, will need its own mousedown guard so a drag that starts ON a
-    // node moves the node instead of panning the canvas underneath it —
-    // out of scope today since there's nothing yet to click on but the
-    // canvas itself.
+    // Pan: drag starting on the bare canvas — NOT on a node card. Sin este
+    // guard, un click sobre un nodo (para colapsarlo, ver renderMapGraph)
+    // también arrancaría un pan de 0px, que igual dispara `is-panning` y
+    // pisa la transición del colapso. Los nodos no son arrastrables
+    // todavía (posición fija desde datos, ver docs/map.md → Pendiente),
+    // así que un mousedown sobre uno simplemente no hace nada acá — su
+    // propio click handler (en renderMapGraph) es quien decide qué pasa.
     let dragStartX = 0;
     let dragStartY = 0;
     let panStartX = 0;
@@ -4425,6 +5471,7 @@
     }
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return; // left button only, same as every other drag in this file
+      if (e.target.closest('[data-map-node]')) return; // a node's own click handler owns this, not pan
       canvas.classList.add('is-panning');
       dragStartX = e.clientX;
       dragStartY = e.clientY;
@@ -4436,8 +5483,10 @@
 
     // Wheel/trackpad zoom: no separate pinch-vs-scroll sensitivity split
     // (the richer map reference has one) — a single deltaY-driven step is
-    // enough to make wheel zoom actually work, and there are no nodes yet
-    // to make the cursor-anchored version of this worth its own math.
+    // enough to make wheel zoom actually work. Still center-anchored, not
+    // cursor-anchored (ver docs/map.md → Pendiente) — anclar al puntero
+    // exige recalcular pan a partir de dónde está el mouse sobre el grafo,
+    // que es mejora de una pasada futura, no crítica todavía.
     // preventDefault() so this replaces the panel's own scroll instead of
     // stacking with it.
     canvas.addEventListener('wheel', (e) => {
@@ -4447,9 +5496,11 @@
 
     if (zoomInBtn) zoomInBtn.addEventListener('click', () => setZoom(zoom + PROJECT_MAP_ZOOM_STEP));
     if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => setZoom(zoom - PROJECT_MAP_ZOOM_STEP));
-    // Fit to view: a real bounding-box fit needs nodes to measure against
-    // (Fase 2+) — until then, this is the map's only defined "resting"
-    // view, so Fit to view and the initial render both just call this.
+    // Fit to view: sigue siendo la vista de reposo (pan 0,0 / zoom 1×),
+    // no un encuadre real contra el bounding box del grafo — con la
+    // posición de demo actual ya se ve completo a esa vista por diseño,
+    // pero el cálculo real (medir nodos, ajustar zoom/pan para que
+    // entren todos) queda pendiente (ver docs/map.md).
     function resetView() {
       panX = 0;
       panY = 0;
@@ -4540,6 +5591,7 @@
     panelOpenPicker.hidden = hasTabs;
     panelTabsEl.hidden = !hasTabs;
     if (hasTabs) { renderPanelTabsBar(); renderPanelTabContent(); }
+    else { maybeLoadPanelOpenPicker(); }
   }
 
   // Opening something also opens the panel itself if it wasn't already —
@@ -4680,8 +5732,9 @@
   // experience as opening an already-named one — the first message the
   // user sends there is what actually defines the project (see the
   // pendingNameFromChat branch in startChat()).
-  function startNewProjectFlow() {
-    const project = createProject({ name: 'New Project', description: '', pendingNameFromChat: true });
+  async function startNewProjectFlow() {
+    const project = await createProject({ name: 'New Project', description: '', pendingNameFromChat: true });
+    if (!project) return;
     openProjectChat(project);
   }
 
@@ -4739,8 +5792,9 @@
   // own chat, panel showing the "not built yet" empty state until the
   // first message defines what it should do (see the pendingNameFromChat
   // branch in startChat() and renderAppArtifactTab).
-  function startNewAppFlow() {
-    const app = createApp({ name: 'New App', description: '', projects: [], pendingNameFromChat: true });
+  async function startNewAppFlow() {
+    const app = await createApp({ name: 'New App', description: '', projects: [], pendingNameFromChat: true });
+    if (!app) return;
     openAppChat(app);
   }
 
@@ -5335,7 +6389,7 @@
   // cross-view state, since the user asked for it specifically. Everything
   // else (New project, card clicks) stays the deliberate no-op pattern
   // used throughout this view.
-  function toggleProjectPinned(id) {
+  async function toggleProjectPinned(id) {
     const project = findProjectById(id);
     if (!project) return;
     project.pinned = !project.pinned;
@@ -5345,6 +6399,8 @@
     const sidebarItem = project.pinned ? ensureSidebarPinnedItem(project) : findSidebarPinnedItem(project.name);
     if (sidebarItem) sidebarItem.hidden = !project.pinned;
     applyProjectsFilters();
+    const { error } = await supabaseClient.from('projects').update({ pinned: project.pinned }).eq('id', id);
+    if (error) console.error('toggleProjectPinned', error);
   }
 
   // Archive: removes the project from this view (filtered out by
@@ -5355,11 +6411,13 @@
   function archiveProject(id, tileEl) {
     const project = findProjectById(id);
     if (!project) return;
-    const commit = () => {
+    const commit = async () => {
       project.archived = true;
       const sidebarItem = findSidebarPinnedItem(project.name);
       if (sidebarItem) sidebarItem.hidden = true;
       applyProjectsFilters();
+      const { error } = await supabaseClient.from('projects').update({ archived: true }).eq('id', id);
+      if (error) console.error('archiveProject', error);
     };
     if (tileEl) {
       tileEl.style.opacity = '0';
@@ -5381,13 +6439,15 @@
     const index = PROJECTS_DATA.findIndex((p) => p.id === id);
     if (index === -1) return;
     const project = PROJECTS_DATA[index];
-    const commit = () => {
+    const commit = async () => {
       const sidebarItem = findSidebarPinnedItem(project.name);
       if (sidebarItem) sidebarItem.remove();
       const sidebarMenu = document.querySelector(`.sidebar-project-actions-menu[data-sidebar-actions-menu="${id}"]`);
       if (sidebarMenu) sidebarMenu.remove();
       PROJECTS_DATA.splice(index, 1);
       applyProjectsFilters();
+      const { error } = await supabaseClient.from('projects').delete().eq('id', id);
+      if (error) console.error('deleteProject', error);
     };
     if (tileEl) {
       tileEl.style.opacity = '0';
@@ -5440,7 +6500,7 @@
   // the OLD name before overwriting it, then push the new name into that
   // same element — same reasoning as the pin/archive sync already does
   // elsewhere, just for a rename instead of a visibility toggle.
-  function saveProjectEdit() {
+  async function saveProjectEdit() {
     if (projectEditSaveBtn.disabled || !projectBeingEdited) return;
     const project = projectBeingEdited;
     const sidebarItem = findSidebarPinnedItem(project.name);
@@ -5452,6 +6512,10 @@
     }
     applyProjectsFilters();
     closeProjectEditModal();
+    const { error } = await supabaseClient.from('projects')
+      .update({ name: project.name, description: project.description })
+      .eq('id', project.id);
+    if (error) console.error('saveProjectEdit', error);
   }
 
   projectEditNameInput.addEventListener('input', () => {
@@ -5697,17 +6761,24 @@
   // Pin/unpin: local to this view only (no sidebar sync — see docs/apps.md
   // → Pendiente). Its visible effect is the "Pinned" tab above, not a
   // mirrored sidebar row the way Projects' pin does.
-  function toggleAppPinned(id) {
+  async function toggleAppPinned(id) {
     const app = findAppById(id);
     if (!app) return;
     app.pinned = !app.pinned;
     applyAppsFilters();
+    const { error } = await supabaseClient.from('apps').update({ pinned: app.pinned }).eq('id', id);
+    if (error) console.error('toggleAppPinned', error);
   }
 
   function archiveApp(id, tileEl) {
     const app = findAppById(id);
     if (!app) return;
-    const commit = () => { app.archived = true; applyAppsFilters(); };
+    const commit = async () => {
+      app.archived = true;
+      applyAppsFilters();
+      const { error } = await supabaseClient.from('apps').update({ archived: true }).eq('id', id);
+      if (error) console.error('archiveApp', error);
+    };
     if (tileEl) {
       tileEl.style.opacity = '0';
       tileEl.style.transform = 'scale(0.97)';
@@ -5720,7 +6791,12 @@
   function deleteApp(id, tileEl) {
     const index = APPS_DATA.findIndex((a) => a.id === id);
     if (index === -1) return;
-    const commit = () => { APPS_DATA.splice(index, 1); applyAppsFilters(); };
+    const commit = async () => {
+      APPS_DATA.splice(index, 1);
+      applyAppsFilters();
+      const { error } = await supabaseClient.from('apps').delete().eq('id', id);
+      if (error) console.error('deleteApp', error);
+    };
     if (tileEl) {
       tileEl.style.opacity = '0';
       tileEl.style.transform = 'scale(0.97)';
@@ -5783,14 +6859,36 @@
     appBeingEdited = null;
   }
 
-  function saveAppEdit() {
+  async function saveAppEdit() {
     if (!appEditModalBackdrop || appEditSaveBtn.disabled || !appBeingEdited) return;
     const app = appBeingEdited;
+    const previousProjects = app.projects;
     app.name = appEditNameInput.value.trim();
     app.description = appEditDescInput.value.trim();
     app.projects = Array.from(appEditSelectedProjects);
     applyAppsFilters();
     closeAppEditModal();
+
+    const { error } = await supabaseClient.from('apps')
+      .update({ name: app.name, description: app.description })
+      .eq('id', app.id);
+    if (error) console.error('saveAppEdit', error);
+
+    // apps_projects es una tabla puente, no una columna — diff contra lo que
+    // había antes en vez de un update directo: agrega los ids nuevos, borra
+    // los que se sacaron, no toca los que se mantuvieron.
+    const added = app.projects.filter((id) => !previousProjects.includes(id));
+    const removed = previousProjects.filter((id) => !app.projects.includes(id));
+    if (added.length) {
+      const { error: addError } = await supabaseClient.from('apps_projects')
+        .insert(added.map((projectId) => ({ app_id: app.id, project_id: projectId })));
+      if (addError) console.error('saveAppEdit (link projects)', addError);
+    }
+    if (removed.length) {
+      const { error: removeError } = await supabaseClient.from('apps_projects')
+        .delete().eq('app_id', app.id).in('project_id', removed);
+      if (removeError) console.error('saveAppEdit (unlink projects)', removeError);
+    }
   }
 
   if (appEditModalBackdrop) {
@@ -5983,7 +7081,7 @@
     chatBeingRenamed = null;
   }
 
-  function saveRenameChat() {
+  async function saveRenameChat() {
     if (renameChatSaveBtn.disabled || !chatBeingRenamed) return;
     const chat = chatBeingRenamed;
     chat.name = renameChatNameInput.value.trim();
@@ -5997,6 +7095,8 @@
     }
     applyChatsFilters();
     closeRenameChatModal();
+    const { error } = await supabaseClient.from('chats').update({ name: chat.name }).eq('id', chat.id);
+    if (error) console.error('saveRenameChat', error);
   }
 
   renameChatNameInput.addEventListener('input', () => {
@@ -6225,9 +7325,10 @@
     createProjectOnCreate = null;
   }
 
-  function submitCreateProjectModal() {
+  async function submitCreateProjectModal() {
     if (createProjectSubmitBtn.disabled) return;
-    const project = createProject({ name: createProjectNameInput.value, description: createProjectDescInput.value, icon: createProjectSelectedIcon });
+    const project = await createProject({ name: createProjectNameInput.value, description: createProjectDescInput.value, icon: createProjectSelectedIcon });
+    if (!project) return;
     const onCreate = createProjectOnCreate;
     closeCreateProjectModal();
     if (onCreate) onCreate(project);
@@ -6482,6 +7583,15 @@
       const actionBtn = e.target.closest('[data-sidebar-action]');
       if (!actionBtn) return;
       switch (actionBtn.dataset.sidebarAction) {
+        case 'goto':
+          // Fix (2026-08-18, feedback direct): clicking the project row
+          // itself only expands/collapses its chat-sublist (see shell.js),
+          // it never actually opened the project's own workspace — this is
+          // the same openProjectChat() a Projects-view card click uses (see
+          // its own tile click handler), so "Go to project" behaves
+          // identically no matter which entry point was used.
+          openProjectChat(findProjectById(id));
+          break;
         case 'unpin':
           toggleProjectPinned(id);
           break;
@@ -6595,16 +7705,11 @@
   // old integrations mock ("Google Drive sync check") to
   // bank-reconciliation-summary once docs/apps.md redefined what an App is
   // — see APPS_DATA in the Apps view section above.
-  const CHATS_DATA = [
-    { id: 'july-period-close', name: 'July period close', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '2 days ago', archived: false, pinned: false },
-    { id: 'nequi-source-differences', name: 'Nequi source differences', context: { type: 'project', id: 'latam-bank-reconciliation' }, createdAt: '3 days ago', archived: false, pinned: false },
-    { id: 'manual-entries-review', name: 'Manual entries review', context: { type: 'project', id: 'q2-journal-entry-audit' }, createdAt: '1 week ago', archived: false, pinned: false },
-    { id: 'base-vs-optimistic-scenario', name: 'Base vs. optimistic scenario', context: { type: 'project', id: 'q3-treasury-forecast' }, createdAt: '2 weeks ago', archived: false, pinned: false },
-    { id: 'reconciliation-summary-check-in', name: 'Reconciliation Summary check-in', context: { type: 'app', id: 'bank-reconciliation-summary' }, createdAt: '4 days ago', archived: false, pinned: false },
-    { id: 'period-close-agent-review', name: 'Period close agent review', context: { type: 'agent', id: 'period-close-assistant' }, createdAt: '5 days ago', archived: false, pinned: false },
-    { id: 'how-do-i-build-a-reconciliation-rule', name: 'How do I build a reconciliation rule?', context: null, createdAt: '1 week ago', archived: false, pinned: false },
-    { id: 'this-weeks-anomaly-summary', name: "This week's anomaly summary", context: null, createdAt: '2 weeks ago', archived: false, pinned: false },
-  ];
+  // Fase 1 (2026-08-18): ya no hardcodeado — se puebla desde Supabase vía
+  // loadChatsFromSupabase() (ver bootstrapDataFromSupabase() más arriba). Los
+  // 8 chats de la demo original viven ahora como seed en
+  // supabase/migrations/0003_chats.sql.
+  let CHATS_DATA = [];
   let chatsSearchTerm = '';
   let chatsSelectMode = false;
   let chatsSelectedIds = new Set();
@@ -6617,6 +7722,8 @@
     return CHATS_DATA.find((c) => c.id === id);
   }
 
+  // Sin uso desde Fase 2 (2026-08-18) — mismo motivo que generateProjectId.
+  //
   // Slugifies into an id, disambiguating with -2/-3/... on collision —
   // same convention as generateProjectId.
   function generateChatId(name) {
@@ -6635,29 +7742,50 @@
   // from whatever was attached in the empty-state composer's selector
   // before the first message (contextState.empty.selected), same
   // { type, id } shape CHATS_DATA already uses elsewhere.
-  function registerNewChat(title) {
+  // Fase 2 (2026-08-18): id ya no se genera en el cliente (generateChatId
+  // queda solo para lo que todavía lo use) — Supabase asigna el uuid real al
+  // insertar. owner_user_id se manda para que quede registrado quién abrió
+  // el chat, aunque hoy nada de la UI lo muestra todavía.
+  async function registerNewChat(title) {
     const selected = contextState.empty && contextState.empty.selected;
-    const chat = {
-      id: generateChatId(title),
+    const { data, error } = await supabaseClient.from('chats').insert({
+      organization_id: currentOrganizationId,
       name: title,
-      context: selected ? { type: selected.type, id: selected.id } : null,
-      createdAt: 'Just now',
+      project_id: selected && selected.type === 'project' ? selected.id : null,
+      app_id: selected && selected.type === 'app' ? selected.id : null,
+      agent_id: selected && selected.type === 'agent' ? selected.id : null,
+      owner_user_id: currentUserId,
       archived: false,
       pinned: false,
+    }).select().single();
+    if (error) { console.error('registerNewChat', error); return null; }
+    const chat = {
+      id: data.id,
+      name: data.name,
+      context: chatContextFromRow(data),
+      createdAt: 'Just now',
+      archived: data.archived,
+      pinned: data.pinned,
     };
     CHATS_DATA.unshift(chat);
 
     const recentList = document.getElementById('sidebarRecentList');
     if (recentList) {
       const li = document.createElement('li');
-      li.innerHTML = `<a class="chat-row" href="#">${title}</a>`;
+      // .chat-row--icon: every Recent row opens a Chat, always — the icon
+      // makes that explicit instead of relying on plain text (see
+      // docs/sidebar.md). lucide.createIcons() re-scans the whole document,
+      // so this new <i data-lucide> gets swapped for its real SVG too.
+      li.innerHTML = `<a class="chat-row chat-row--icon" href="#"><i data-lucide="message-circle-more"></i><span class="chat-row-label">${title}</span></a>`;
       recentList.prepend(li);
+      if (window.lucide) lucide.createIcons();
     }
 
     // Only re-render if the Chats and Tasks view happens to already be
     // open — if it isn't, CHATS_DATA is already the source of truth it'll
     // read from next time it's entered, no render to force nobody sees.
     if (chatsView && !chatsView.hidden) applyChatsFilters();
+    return chat;
   }
 
   function getFilteredChats() {
@@ -6855,13 +7983,15 @@
   // above calls this too), so the two never drift into two separate
   // implementations of "the same action" — same principle already
   // applied to toggleProjectPinned.
-  function toggleChatPinned(id) {
+  async function toggleChatPinned(id) {
     const chat = findChatById(id);
     if (!chat) return;
     chat.pinned = !chat.pinned;
     const sidebarItem = chat.pinned ? ensureSidebarPinnedChatItem(chat) : findSidebarPinnedChatItem(chat.id);
     if (sidebarItem) sidebarItem.hidden = !chat.pinned;
     applyChatsFilters();
+    const { error } = await supabaseClient.from('chats').update({ pinned: chat.pinned }).eq('id', id);
+    if (error) console.error('toggleChatPinned', error);
   }
 
   function renderChatsList(chats) {
@@ -6960,8 +8090,9 @@
   // criterion as Projects' own Archive). No "Archived" view to see them
   // again afterwards, same gap already accepted for Projects' own Archive
   // (see docs/home.md).
-  function archiveSelectedChats() {
+  async function archiveSelectedChats() {
     if (!chatsSelectedIds.size) return;
+    const ids = Array.from(chatsSelectedIds);
     CHATS_DATA.forEach((c) => {
       if (!chatsSelectedIds.has(c.id)) return;
       c.archived = true;
@@ -6969,6 +8100,10 @@
       if (sidebarItem) sidebarItem.hidden = true;
     });
     setChatsSelectMode(false);
+    // Un solo update por lote en vez de N llamadas — mismo efecto, una
+    // sola ida y vuelta contra Supabase.
+    const { error } = await supabaseClient.from('chats').update({ archived: true }).in('id', ids);
+    if (error) console.error('archiveSelectedChats', error);
   }
 
   function closeAllChatActionMenus() {
@@ -7166,31 +8301,26 @@
     chatEmpty.hidden = false;
   });
 
-  // Log out: exits the prototype back to the login screen
+  // Log out: real Supabase sign-out (clears the session), then back to login
   document.getElementById('logoutBtn').addEventListener('click', () => {
-    window.location.href = '../../index.html';
+    signOutAndRedirect(supabaseClient, '../../index.html');
   });
 
   // ---------- Search modal ----------
   const SEARCH_DATA = {
     chats: [
-      { name: 'July period close', kbd: '⌘1' },
-      { name: 'Nequi source differences', kbd: '⌘2' },
+      { name: 'July period close' },
+      { name: 'Nequi source differences' },
       { name: 'Manual entries review' },
       { name: 'Base vs. optimistic scenario' },
       { name: 'How do I build a reconciliation rule?' },
       { name: "This week's anomaly summary" },
     ],
-    projects: [
-      { name: 'LATAM Bank Reconciliation' },
-      { name: 'Q2 Journal Entry Audit' },
-      { name: 'Q3 Treasury Forecast' },
-    ],
-    // Decoupled from APPS_DATA by convention (same criterion already
-    // applied to SEARCH_DATA.projects vs. PROJECTS_DATA, see docs/home.md)
-    // — kept in sync by hand, not read live. Names updated 2026-08-14 from
-    // the old integrations mock (Slack/Snowflake/Google Drive) to match the
-    // 3 real seeded apps once docs/apps.md redefined what an App is.
+    // No .projects entry here anymore (2026-08-18) — see getSearchItems()
+    // below, which reads live from PROJECTS_DATA instead. Apps/Agents stay
+    // on this decoupled hand-kept mock for now, same as always — only
+    // Projects needed live data, to show real tags in results (explicit
+    // request).
     apps: [
       { name: 'Bank Reconciliation Summary' },
       { name: 'Quarterly Anomaly Digest' },
@@ -7205,10 +8335,27 @@
   const SEARCH_ICONS = { chats: 'message-circle-more', projects: 'folder', apps: 'layout-grid', agents: 'bot' };
   const SEARCH_LABELS = { chats: 'Chats', projects: 'Projects', apps: 'Apps', agents: 'Agents' };
 
+  // Projects read live from PROJECTS_DATA (2026-08-18, explicit request) —
+  // unlike Chats/Apps/Agents above, Projects already has real `tags`
+  // (source:.../region:.../period:...) the search results should show, and
+  // a second hand-kept copy would just be one more place for tags to drift
+  // out of sync with the real project (the exact "two mock lists disagree"
+  // bug this codebase has hit more than once — see docs/home.md). Archived
+  // projects are filtered out, same as every other view that lists
+  // Projects — finding one here that isn't reachable/visible anywhere else
+  // would be a dead end.
+  function getSearchItems(cat) {
+    if (cat === 'projects') {
+      return PROJECTS_DATA.filter((p) => !p.archived).map((p) => ({ name: p.name, tags: p.tags }));
+    }
+    return SEARCH_DATA[cat];
+  }
+
   const searchModalBackdrop = document.getElementById('searchModalBackdrop');
   const searchModalInput = document.getElementById('searchModalInput');
   const searchModalResults = document.getElementById('searchModalResults');
   let searchActiveTab = 'all';
+  let searchActiveTags = new Set();
   let searchHighlightIndex = 0;
 
   function updateSearchTabs() {
@@ -7217,9 +8364,103 @@
     });
   }
 
+  // Tag filter (2026-08-18, explicit request) — same pool/logic/markup
+  // pattern as Projects' own Filter by tag (renderProjectsFilterMenu/
+  // updateProjectsFilterButton/getFilteredProjects' matchesTags), copied
+  // rather than called directly since it's tied to different DOM ids and a
+  // different active-tags Set. Tags only exist on Projects today ("los
+  // chats no necesariamente tienen tags, pero pronto los proyectos sí" —
+  // see docs/search.md), so the tag pool is Projects' tags for now; an item
+  // from a category with no tags simply never matches an active filter,
+  // same as it would for any other cat once it gains tags of its own.
+  //
+  // Refined same day (feedback direct) to also filter the tag list itself
+  // by #searchFilterSearchInput — useful once the tag pool grows past what
+  // fits on screen without scrolling ("poder buscar y seleccionar uno o
+  // varios"). Re-run on every keystroke there, not just on open/clear —
+  // it's an instant local filter over an already-loaded list, not a
+  // simulated fetch, so no skeleton/delay needed (same criterion Projects'
+  // own tag popover already uses).
+  function renderSearchFilterMenu() {
+    const list = document.getElementById('searchFilterList');
+    const searchInput = document.getElementById('searchFilterSearchInput');
+    if (!list) return;
+    const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    const tags = Array.from(new Set(PROJECTS_DATA.flatMap((p) => p.tags)))
+      .filter((tag) => !term || tag.toLowerCase().includes(term))
+      .sort();
+    list.innerHTML = tags.length
+      ? tags.map((tag) => `
+        <button type="button" class="composer-menu-option composer-menu-option--model${searchActiveTags.has(tag) ? ' is-selected' : ''}" data-search-tag-filter="${tag}">
+          <span class="opt-left"><span class="opt-body"><span class="opt-title">${tag}</span></span></span>
+          <span class="opt-check"><i data-lucide="check"></i></span>
+        </button>
+      `).join('')
+      : `<div class="search-filter-empty">No tags match "${term}"</div>`;
+    list.querySelectorAll('[data-search-tag-filter]').forEach((option) => {
+      option.addEventListener('click', () => {
+        const tag = option.dataset.searchTagFilter;
+        if (searchActiveTags.has(tag)) searchActiveTags.delete(tag);
+        else searchActiveTags.add(tag);
+        option.classList.toggle('is-selected');
+        updateSearchFilterButton();
+        querySearchWithLoading(400);
+      });
+    });
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // Dot badge (2026-08-18, refined same day) — replaces the old text value
+  // ("all"/tag name/"N tags") now that the trigger is an icon button with
+  // no room for a label. Same .dot primitive already defined generically
+  // in shared/tokens.css for exactly this "has something active" signal.
+  function updateSearchFilterButton() {
+    const dot = document.getElementById('searchFilterDot');
+    if (dot) dot.hidden = searchActiveTags.size === 0;
+    // "Clear filters" only makes sense once there's actually something to
+    // clear (explicit request) — disabled otherwise, same .btn-primary
+    // [disabled] idiom (opacity + cursor) now generalized onto
+    // .composer-menu-option[disabled] in shared/tokens.css.
+    const clearBtn = document.getElementById('searchFilterClear');
+    if (clearBtn) clearBtn.disabled = searchActiveTags.size === 0;
+  }
+
   function updateSearchHighlight() {
     const items = searchModalResults.querySelectorAll('.search-result-item');
     items.forEach((el, i) => el.classList.toggle('is-highlighted', i === searchHighlightIndex));
+  }
+
+  // Skeleton (2026-08-14): flat placeholder rows, not grouped by category
+  // like the real "All" tab results — same simplification the chat panel's
+  // own open-picker skeleton already makes (panelOpenSkeletonMarkup), since
+  // a loading state doesn't need to fake the exact shape of what's coming,
+  // just read as "results incoming". Widths vary per row so the shimmer
+  // reads as placeholder text, not a repeated identical block.
+  function searchSkeletonMarkup(count) {
+    const widths = ['45%', '65%', '55%'];
+    return Array.from({ length: count }, (_, i) => `
+      <button type="button" class="search-skeleton-item" tabindex="-1" aria-hidden="true">
+        <span class="search-skeleton-icon"></span>
+        <span class="search-skeleton-line" style="width: ${widths[i % widths.length]}"></span>
+      </button>
+    `).join('');
+  }
+
+  function showSearchSkeleton() {
+    searchModalResults.innerHTML = searchSkeletonMarkup(6);
+  }
+
+  // One timer, not one per scope like the chat panel's picker/menu — there's
+  // only ever one Search modal instance, so a second query (typing again,
+  // switching tabs right after opening) just needs to cancel whichever mock
+  // fetch was still "in flight" instead of letting both land and race.
+  let searchQueryTimer = null;
+  function querySearchWithLoading(delay) {
+    showSearchSkeleton();
+    clearTimeout(searchQueryTimer);
+    searchQueryTimer = setTimeout(() => {
+      renderSearchResults();
+    }, delay);
   }
 
   function renderSearchResults() {
@@ -7229,7 +8470,15 @@
     let total = 0;
 
     categories.forEach((cat) => {
-      const items = SEARCH_DATA[cat].filter((item) => item.name.toLowerCase().includes(query));
+      const items = getSearchItems(cat).filter((item) => {
+        const matchesTerm = item.name.toLowerCase().includes(query);
+        // OR logic, same as Projects' own tag filter (matchesTags in
+        // getFilteredProjects): matches if it has AT LEAST ONE active tag.
+        // (item.tags || []) — chats/apps/agents have no .tags field at all,
+        // so an active filter correctly excludes them instead of throwing.
+        const matchesTags = searchActiveTags.size === 0 || (item.tags || []).some((t) => searchActiveTags.has(t));
+        return matchesTerm && matchesTags;
+      });
       if (!items.length) return;
       total += items.length;
       html += '<div class="search-results-group">';
@@ -7237,11 +8486,17 @@
         html += `<div class="search-group-title">${SEARCH_LABELS[cat]}</div>`;
       }
       items.forEach((item) => {
+        // Tags shown as plain text after the name — "name - tag - tag",
+        // explicit request, not styled as pills (unlike Projects' own
+        // .project-tag-pill cards) since this is a compact single-line row.
+        const tagsHtml = item.tags && item.tags.length
+          ? `<span class="search-result-tags"> - ${item.tags.join(' - ')}</span>`
+          : '';
         html += `
           <button class="search-result-item" data-cat="${cat}">
             <span class="search-result-icon"><i data-lucide="${SEARCH_ICONS[cat]}"></i></span>
-            <span class="search-result-name">${item.name}</span>
-            ${item.kbd ? `<span class="search-result-kbd">${item.kbd}</span>` : ''}
+            <span class="search-result-name">${item.name}${tagsHtml}</span>
+            <kbd class="search-result-enter-kbd"><i data-lucide="corner-down-left" class="kbd-glyph-enter"></i></kbd>
           </button>`;
       });
       html += '</div>';
@@ -7262,7 +8517,18 @@
     searchModalInput.value = '';
     searchActiveTab = 'all';
     updateSearchTabs();
-    renderSearchResults();
+    // Fresh tag filter every open, same reset spirit as the term/tab above —
+    // re-rendered (not just cleared) because PROJECTS_DATA can have loaded/
+    // changed since the last time this modal was open (tags come from
+    // there now, see getSearchItems).
+    searchActiveTags.clear();
+    const searchFilterSearchInput = document.getElementById('searchFilterSearchInput');
+    if (searchFilterSearchInput) searchFilterSearchInput.value = '';
+    renderSearchFilterMenu();
+    updateSearchFilterButton();
+    // 700ms "first load" feel — same delay Projects/Apps/Chats and the chat
+    // panel's open picker use for their own fresh-open fetch simulation.
+    querySearchWithLoading(700);
     setTimeout(() => searchModalInput.focus(), 50);
   }
 
@@ -7275,11 +8541,27 @@
     tab.addEventListener('click', () => {
       searchActiveTab = tab.dataset.tab;
       updateSearchTabs();
-      renderSearchResults();
+      // 400ms "re-filter" feel — same delay used everywhere else in this
+      // prototype for a query against data that's already "loaded", as
+      // opposed to the 700ms first-load feel in openSearchModal() above.
+      querySearchWithLoading(400);
     });
   });
 
-  searchModalInput.addEventListener('input', renderSearchResults);
+  searchModalInput.addEventListener('input', () => querySearchWithLoading(400));
+
+  document.getElementById('searchFilterClear').addEventListener('click', () => {
+    searchActiveTags.clear();
+    renderSearchFilterMenu();
+    updateSearchFilterButton();
+    querySearchWithLoading(400);
+  });
+
+  // Instant local filter over the tag list itself, not a simulated fetch —
+  // no skeleton/delay, same criterion as Projects' own tag popover. No
+  // click-stopPropagation needed here — .composer-menu's own generic
+  // wiring already stops propagation for any click inside it (see below).
+  document.getElementById('searchFilterSearchInput').addEventListener('input', () => renderSearchFilterMenu());
 
   searchModalResults.addEventListener('click', (e) => {
     if (e.target.closest('.search-result-item')) closeSearchModal();

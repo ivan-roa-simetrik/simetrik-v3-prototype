@@ -33,6 +33,15 @@
   --color-danger-hover: #A82F2F;
   --color-danger-tint: #FCEAEA;
 
+  /* Acento — hoy solo lo usa el nodo Function del Project View Map (ver
+     docs/map.md). Violeta y no una de las de Estado de arriba a propósito:
+     success/warning/danger ya tienen significado propio (bueno/atención/
+     error) y prestarle uno de esos a "esto es una Function" chocaría con
+     ese significado en cualquier lugar donde ambos convivan. */
+  --color-accent: #7C3AED;
+  --color-accent-tint: #F1EAFC;
+  --color-accent-ink: #6425D1;
+
   /* Elevación */
   --shadow-sm: 0 1px 2px rgba(23,23,31,.05);
   --shadow-md: 0 8px 24px rgba(23,23,31,.10);
@@ -439,6 +448,36 @@ a { color: inherit; text-decoration: none; }
    behave *exactly* like the real Pinned section, for free, with zero risk
    of the two drifting apart. See those classes above in this file. */
 
+/* Collapsed-sidebar Recent popover (2026-08-14): same mechanism as the
+   Pinned popover right above (portal, fixed position, min/max-height,
+   scroll-safe close) — own classes copied 1:1 rather than reused, same
+   "never share a class name across independent components" rule already
+   applied throughout this file. Simpler than Pinned's: Recent's own list
+   (#sidebarRecentList) is flat, no projects to group under, so its results
+   are plain .chat-row items — no wrapper class of its own needed for rows,
+   .chat-row already has its own hover treatment. */
+.sidebar-recent-popover {
+  display: none; position: fixed; z-index: 200;
+  width: 260px; min-height: 200px; max-height: 300px; flex-direction: column;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.sidebar-recent-popover.is-open { display: flex; }
+.sidebar-recent-popover-search {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 10px 12px; border-bottom: 1px solid var(--color-border);
+  color: var(--color-ink-faint);
+}
+.sidebar-recent-popover-search svg, .sidebar-recent-popover-search i { width: 15px; height: 15px; flex-shrink: 0; }
+.sidebar-recent-popover-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font-size: 13.5px; color: var(--color-ink); font-family: inherit;
+}
+.sidebar-recent-popover-search input::placeholder { color: var(--color-ink-faint); }
+
+.sidebar-recent-popover-results { flex: 1; min-height: 0; overflow-y: auto; padding: 6px; }
+.sidebar-recent-popover-empty { padding: 24px 12px; text-align: center; color: var(--color-ink-faint); font-size: 13px; }
+
 /* Pinned CHATS (2026-08-13): pinning a chat from the Chats and Tasks
    view's ellipsis (flows/home/index.html) mirrors it into this same
    Pinned list, as a plain flat row appended alongside the 3 hand-written
@@ -525,6 +564,18 @@ a { color: inherit; text-decoration: none; }
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .chat-row:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+
+/* Recent-only modifier (2026-08-14): a chat icon next to the name — Recent
+   is the one list in the sidebar where every row is guaranteed to open a
+   Chat (Pinned's nested chats already read as chats from their indentation
+   under a project, no icon needed there; this modifier is intentionally
+   NOT applied to plain .chat-row usages elsewhere, like .chat-sublist's).
+   Truncation moves from .chat-row itself (block, single text node) to the
+   inner .chat-row-label span, since a flex row with an icon can't ellipsis
+   its own text the same way a block element with only text can. */
+.chat-row--icon { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.chat-row--icon i, .chat-row--icon svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--color-ink-faint); }
+.chat-row--icon .chat-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 
 .sidebar-footer {
   margin-top: auto; padding: 10px 12px; border-top: 1px solid var(--color-border); flex-shrink: 0;

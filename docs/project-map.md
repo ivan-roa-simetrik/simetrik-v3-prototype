@@ -1,7 +1,7 @@
 # Project View Map (concepto: modelo de nodos)
 
 > Última actualización: 2026-08-14
-> Este archivo es distinto a los demás de `docs/`: como `proyecto.md` y `apps.md`, no documenta una pantalla — documenta el **modelo conceptual** de los nodos que van a vivir en el mapa de un proyecto, para que las fases de implementación (ver `home.md` → secciones "Project View Map — Fase 0/Fase 1") no tengan que re-derivar estas decisiones cada vez que se agregue algo nuevo al mapa.
+> Este archivo es distinto a los demás de `docs/`: como `proyecto.md` y `apps.md`, no documenta una pantalla — documenta el **modelo conceptual** de los nodos que van a vivir en el mapa de un proyecto, para que las fases de implementación (ver [`map.md`](./map.md)) no tengan que re-derivar estas decisiones cada vez que se agregue algo nuevo al mapa.
 > Ver también: el artifact **"Planos del Mapa"** (misma sesión, previo a este documento) — inventario de funcionalidades del mapa cruzado con la arquitectura real, del que salió la priorización que llevó a construir Fase 0/Fase 1 antes de definir esto.
 
 ## Propósito
@@ -40,11 +40,11 @@ Tres versiones, cada una descartada por una razón concreta:
 
 ## Pendiente / abierto
 
-- **Íconos y copy en inglés** por tipo — propuesto en la sesión (sin confirmar todavía): `arrow-down-to-line` (Integración/entrada), `arrow-up-from-line` (Integración/salida), `database` (Dataset), `square-function` (Function).
-- **Cómo se ven los tags en la tarjeta del nodo** — ¿pill siempre visible en el mapa, o solo dentro del drawer de detalle? No definido.
+- ✅ **Íconos confirmados e implementados** (ver `map.md` → Fase 2) — dos niveles, no uno: el del header es genérico por tipo/dirección (`arrow-down-to-line`/`arrow-up-from-line` Integración, `database-zap` Dataset, `square-function` Function); el de la card blanca (content) es específico por nodo (banco, ERP, transacciones, conciliación, proceso manual...), asociado al proceso real de cada uno.
+- ✅ **Tags: siempre visibles en la tarjeta**, en la zona gris exterior — resuelto al implementar Fase 2 (ver `map.md`).
 - **Function como nodo del mapa está en M7 del roadmap real** — decisión consciente de adelantarlo en el prototipo; no implica que el producto real vaya a tenerlo pronto.
 
 ## Archivos relacionados
 
-- `docs/home.md` — secciones "Project View Map — Fase 0" (empty state real) y "Fase 1: navegación del canvas" — la implementación de la vista donde este modelo de nodos se va a usar (Fase 2, todavía sin construir).
+- `docs/map.md` — la pantalla completa donde este modelo de nodos ya está implementado (Fase 0, 1 y 2), fase por fase.
 - Artifact **"Planos del Mapa"** — inventario de funcionalidades del mapa y priorización P0–P3, anterior a esta definición de nodos.

@@ -94,6 +94,38 @@ Solo 2 niveles (se descartó un tercer nivel intermedio "básico" que tenía el 
 - **Bug de centrado del ícono, corregido dos veces antes de portarlo**: una primera versión encadenaba `width:100%`/`height:100%` a través de varios niveles de flexbox (card → inner → ícono) — correcta en teoría, se seguía viendo desfasada en la práctica. La versión final ancla `.node-card-inner` y `.node-card-icon` con `position:absolute; inset:0` directo contra `.node-card` (que ya es `position:absolute`), sin pasar por ningún cálculo de porcentaje de flexbox que pueda fallar.
 - **Click en la card (fuera del "···") alterna completo ↔ colapsado.** No hay drag de nodo todavía (ver Pendiente).
 
+### Refinamiento visual de la card (2026-08-18, misma sesión de Fase 2)
+
+Ronda larga de ajustes puntuales sobre la estructura de Fase 2, todos pedidos explícitos durante iteración rápida — agrupados acá en vez de uno por uno (ver [[docs-update-cadence-feedback]] en memoria: no se documentó micro a micro mientras el diseño seguía en movimiento, se cierra ahora que asentó).
+
+- **El estado dejó de ser un badge de texto y pasó a ser un dot** en la esquina derecha del header (`.node-dot`, reusa las clases de color `.node-status-*` ya existentes pero como selector compuesto `.node-dot.node-status-x`, más específico que el tinte pálido pensado para un pill con texto). El badge de texto (`.node-card-status`) no se borró — sigue viviendo dentro de `.node-card-tooltip`, visible solo en modo colapsado al hover.
+  - Tamaño final: 12px (subió de 7px en dos pasos), borde blanco de 1px.
+  - Verde de éxito: hex puntual `#01A401` (no `--color-success`, que sigue igual en el resto del prototipo).
+  - **"Corriendo" es un spinner, no un dot fijo**: anillo con `border: 2px solid var(--color-primary)` + un lado (`border-right-color`) en `--color-primary-tint`, girando con `@keyframes node-dot-spin` (0.8s linear). El lado pálido es intencionalmente pequeño (3 lados azules, 1 pálido) — pedido explícito, "que la línea azul sea más larga". Respeta `prefers-reduced-motion` (se congela el anillo, sin girar).
+  - Tooltip del dot reposicionado arriba-centrado (`.node-dot[data-tooltip]::after`, override puntual sobre el mecanismo genérico de `[data-tooltip]` del resto del prototipo).
+- **Badge de "N rows"** (`.node-meta-badge`, header, junto al dot): Dataset (tamaño del dataset) e Integración — **las dos direcciones**, no solo entrada (pedido explícito, extendido de "solo entrada" a "también salida": *"por lo menos los rows principalmente"*; "Files" sí se mantuvo solo-entrada). Hoy es un número fijo por nodo en `DEMO_MAP_GRAPH` — pendiente de recalcularse contra la base de datos real (aclarado por el propio usuario, no es scope de esta pasada).
+- **Badge de "N files"** (footer, esquina izquierda, solo Integración/entrada): ícono `file-check` + número + "files" — sustituto de `file-check-corner`, que no es un nombre real de Lucide (pendiente de confirmación del usuario, ver Pendiente). Sin datos reales de archivos todavía, `filesCount` cae a `0` por defecto.
+- **Badge de cantidad de tags** (footer, esquina derecha, ícono `tags`): visible en **todos los nodos siempre**, con o sin tags (pedido explícito, "independientemente de que tenga tags o no" — sin tags muestra `0`). Anclado a la derecha con `margin-left: auto` en vez de `justify-content` en el contenedor — más robusto cuando el badge de "Files" no existe (un solo hijo).
+- **Fondo de `.node-meta-badge`**: recorrido de 3 pasos hasta `--color-border` ("gris intermedio entre este y el anterior" — resultó ser un token ya existente, no uno nuevo).
+- **Fondo de `.node-card` (gris exterior)**: recorrido `--color-surface-sunken` → `--color-sidebar-bg` → `--color-bg` (un escalón más oscuro, pedido explícito).
+- **`.node-card-inner` (card blanca)**: padding vertical a la mitad (9px → 4.5px); horizontal recorrido 10px → 2px → 4px de margen, y el padding interno separado en `4.5px 4px` (vertical/horizontal distintos, pedido explícito puntual sobre el padding, no el margen).
+- **Ícono junto al nombre, sacado de la vista completa** (pedido explícito) — sigue en el markup (necesario para el modo colapsado, que lo muestra como único contenido del cuadrado 48×48) pero oculto vía `.node-card:not(.is-compact) .node-card-icon { display: none; }` en vez de borrado.
+- **Zoom in extendido**: rango subido de 0.6×–1.2× a **0.6×–2×** (pedido explícito, "permite que el mapa pueda hacer más zoom in").
+
+### Interacción de nodos — de "click colapsa" a "click selecciona" + drag + loading (2026-08-18)
+
+Reemplaza el comportamiento de Fase 2 (*"Click en la card alterna completo ↔ colapsado"*) — pedido explícito: *"los nodos deben tener como un estereotipo el estado select donde yo lo seleccione. Esto va a abrir algo, pero todavía no lo vamos a definir... toca remover que, cuando yo lo seleccione, se colapse."*
+
+- **Seleccionar reemplaza a colapsar**: un click sobre una card (sin arrastre de por medio) marca esa card con `.is-selected` — clase que ya existía en el CSS sin ningún disparador — y deselecciona cualquier otra. Clickear la misma card otra vez la deselecciona. **No abre nada todavía** — es el placeholder de un futuro drawer de detalle (D42), aún sin definir. El toggle de `.is-compact` (colapsar/expandir) se sacó del `click` handler; el CSS de `.is-compact` sigue en el archivo pero hoy es código muerto — nada lo dispara.
+- **Borde azul en selección** (pedido explícito, hex `3838F9` — resultó ser exactamente `--color-primary`, token ya existente, no uno nuevo): `.node-card.is-selected { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-tint); }` — el borde sólido más el halo suave que ya tenía.
+- **Drag de nodos** (pedido explícito, *"permita que se pueda mover la ubicación de los nodos"*): mousedown sobre una card arranca un posible arrastre; se confirma como tal solo pasado un umbral de 4px de movimiento (`DRAG_THRESHOLD`) — por debajo de eso, el mouseup se trata como click y selecciona en vez de mover. El delta de mouse (en píxeles de pantalla) se divide por el zoom actual antes de aplicarse a `left`/`top`, porque esas coordenadas viven en el espacio local SIN escalar de `.project-map-zoom-content` (mismo razonamiento que ya usa el pan). El listener vive en `.project-map-graph` (`graphEl`), no en cada card individual.
+  - **La posición persiste dentro de la sesión**: al soltar, la nueva `x`/`y` se escribe de vuelta en `graph.nodes` — como `buildMapGraph()` devuelve siempre la misma referencia a `DEMO_MAP_GRAPH`, mover un nodo y volver a este tab más tarde (cambiar de tab y volver) no lo hace saltar de vuelta a su posición original. No hay persistencia real (Supabase) — se pierde al recargar la página.
+  - No hay conflicto con el pan del canvas: `initProjectMapCanvas` ya ignoraba el mousedown sobre `[data-map-node]` desde Fase 1 (guard que en ese momento no tenía ningún uso todavía).
+- **Skeleton de carga de nodos** (pedido explícito, *"que trabajes en una vista de esqueleto del nodo. Cuando uno ingrese al proyecto, se estén cargando los nodos"* — reimplementado desde cero una vez, ver más abajo el porqué): al entrar al tab, antes de que monten las cards reales, se muestra brevemente (700ms, mismo delay de "primera carga" que Projects/Apps/Chats) un set de cards de skeleton propias — no una versión recoloreada de las cards reales.
+  - **Por qué una card propia y no recolorear la real**: el primer intento reusaba el DOM real (mismo texto/ícono, solo con `color: transparent` + fondo shimmer) para garantizar el mismo tamaño exacto. Se veía raro: `.node-card-header-label` usa `flex: 1` y se estiraba a un bloque gris enorme en vez de leerse como una línea de texto. Se descartó a pedido explícito ("vuelvan a implementarlo desde cero") a favor de una card de skeleton dedicada, mismo patrón que ya usan Projects/Apps (`.project-skeleton-card`/`-icon`/`-line`/`-pill`): ícono + línea de "tipo" arriba, línea de "nombre" en el medio, fila de pills (rows/tags) abajo — `border-color` gris, `background: var(--color-surface)` blanco, elementos internos grises con el mismo gradiente + keyframe `skeletonShimmer` que el resto del prototipo (pedido explícito, confirmado: "borde gris, fondo blanco y elementos internos de color gris con animación de carga esqueleto").
+  - El alto de la card de skeleton es aproximado (`min-height` fijo, no calculado por nodo) — mismo criterio que ya acepta `.project-skeleton-card` con su propio `min-height` fijo, no un cálculo exacto por card real.
+  - Se posiciona con el `x`/`y` real de cada nodo y se centra con el mismo cálculo que el grafo real (`centerGraphWrapper()`, función compartida extraída de lo que antes era lógica inline solo de `renderMapGraph()`), así el swap no salta de lugar cuando el skeleton se reemplaza por las cards reales.
+
 ### El grafo de demo — divergencia temporal, documentada a propósito
 
 **`DEMO_MAP_GRAPH` es un grafo hardcodeado (7 nodos, escenario "LATAM Bank Reconciliation") que hoy se muestra en CUALQUIER proyecto**, no en uno en particular. Dos razones, ambas de esta sesión:
@@ -107,40 +139,47 @@ Esto es una **divergencia deliberada y temporal** de la Decisión 3 de `project-
 
 ## Estado actual de implementación
 
-- ✅ Canvas con pan (arrastre) + zoom (botones/rueda), rango 0.6×–1.2×
+- ✅ Canvas con pan (arrastre) + zoom (botones/rueda), rango **0.6×–2×** (subido de 1.2× tope)
 - ✅ Empty state real (Fase 0) y grafo de demo (Fase 2), mutuamente excluyentes
 - ✅ Controles de navegación visibles solo con nodos, con porcentaje de zoom visible entre −/+
 - ✅ Botón de Filter (esquina superior derecha), sin funcionalidad todavía
-- ✅ Retícula de puntos visible en todo el rango de zoom (0.6×–1.2×)
+- ✅ Retícula de puntos visible en todo el rango de zoom
 - ✅ 3 tipos de nodo (Integración con dirección, Dataset, Function) con sus handles, colores y header
-- ✅ 2 estados por nodo (completo/colapsado) con tooltip en colapsado
+- ✅ Estado por nodo como dot en el header (spinner animado para "corriendo"), con tooltip de texto
+- ✅ Badges de "N rows" (Dataset + Integración, las 2 direcciones), "N files" (Integración/entrada) y cantidad de tags (todos los nodos, siempre)
 - ✅ Tags libres + "Last updated" en los 3 tipos
 - ✅ Aristas dirigidas, con estilo punteado para la arista que alimenta a una Function
 - ✅ Grafo centrado automáticamente contra el tamaño real del canvas
+- ✅ **Seleccionar un nodo con click** (`.is-selected`, borde azul + halo) — reemplaza al colapso de Fase 2
+- ✅ **Arrastrar un nodo a una nueva posición**, persiste dentro de la sesión (no sobrevive a un reload)
+- ✅ **Skeleton de carga** al entrar al tab (700ms, card de skeleton dedicada, mismo patrón que Projects/Apps)
+- ⛔ `.is-compact` (colapsar/expandir de Fase 2) es **código muerto** — el CSS sigue en el archivo pero nada lo dispara desde que el click pasó a seleccionar
 - ⛔ El grafo es de demo (`DEMO_MAP_GRAPH`), no datos reales — se muestra en cualquier proyecto
 - ⛔ Sin reveal animado disparado por el primer mensaje del chat
-- ⛔ Sin drawer inferior de detalle (D42) — clickear un nodo hoy solo colapsa/expande
-- ⛔ Sin persistencia — nada de esto pasa por `map_nodes`/`map_edges`/`map_versions` (esas tablas ya existen en Supabase, `supabase/migrations/0004_project_map.sql`, pero conectarlas es la Fase 5 de esa migración — explícitamente la última, después de proyectos/apps/chats)
-- ⛔ Verificado solo por trazado de código + chequeo de sintaxis del `<script>` — sin confirmación visual en navegador en ninguna de las 3 fases (la extensión de Chrome no estuvo conectada en ninguna sesión hasta ahora)
+- ⛔ Sin drawer inferior de detalle (D42) — seleccionar un nodo hoy no abre nada, es un placeholder
+- ⛔ Sin persistencia real — nada de esto pasa por `map_nodes`/`map_edges`/`map_versions` (esas tablas ya existen en Supabase, `supabase/migrations/0004_project_map.sql`, pero conectarlas es la Fase 5 de esa migración — explícitamente la última, después de proyectos/apps/chats); la posición de un nodo arrastrado tampoco se guarda ahí, solo en memoria
+- ⛔ Verificado solo por trazado de código + chequeo de sintaxis del `<script>` — sin confirmación visual en navegador en ninguna de las fases (la extensión de Chrome no estuvo conectada en ninguna sesión hasta ahora)
 
 ## Pendiente / abierto
 
 - **El grafo real**: reemplazar `DEMO_MAP_GRAPH` por datos reales del proyecto, y el primer mensaje del chat disparando el reveal animado (nodos apareciendo uno por uno, con anillo pulsante) — el pendiente más grande, cierra la divergencia de la Decisión 3.
-- **Drawer inferior de detalle** (D42) — clickear un nodo hoy solo alterna completo/colapsado; abrir su detalle real todavía no existe. El menú "···" que hubiera podido llevar a esto se sacó del todo (2026-08-18) en vez de dejarse decorativo — si hace falta una acción por nodo más adelante, se vuelve a evaluar entonces.
+- **Drawer inferior de detalle** (D42) — seleccionar un nodo (`.is-selected`) es hoy un placeholder que no abre nada; falta definir y construir el drawer real. El menú "···" que hubiera podido llevar a esto se sacó del todo (2026-08-18) en vez de dejarse decorativo.
+- **Deseleccionar clickeando el canvas vacío** — hoy la única forma de deseleccionar es clickear otra vez la misma card seleccionada; clickear el fondo del canvas no limpia la selección. No pedido explícitamente, pero es un complemento natural si se vuelve confuso en uso.
 - **Filter real** — el botón existe (esquina superior derecha) pero no filtra nada todavía; falta definir qué (¿por tipo de nodo, como el "Layers" de los mocks? ¿por tag?).
-- **Footer (zona extra) para otra cosa** — hoy solo tiene tags; el usuario mencionó explícitamente que lo van a reusar para algo distinto, todavía sin definir qué.
-- **Logo/ícono de "Banco" específico** — el usuario ofreció compartir una referencia visual de un logo de banco con el estilo del nombre del nodo ("Bank statement feed"); no llegó ninguna imagen adjunta al pedido, así que el ícono `landmark` sigue siendo el placeholder hasta que se reciba esa referencia.
+- **Footer (zona extra) para otra cosa** — además de "Files"/tags, el usuario mencionó explícitamente que lo van a reusar para algo distinto, todavía sin definir qué.
+- **Ícono `file-check-corner`** — pedido en el badge de "Files", no es un nombre real de Lucide; se sustituyó por `file-check` (ya usado en el nodo "Settlement report") a la espera de confirmación del usuario.
+- **Logo/ícono de "Banco" específico** — el usuario ofreció compartir una referencia visual de un logo de banco con el estilo del nombre del nodo ("Bank statement feed"); no llegó ninguna imagen adjunta al pedido (mencionado dos veces), así que el ícono `landmark` sigue siendo el placeholder.
+- **Reporte sin resolver: elementos "ovalados"** en nodos de Integración/entrada — el usuario reportó verlos ovalados en vez de circulares; no se pudo identificar el bug correspondiente por revisión estática de código (todos los elementos circulares usan ancho/alto fijos iguales + `flex-shrink: 0`); pendiente de que el usuario precise qué elemento puntual (¿el dot?, ¿un handle?, ¿el chip de ícono?).
 - **Zoom anclado al cursor**, no al centro del panel.
 - **Fit to view real** — hoy es la vista de reposo, no un cálculo contra el bounding box real del grafo (aunque el centrado automático de Fase 2 hace que hoy ya se vea bien a esa vista).
-- **Drag de nodo** — posición fija desde datos, no arrastrable todavía (igual que el producto real, donde el drag existe pero no persiste).
-- **Persistencia real** (`map_nodes`/`map_edges`/`map_versions`) — Fase 5 de la migración a Supabase, todavía lejos en la secuencia de esa migración (ver `docs/supabase.md`).
-- **Verificación visual en navegador real** — pendiente en las 3 fases.
+- **Persistencia real de la posición de un nodo** — hoy el drag solo persiste en memoria (mutando `DEMO_MAP_GRAPH` directamente) durante la sesión; una recarga de página lo pierde. Persistencia real es la Fase 5 de la migración a Supabase (ver `docs/supabase.md`), todavía lejos en la secuencia.
+- **Verificación visual en navegador real** — pendiente en todas las fases.
 
 ## Archivos relacionados
 
-- `flows/home/index.html` — todo el código: `renderProjectMapTab`, `initProjectMapCanvas`, `renderMapGraph`, `buildNodeCardHtml`, `buildMapGraph`, `DEMO_MAP_GRAPH`, `projectMapNodeCount`, `nodeIconName`/`nodeTypeLabel`/`nodeHasInHandle`/`nodeHasOutHandle`, constantes `PROJECT_MAP_ZOOM_*`.
-- `shared/tokens.css` — `--color-accent`/`--color-accent-tint`/`--color-accent-ink`, el único token nuevo que esta pantalla necesitó.
+- `flows/home/index.html` — todo el código: `renderProjectMapTab`, `initProjectMapCanvas`, `renderMapGraph`, `buildNodeCardHtml`, `buildMapGraph`, `DEMO_MAP_GRAPH`, `projectMapNodeCount`, `nodeIconName`/`nodeContentIcon`/`nodeTypeLabel`/`nodeHasInHandle`/`nodeHasOutHandle`, `centerGraphWrapper`/`mapSkeletonMarkup` (skeleton de carga), constantes `PROJECT_MAP_ZOOM_*`.
+- `shared/tokens.css` — `--color-accent`/`--color-accent-tint`/`--color-accent-ink` (Function); el borde azul de selección reusa `--color-primary`/`--color-primary-tint`, ya existentes, sin tokens nuevos.
 - [`project-map.md`](./project-map.md) — el modelo conceptual de nodos (por qué 3 tipos, por qué la conciliación es un tag).
 - [`chat-side-panel.md`](./chat-side-panel.md) — el tab donde este mapa vive.
 - [`home.md`](./home.md) — resumen corto + el flujo de `openProjectChat()` que abre este tab.
-- `docs/supabase.md` — estado de la migración a Supabase, incluida la Fase 5 (todavía no alcanzada) que eventualmente reemplaza `DEMO_MAP_GRAPH` por datos reales.
+- `docs/supabase.md` — estado de la migración a Supabase, incluida la Fase 5 (todavía no alcanzada) que eventualmente reemplaza `DEMO_MAP_GRAPH` por datos reales y persiste la posición de los nodos.

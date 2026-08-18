@@ -38,11 +38,39 @@ Tres versiones, cada una descartada por una razón concreta:
 - `Simetrik v3/frontend/src/lib/grafo.ts` / `NodoGrafo.tsx` — `TipoNodo`/`VarianteNodo`/`ICONO` reales. Contexto, no vinculante para v3.1: este prototipo no está atado a la secuencia de build del producto real (que deja Function como nodo del mapa para **M7**, muy adelante) — es un prototipo de experiencia, así que puede mostrar el vocabulario completo antes de que el backend real lo soporte.
 - `Mock/mock-v3/reference/map/concepts/objects/{integration,output,dataset}.md` — material exploratorio (`status: draft`), usado como referencia de lenguaje pero no como fuente autoritativa (a diferencia del glosario, este directorio tiene preguntas abiertas sin resolver, ej. *"¿son in y out el mismo objeto?"*).
 
+## Ambientes y el mapa (decisión, 2026-08-18 — previa a la Fase 5 de persistencia)
+
+Antes de conectar el mapa a datos reales (`docs/supabase.md` → Fase 5) hacía falta cerrar cómo se relacionan los **ambientes de un proyecto** (`production`/`qa`/`dev`, ver `home.md` → "Footer y tags") con el mapa — el usuario marcó explícitamente que la arquitectura de la Fase 5 dependía de esto.
+
+Se investigaron 3 referencias antes de decidir (ninguna tenía ya resuelto "cada ambiente = su propio mapa"):
+- **Este prototipo**: `environments` es hoy solo un badge decorativo por proyecto, sin ninguna relación con el mapa.
+- **Producto real (D17)**: ambientes = branches de git del repo de configuración del proyecto; deploy = taguear una versión de esa branch. Un solo historial, promovido entre ambientes — no mapas paralelos.
+- **mock-v3**: `environment` es un campo singular por proyecto (etapa de vida: Dev → Prod), no ambientes coexistiendo.
+
+**Decisión (confirmada con el usuario): un solo grafo de nodos por proyecto — los ambientes son puntos de promoción sobre esa misma línea de tiempo, no mapas independientes.** Mismo espíritu que D17: construís en el chat (equivale a un commit en `dev`), y promovés explícitamente a `qa`/`prod` cuando corresponde (equivale a taguear un deploy). Implementado como `project_environment_promotions` (append-only: proyecto + ambiente + qué `map_version` se promovió + quién + cuándo) — ver `docs/supabase.md`. El "ambiente actual" de un proyecto es la promoción más reciente para ese par (proyecto, ambiente); un ambiente sin ninguna promoción todavía se ve vacío, no es un error.
+
+**Regla de aplicación para cuando se construya el reveal real (pendiente más grande de este archivo):** cada `map_version` nueva creada por el chat se promueve automáticamente a `dev` — promover a `qa`/`prod` es siempre una acción explícita del usuario, nunca automática.
+
+**Implicación de UI todavía sin construir**: el mapa va a necesitar un selector de ambiente (hoy no existe — el canvas de Fase 2 es agnóstico a esto). Sin selector, "el mapa" pasa a ser ambiguo en cuanto haya más de una promoción — cuál versión mostrar depende de qué ambiente se esté mirando.
+
+## Estructura interna de nodo: Data y Context (decisión, 2026-08-18)
+
+Antes de conectar la Fase 5, se corroboró la estructura interna de un nodo contra la arquitectura real (`uploads`, ClickHouse, `rulesetKey` — ver investigación citada en `docs/supabase.md`) y se cerraron 2 conceptos que el plan original del mapa ya anticipaba como pestañas del drawer de detalle sin definir ("Data"/"Context"):
+
+- **Uploads**: confirmado que existe en el producto real tal como se esperaba — metadata de archivos (`filename`, `bytes`, `sha256`, `object_key` hacia un bucket externo; el archivo nunca vive en la base de datos). Un nodo de Integración referencia el/los uploads que lo originaron.
+- **"Data" (rows del nodo) — corrección real importante encontrada**: en el producto real, la Integración *"lee un archivo y emite filas, no crea tablas"* — la tabla de filas es del nodo **Dataset** aguas abajo (en ClickHouse, no Postgres), nunca de la Integración misma. **Decisión para v3.1 (divergencia deliberada, confirmada con el usuario): "Data" es una sección que tienen TODOS los nodos que transportan filas — Integración Y Dataset —, no solo el Dataset.** Cada uno documenta su propia lista de rows, con la forma de columnas que le corresponda en esa etapa del pipeline (varía tras cada transformación). Function queda afuera — no transporta datos propios, opera sobre los de un Dataset. Tabla `map_node_data` (fila = `jsonb`, sin esquema de columnas fijo).
+- **Tags — confirmado sin cambios**: siguen siendo informativos/libres, sin disparar ejecución — "la facilidad de poder etiquetar nodos", pensados para filtrar el mapa más adelante (y a futuro, tags también sobre columnas de un dataset, no solo sobre el nodo). Esto es una divergencia consciente frente al producto real, que no usa tags en absoluto — ahí la distinción (ej. qué dataset es resultado de un cruce) se resuelve con un discriminador estructurado en la config (`config.izquierda`/`config.derecha`), no con etiquetas. Se mantiene la decisión original de la Fase 0 (tags libres) tal cual.
+- **"Context" — sin precedente en el producto real** (ahí ni node ni dataset tienen descripción semántica, solo `projects.description` manual). Nuevo para v3.1: interpretación en lenguaje natural de qué hace el nodo, **construida y mantenida por el agente** a medida que impacta el nodo desde el chat — nunca editada a mano por el usuario. Columna propia `map_nodes.agent_context`.
+- **Rulesets — confirmado sin cambios**, con matiz: el ruleset de una Integración ("trata la data que ingresa") y el de un Dataset (inserta, o cruza si es conciliación) son conceptualmente distintos — coincide con lo ya modelado.
+
+Ver `supabase/migrations/0010_node_data_and_context.sql`.
+
 ## Pendiente / abierto
 
 - ✅ **Íconos confirmados e implementados** (ver `map.md` → Fase 2) — dos niveles, no uno: el del header es genérico por tipo/dirección (`arrow-down-to-line`/`arrow-up-from-line` Integración, `database-zap` Dataset, `square-function` Function); el de la card blanca (content) es específico por nodo (banco, ERP, transacciones, conciliación, proceso manual...), asociado al proceso real de cada uno.
 - ✅ **Tags: siempre visibles en la tarjeta**, en la zona gris exterior — resuelto al implementar Fase 2 (ver `map.md`).
 - **Function como nodo del mapa está en M7 del roadmap real** — decisión consciente de adelantarlo en el prototipo; no implica que el producto real vaya a tenerlo pronto.
+- **Selector de ambiente en el canvas** — el modelo de datos ya está resuelto (ver sección "Ambientes y el mapa" arriba), pero el canvas de Fase 2 no tiene ningún UI para elegir qué ambiente estás viendo. Necesario antes o durante la Fase 5 de `docs/supabase.md`, para que "el mapa" deje de ser ambiguo en cuanto un proyecto tenga más de una promoción.
 
 ## Archivos relacionados
 

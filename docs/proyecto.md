@@ -40,6 +40,7 @@ Organización (cuenta)
 - **Los permisos son scoped al Proyecto, no globales.** Un usuario invitado a un Proyecto recibe un rol + acciones específicas *dentro de ese Proyecto*. Ese mismo usuario puede no tener ningún acceso a otros Proyectos de la misma organización, o tener un rol distinto en cada uno.
 - **La organización gobierna el marco de roles/permisos.** El *catálogo* de roles y qué acciones habilita cada uno se controla a nivel de organización — un Proyecto no inventa su propio sistema de permisos desde cero, aplica el que la organización define.
 - **Un usuario puede estar "dentro" de la organización y "fuera" de todo Proyecto a la vez.** Este es un estado válido y esperado, no un caso de error: cuenta creada, cero proyectos visibles, cero capacidad de crear uno.
+- **Los Chats son privados a quien los inició, aunque el Proyecto al que pertenecen sea compartido.** (Confirmado 2026-08-18.) Si dos usuarios tienen acceso al mismo Proyecto, cada uno ve únicamente los chats que él mismo empezó bajo ese Proyecto — nunca los del otro. El acceso compartido es al Proyecto como entidad (sus datos, su mapa, sus artefactos); la conversación de cada usuario con el agente sobre ese Proyecto es su propio espacio, no un canal de equipo. Implementado como RLS por `owner_user_id`, no por membresía del Proyecto — ver `supabase.md`.
 
 ## Decisiones funcionales: cómo funciona hoy en el prototipo
 
@@ -86,3 +87,4 @@ Desde que se escribió este documento, varias piezas de UI se construyeron sobre
 - `docs/home.md` — sección "Projects", incluye la nota de que `owner` es solo mock visual, no permisos reales
 - `docs/sidebar.md` — estructura de Pinned, que eventualmente debería filtrarse por acceso real del usuario
 - `flows/home/index.html` — `PROJECTS_DATA`, vista Projects (grid/list, tabs de ownership)
+- `docs/supabase.md` / `supabase/migrations/0005_chats_private_per_user.sql` — implementación real de "Chats privados por usuario"

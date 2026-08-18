@@ -62,11 +62,17 @@
   --sidebar-w: 260px;
   --sidebar-w-collapsed: 52px;
 
-  /* Scrollbar — thickness única para todo el sitio. Cualquier scrollbar
-     custom (ej. el de .panel-tabs-list en flows/home/index.html) debe
-     referenciar esta variable en vez de hardcodear un px propio, para que
-     nunca varíe entre componentes ni se desactualice si se ajusta acá. */
+  /* Scrollbar — thickness y color únicos para todo el sitio. Cualquier
+     scrollbar custom (ej. el de .panel-tabs-list en flows/home/index.html)
+     debe referenciar estas variables en vez de hardcodear un valor propio,
+     para que nunca varíen entre componentes ni se desactualicen si se
+     ajustan acá. --scrollbar-thumb-color es su propio token (2026-08-18,
+     antes reusaba --color-border-strong) — decoupled a propósito: ese
+     token también controla bordes de inputs/botones en todo el archivo,
+     así que cambiar el color del scrollbar ya no puede afectar bordes sin
+     querer, ni viceversa. */
   --scrollbar-size: 4px;
+  --scrollbar-thumb-color: #E5E5EA;
 }
 
 * { box-sizing: border-box; }
@@ -89,10 +95,15 @@ a { color: inherit; text-decoration: none; }
 /* scrollbar-width: thin es el único valor de Firefox que se acerca a un
    scrollbar delgado (no soporta px arbitrarios como --scrollbar-size) —
    se declara acá, una sola vez, para que ningún componente nuevo tenga
-   que acordarse de repetirlo. */
-* { scrollbar-width: thin; }
+   que acordarse de repetirlo. scrollbar-color (2026-08-18) es lo que
+   Firefox de verdad usa para pintar el thumb — antes solo estaba seteado
+   para el caso especial de .panel-tabs-list, así que en Firefox el resto
+   del sitio dependía del gris default del navegador en vez de
+   --scrollbar-thumb-color; Chrome/Safari (::-webkit-scrollbar-thumb,
+   abajo) sí ya lo respetaban en todos lados. */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb-color) transparent; }
 ::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
-::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-color); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- Componentes genéricos ---------- */

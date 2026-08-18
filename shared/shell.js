@@ -127,7 +127,15 @@ function initSidebarCollapsedPinnedPopover() {
         const name = li.querySelector('.project-name')?.textContent.trim();
         if (!name) return;
         const chats = Array.from(li.querySelectorAll('.chat-sublist .chat-row')).map((a) => a.textContent.trim());
-        entries.push({ type: 'project', name, chats, expanded: li.classList.contains('is-expanded') });
+        // id (2026-08-18, feedback direct — added so the popover's own
+        // ellipsis, below, can target the same portal
+        // .sidebar-project-actions-menu the real row's ellipsis already
+        // uses): whatever's on the real <li data-project-id>, stale mock
+        // slug or a real Supabase uuid — same value the real row's own
+        // ellipsis already works (or doesn't) with, no new mismatch
+        // introduced here.
+        const id = li.dataset.projectId || '';
+        entries.push({ type: 'project', name, id, chats, expanded: li.classList.contains('is-expanded') });
       } else if (li.classList.contains('sidebar-pinned-chat-item')) {
         const name = li.querySelector('.sidebar-pinned-chat-name')?.textContent.trim();
         if (!name) return;
@@ -153,9 +161,15 @@ function initSidebarCollapsedPinnedPopover() {
   // instead of inventing parallel ones — that's what makes open/close and
   // hover behave *exactly* like the real Pinned rows (same crossfade, same
   // unified hover-the-whole-row treatment) for free, with zero drift risk.
-  // The one thing intentionally NOT reused is .sidebar-project-actions-*
-  // (the ellipsis) — this popover is a read/select shortcut, not a place to
-  // manage projects.
+  // .sidebar-project-actions-* (the ellipsis) is now reused too (2026-08-18,
+  // feedback direct — reverses the earlier "read/select shortcut only"
+  // decision noted here before): the trigger targets the SAME portal
+  // .sidebar-project-actions-menu the real Pinned row already uses for that
+  // project id, so Unpin/Go to project/Archive/Edit detail all run the
+  // exact same logic no matter which of the two rows opened them. Only the
+  // trigger's own open/position/close wiring needs doing here (see
+  // wireSidebarActionsTrigger below) — the menu's action clicks are already
+  // wired once, in index.html, against that shared id.
   function renderResults(term) {
     const q = term.trim().toLowerCase();
     const entries = readPinnedEntries();
@@ -188,6 +202,11 @@ function initSidebarCollapsedPinnedPopover() {
             </span>
             <span class="project-name">${escapeHtml(entry.name)}</span>
           </button>
+          <div class="sidebar-project-actions-wrap">
+            <button type="button" class="sidebar-project-actions-btn" data-sidebar-actions-trigger="${escapeHtml(entry.id)}" aria-label="Project actions">
+              <i data-lucide="more-vertical"></i>
+            </button>
+          </div>
         </div>
         <div class="chat-sublist"><div class="chat-sublist-inner">
           ${matchingChats.map((c) => `<a class="chat-row" href="#">${escapeHtml(c)}</a>`).join('')}
@@ -196,6 +215,14 @@ function initSidebarCollapsedPinnedPopover() {
     });
     results.innerHTML = html ? `<ul class="project-list">${html}</ul>` : '<div class="sidebar-pinned-popover-empty">No pinned items match your search.</div>';
     if (window.lucide) lucide.createIcons();
+    // Freshly-stamped triggers (this list is rebuilt from scratch on every
+    // render) — wire each one's open/position/close the same way
+    // initSidebarProjectActions() wires the real Pinned row's own ellipsis.
+    // Idempotent (data-actions-wired guard inside), so re-rendering on every
+    // keystroke never stacks duplicate click listeners.
+    if (typeof window.wireSidebarActionsTrigger === 'function') {
+      results.querySelectorAll('[data-sidebar-actions-trigger]').forEach(window.wireSidebarActionsTrigger);
+    }
   }
 
   function closePopover() {
@@ -449,7 +476,6 @@ function initSidebarCollapsedRecentPopover() {
 // once the element isn't nested where CSS could anchor it with top/right.
 function initSidebarProjectActions() {
   const triggers = Array.from(document.querySelectorAll('[data-sidebar-actions-trigger]'));
-  if (!triggers.length) return;
 
   const POPOVER_GAP = 6; // space between the trigger's right edge and the popover
   const VIEWPORT_MARGIN = 8; // never render flush against the window edge
@@ -484,7 +510,20 @@ function initSidebarProjectActions() {
     menu.style.top = `${Math.round(top)}px`;
   }
 
-  triggers.forEach((trigger) => {
+  // Wires one trigger's open/position/close against its matching portal
+  // menu — extracted (2026-08-18, feedback direct) so a trigger stamped
+  // into the DOM later (the collapsed Pinned popover's own project rows,
+  // see initSidebarCollapsedPinnedPopover's renderResults, which rebuilds
+  // its rows from scratch on every open/keystroke) can get the exact same
+  // wiring the 3 real Pinned rows get at page load, instead of duplicating
+  // this open/position/close logic a second time over there. Exposed on
+  // `window` as the public entry point for that (same convention as
+  // window.onNavSectionChange elsewhere in this file: a callback contract
+  // another script can call into). data-actions-wired guards against
+  // double-binding if the same trigger element gets passed in twice.
+  function wireTrigger(trigger) {
+    if (trigger.dataset.actionsWired) return;
+    trigger.dataset.actionsWired = '1';
     const id = trigger.getAttribute('data-sidebar-actions-trigger');
     const menu = document.querySelector(`.sidebar-project-actions-menu[data-sidebar-actions-menu="${id}"]`);
     if (!menu) return;
@@ -496,13 +535,23 @@ function initSidebarProjectActions() {
       if (!isOpen) openSidebarActionMenu(trigger, menu);
     });
 
-    // Clicking an option doesn't do anything real yet — just closes the
-    // popover, same as every other not-yet-wired action in this prototype.
-    menu.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (e.target.closest('[data-sidebar-action]')) closeAllSidebarActionMenus();
-    });
-  });
+    // Clicking an option closes the popover after. Guarded separately from
+    // data-actions-wired above (that one's per-trigger, this one's per-menu)
+    // — the collapsed Pinned popover re-renders its rows (and so, fresh
+    // trigger elements) on every open/keystroke, but they keep resolving to
+    // the SAME persistent portal menu; without this guard each re-render
+    // would stack another identical listener on that one menu element.
+    if (!menu.dataset.actionsMenuWired) {
+      menu.dataset.actionsMenuWired = '1';
+      menu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target.closest('[data-sidebar-action]')) closeAllSidebarActionMenus();
+      });
+    }
+  }
+  window.wireSidebarActionsTrigger = wireTrigger;
+
+  triggers.forEach(wireTrigger);
 
   document.addEventListener('click', closeAllSidebarActionMenus);
   // The popover's position is a one-time snapshot of the trigger's

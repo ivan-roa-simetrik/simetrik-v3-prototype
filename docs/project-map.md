@@ -1,6 +1,6 @@
 # Project View Map (concepto: modelo de nodos)
 
-> Última actualización: 2026-08-14
+> Última actualización: 2026-08-18
 > Este archivo es distinto a los demás de `docs/`: como `proyecto.md` y `apps.md`, no documenta una pantalla — documenta el **modelo conceptual** de los nodos que van a vivir en el mapa de un proyecto, para que las fases de implementación (ver [`map.md`](./map.md)) no tengan que re-derivar estas decisiones cada vez que se agregue algo nuevo al mapa.
 > Ver también: el artifact **"Planos del Mapa"** (misma sesión, previo a este documento) — inventario de funcionalidades del mapa cruzado con la arquitectura real, del que salió la priorización que llevó a construir Fase 0/Fase 1 antes de definir esto.
 
@@ -64,6 +64,20 @@ Antes de conectar la Fase 5, se corroboró la estructura interna de un nodo cont
 - **Rulesets — confirmado sin cambios**, con matiz: el ruleset de una Integración ("trata la data que ingresa") y el de un Dataset (inserta, o cruza si es conciliación) son conceptualmente distintos — coincide con lo ya modelado.
 
 Ver `supabase/migrations/0010_node_data_and_context.sql`.
+
+## Versionado: una sola línea de tiempo, no una tabla por nodo (decisión, 2026-08-18)
+
+El usuario preguntó explícitamente si hacía falta un historial de versiones **por nodo individual**, separado del historial del mapa completo (`map_versions`). Se evaluó y se descartó: **`map_versions.snapshot` ya contiene la foto completa de todos los nodos en ese momento** — "la versión de un nodo" no es información que falte, es información que ya está adentro y se obtiene **filtrando**, no guardando aparte.
+
+- **Consultar la versión de un nodo puntual** = abrir la fila de `map_versions` que corresponda y buscar ese nodo por id dentro de `snapshot.nodes`.
+- **Comparar el mismo nodo entre dos versiones** = repetir esa búsqueda en las dos fotos y comparar — lógica de la aplicación, no una tabla nueva.
+- **Por qué no una tabla `map_node_versions` aparte**: crearía dos líneas de tiempo corriendo en paralelo (la del mapa completo y la de cada nodo) que podrían desincronizarse, y necesitaría una tabla más solo para mapear qué versión de nodo corresponde a qué versión de mapa — mismo error de "segunda fuente de verdad" ya evitado antes en esta migración (pin de proyectos, `SEARCH_DATA`).
+
+**Requisito para cuando se construya la Fase 5 real**: `map_versions.snapshot` debe tener una forma predecible, `{ nodes: [...], edges: [...] }` (cada nodo con su `id`), para que filtrar "solo este nodo" sea trivial.
+
+## Alcance inicial: 2 ambientes, no 3 (decisión, 2026-08-18)
+
+Aunque `project_environment` (0006) define 3 valores (`production`/`qa`/`dev`) y las cards de Projects ya muestran los 3 badges, **la Fase 5 real arranca trabajando solo con `dev` y `production`** — pedido explícito del usuario, para no complejizar el prototipo inicial. `qa` queda definido en el enum y visible como badge, pero sin flujo de promoción propio todavía. Ampliarlo a los 3 ambientes activos es trabajo futuro, no de esta fase.
 
 ## Pendiente / abierto
 

@@ -444,7 +444,17 @@
      popover sits inside .chat-empty (text-align: center), which otherwise
      cascades all the way down to this label since text-align inherits. */
   .panel-open-group-title { font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-ink-faint); padding: 6px 8px; text-align: left; }
-  .panel-open-empty { padding: 20px 8px; text-align: center; font-size: 12.5px; color: var(--color-ink-faint); }
+  /* flex: 1 + centrado (2026-08-19, reportado por el usuario): .panel-open-results
+     es display:flex; flex-direction:column con alto fijo (210/220/280px según
+     el consumidor) — sin esto, este estado vacío era un bloque más dentro de
+     ese flex column, con su propio alto de contenido (~60px) alineado arriba
+     por default, dejando el resto del contenedor fijo como espacio vacío sin
+     usar debajo. Ahora crece para ocupar todo el alto disponible y centra su
+     contenido ahí adentro, sea cual sea la altura fija del consumidor. */
+  .panel-open-empty {
+    padding: 20px 8px; text-align: center; font-size: 12.5px; color: var(--color-ink-faint);
+    flex: 1; display: flex; align-items: center; justify-content: center;
+  }
   /* Wider row than the old fixed-220px list — icon + name + generous
      padding, matching the Cmd+K search modal's own result rows. */
   .panel-open-item {
@@ -677,6 +687,41 @@
      (solo con nodos — ver renderProjectMapTab). Sin funcionalidad todavía
      — pedido explícito, "por el momento que no haga nada". */
   .project-map-filter { position: absolute; top: 12px; right: 12px; z-index: 1; display: flex; gap: 4px; }
+  /* Buscador de nodos (pedido explícito, 2026-08-18) — a la izquierda del
+     botón de Filter, mismo criterio de visibilidad (solo con nodos).
+     `position: relative` es lo que ancla el popover (`.project-map-
+     search-menu`, `position: absolute`) contra ESTE grupo puntual, no
+     contra todo el canvas. `right: 48px` = 12px (mismo margen que Filter)
+     + 28px (ancho del botón de Filter) + 8px de aire entre los dos. */
+  .project-map-search { position: absolute; top: 12px; right: 48px; z-index: 2; }
+  .project-map-search-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    width: 240px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); overflow: hidden; padding: 8px;
+  }
+  .project-map-search-menu.is-open { display: block; }
+  .project-map-search-input-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 6px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface);
+  }
+  .project-map-search-input-row i, .project-map-search-input-row svg { width: 14px; height: 14px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .project-map-search-input-row input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 12.5px; color: var(--color-ink); font-family: inherit; }
+  .project-map-search-input-row input::placeholder { color: var(--color-ink-faint); }
+  .project-map-search-results { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+  .project-map-search-result {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: none; background: transparent;
+    border-radius: var(--radius-sm); font-size: 12.5px; color: var(--color-ink); text-align: left; cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .project-map-search-result:hover { background: var(--color-surface-sunken); }
+  .project-map-search-result-icon {
+    width: 22px; height: 22px; border-radius: var(--radius-sm); flex-shrink: 0;
+    background: var(--color-surface-sunken); color: var(--color-ink);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .project-map-search-result-icon svg, .project-map-search-result-icon i { width: 12px; height: 12px; }
+  .project-map-search-result-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-map-search-empty { padding: 10px 8px; font-size: 12.5px; color: var(--color-ink-faint); text-align: center; }
   .project-map-control-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; flex-shrink: 0;
@@ -717,7 +762,21 @@
        leyendo directo sobre este gris — no se pidió una card blanca
        adentro como la de los nodos. */
     background: var(--color-sidebar-bg);
-    border-top: 1px solid var(--color-border-strong);
+    /* `--color-border` (no `--color-border-strong`) — corregido: quedaba
+       más oscuro que el `border-bottom` del header (que sí usa
+       `--color-border`, el mismo token que el resto de los divisores
+       internos de este archivo), inconsistencia real detectada por el
+       usuario. */
+    border-top: 1px solid var(--color-border);
+    /* Sombra hacia ARRIBA (pedido explícito, 2026-08-18: "para que se vea
+       esa diferencia con respecto al mapa") — reintroducida después de
+       haberla sacado cuando el panel dejó de flotar (ver más abajo, "ya no
+       flota"); acá no es para simular que flota, es solo la señal de
+       profundidad que separa visualmente el panel del canvas de arriba,
+       además del `border-top`. Offset-y negativo, no positivo — la sombra
+       tiene que proyectarse hacia el contenido que queda ENCIMA, no hacia
+       abajo como el resto de las sombras de este archivo. */
+    box-shadow: 0 -6px 16px rgba(23, 23, 31, .08);
     display: flex; flex-direction: column;
     /* La altura real la fija JS en línea (ver openNodeDrawer/el resize
        handle abajo) — 0 acá es solo el estado cerrado del que arranca la
@@ -751,38 +810,98 @@
   .project-map-drawer-resize.is-dragging .project-map-drawer-resize-grip { background: rgba(85, 85, 95, 0.78); }
   body.is-resizing-map-drawer { cursor: row-resize; user-select: none; }
   body.is-resizing-map-drawer * { cursor: row-resize !important; }
+  /* Header muy justo a nivel de márgenes (pedido explícito, 2026-08-18:
+     "para que no ocupe tanto espacio") — vertical bajado de 14px a 8px;
+     horizontal se deja igual al de tabs/body (16px) para que las 3
+     secciones queden alineadas entre sí. */
   .map-drawer-header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 14px 16px 0;
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-border);
   }
-  .map-drawer-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
-  .map-drawer-title-icon {
-    width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
-    background: var(--color-surface-sunken); color: var(--color-ink);
-    display: flex; align-items: center; justify-content: center;
+  /* Sin ícono (pedido explícito, 2026-08-18) — solo el nombre del nodo.
+     Tamaño y peso bajados ("semibold" en vez del 700 que tenía): 14px/700
+     → 13px/600, se lee más como un título de panel secundario que como un
+     H1. */
+  .map-drawer-title { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+  /* Sin `flex:1` a propósito (pedido explícito, 2026-08-18: "justificado a
+     la izquierda, junto inmediatamente al batch") — con `flex:1` el
+     nombre reclamaba TODO el espacio sobrante de `.map-drawer-title`
+     aunque el texto en sí ya arrancaba pegado al tag; sin él, la caja del
+     nombre mide justo lo que su contenido necesita (se sigue pudiendo
+     encoger vía `min-width:0` + el `flex-shrink:1` default si el nombre
+     es muy largo, así el `text-overflow:ellipsis` sigue funcionando). */
+  .map-drawer-title-name {
+    min-width: 0; text-align: left;
+    font-size: 13px; font-weight: 600; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .map-drawer-title-icon svg, .map-drawer-title-icon i { width: 14px; height: 14px; }
-  .map-drawer-title-name { font-size: 14px; font-weight: 700; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .map-drawer-close {
+  /* Tag de tipo (pedido explícito, 2026-08-18) — a la izquierda del
+     nombre, mismo ícono/label que ya usa el header de la card en el mapa
+     (`nodeIconName()`/`nodeTypeLabel()`, incluye dirección: "Integration ·
+     inbound/outbound"), no uno nuevo. Color por familia: mismo criterio
+     que ya define `.node-card--{tipo} .node-card-header-icon` (azul
+     Integración, gris Dataset "como por defecto", morado Function) —
+     acá con fondo de tinte además del color de texto/ícono, para que lea
+     como un tag/chip real y no solo un ícono coloreado suelto. */
+  .map-drawer-type-tag {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    /* Cuadrado, no pill (pedido explícito, 2026-08-18) — mismo radio que
+       ya usa `.badge--square` en otros lugares del prototipo para esta
+       misma variante, no un valor nuevo. */
+    padding: 3px 8px; border-radius: var(--radius-sm);
+    font-size: 10.5px; font-weight: 600; white-space: nowrap;
+  }
+  .map-drawer-type-tag svg, .map-drawer-type-tag i { width: 11px; height: 11px; }
+  .map-drawer-type-tag--integracion { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .map-drawer-type-tag--dataset { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
+  .map-drawer-type-tag--function { background: var(--color-accent-tint); color: var(--color-accent-ink); }
+  /* Expandir/maximizar (pedido explícito, 2026-08-18: "que ocupe el 100%
+     de la altura, casi que ocultando el mapa") — mismo tratamiento visual
+     que `.map-drawer-close`. Íconos `maximize`/`minimize` (pedido
+     explícito puntual, "utiliza este icono maximize") — el mismo par ya
+     lo usan "Fit to view" del canvas y el expand-to-focus del chat
+     (`chatPanelExpandToggle`) para otras dos acciones, pero acá el propio
+     usuario pidió ese ícono en particular, así que no hay ambigüedad
+     real (cada uno vive en una zona de la UI bien distinta). Tooltip
+     ("Maximize panel"/"Minimize panel", pedido explícito) via
+     `data-tooltip` + `tooltip-bottom`, mismo mecanismo que el resto de
+     los botones de ícono del mapa. */
+  .map-drawer-expand, .map-drawer-close {
     display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; flex-shrink: 0; border: none; border-radius: var(--radius-sm);
     background: transparent; color: var(--color-ink-soft); cursor: pointer;
     transition: background var(--dur-fast) var(--ease-out);
   }
-  .map-drawer-close:hover { background: var(--color-surface-sunken); }
-  .map-drawer-close svg, .map-drawer-close i { width: 14px; height: 14px; }
-  /* Mismo look que `.panel-filter-tab` (pill, transparente → tinte
-     primario activo) pero con clase propia — mismo motivo que esa regla
-     ya documenta la suya: evitar que un handler global de otro selector
-     pise el estado activo de este. */
-  .map-drawer-tabs { display: flex; align-items: center; gap: 4px; padding: 10px 16px 0; border-bottom: 1px solid var(--color-border); }
+  .map-drawer-expand:hover, .map-drawer-close:hover { background: var(--color-surface-sunken); }
+  .map-drawer-expand svg, .map-drawer-expand i, .map-drawer-close svg, .map-drawer-close i { width: 14px; height: 14px; }
+  /* Segmented control (pedido explícito, 2026-08-18: "que queden como las
+     tabs de chat: 100%... un contenedor de fondo gris... tamaño pequeño")
+     — track gris (`--color-surface-sunken`, se nota contra el
+     `--color-sidebar-bg` casi blanco del panel) de ancho completo, cada
+     tab reparte el espacio parejo (`flex:1`) en vez de auto-anchar por su
+     texto; la tab activa es un pill blanco que se despega del track, no
+     un tinte de color. Reemplaza el estilo anterior (pills sueltos sobre
+     un `border-bottom`, calcado de `.panel-filter-tab`). */
+  .map-drawer-tabs {
+    display: flex; align-items: center; gap: 2px;
+    /* ~300px, no el ancho completo del panel (pedido explícito,
+       2026-08-18) — `align-self: flex-start` es lo que lo saca del
+       stretch por default de `.project-map-drawer` (flex-column) y lo
+       deja pegado a la izquierda con su propio ancho en vez de ocupar
+       todo el cross-axis. `max-width` es el fallback si el panel queda
+       más angosto que 300px + los 16px de margen de cada lado. */
+    width: 300px; max-width: calc(100% - 32px); align-self: flex-start;
+    margin: 10px 16px 0; padding: 2px;
+    background: var(--color-surface-sunken); border-radius: var(--radius-sm);
+  }
   .map-drawer-tab {
-    padding: 6px 12px; border-radius: 999px 999px 0 0; border: none; background: transparent;
-    font-size: 12.5px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
+    flex: 1; text-align: center;
+    padding: 5px 8px; border-radius: calc(var(--radius-sm) - 2px); border: none; background: transparent;
+    font-size: 11.5px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
     transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   }
-  .map-drawer-tab:hover { background: var(--color-surface-sunken); }
-  .map-drawer-tab.is-active { background: var(--color-primary-tint); color: var(--color-primary-ink); }
+  .map-drawer-tab:hover:not(.is-active) { color: var(--color-ink); }
+  .map-drawer-tab.is-active { background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-sm); }
   .map-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
   .map-drawer-field { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--color-border); }
   .map-drawer-field:last-child { border-bottom: none; }
@@ -790,6 +909,169 @@
   .map-drawer-field-value { font-size: 12.5px; font-weight: 600; color: var(--color-ink); text-align: right; }
   .map-drawer-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .map-drawer-tag { font-size: 11px; font-weight: 600; color: var(--color-ink-soft); background: var(--color-surface-sunken); border-radius: 999px; padding: 3px 9px; }
+
+  /* ---------- Tab Data — grilla de registros reales del nodo (2026-08-19, ampliada) ----------
+     Reemplaza la lista de metadatos que este tab mostraba antes (ver
+     buildNodeDrawerDataHtml) por una tabla real de filas/columnas,
+     adaptada del componente de referencia
+     (mock-v3/reference/Spreadsheets/components/spreadsheet.html — ver
+     reference/data_grid/10-component-dataset-grid.md): provenance rail,
+     tags de columna, ƒ de "escrita por una regla", resize + reorder de
+     columna, filtro de filas, copy-to-clipboard (⌘C / Shift⌘C con
+     headers). El origen/tags de cada columna son datos estáticos puestos
+     a mano en DEMO_MAP_GRAPH (no hay Rulesets real detrás todavía, ver
+     docs/map.md → Pendiente) — cuentan la misma historia que ya cuenta el
+     grafo (LATAM Bank Reconciliation), no una inferencia dinámica.
+     Sin Views (filtros con nombre) ni composer de fórmula — quedan fuera
+     de esta pasada. */
+  /* Footer del spreadsheet (pedido explícito, 2026-08-20: "un footer que
+     diga 'total de rows' y 'total de columnas'") — vive DEBAJO de la
+     tabla (antes vivía arriba, como resumen) — `border-top` en vez de
+     `border-bottom` porque ahora separa la tabla del footer, no el
+     footer del toolbar. */
+  .map-drawer-grid-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--color-border);
+    font-size: 12px; color: var(--color-ink-soft);
+  }
+  /* Espacio reservado debajo del footer (pedido explícito, 2026-08-20:
+     "un espacio para renderizar contenido, pero aún no lo estoy
+     utilizando") — deliberadamente vacío/sin chrome propio, mismo
+     criterio que el footer ("zona extra") de la card del nodo en el
+     mapa, que también quedó reservado sin definir qué va ahí. */
+  .map-drawer-grid-extra { min-height: 16px; }
+  .map-drawer-grid-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .map-grid-filter {
+    display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    padding: 6px 10px; background: var(--color-surface);
+  }
+  .map-grid-filter svg, .map-grid-filter i { width: 13px; height: 13px; color: var(--color-ink-faint); flex-shrink: 0; }
+  .map-grid-filter input {
+    flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+    font-size: 12.5px; color: var(--color-ink); font-family: inherit;
+  }
+  .map-grid-filter input::placeholder { color: var(--color-ink-faint); }
+  .map-grid-toolbar-btn { padding: 6px 10px; font-size: 12px; font-weight: 600; gap: 5px; flex-shrink: 0; }
+  .map-grid-kbd {
+    font-family: inherit; font-size: 10px; font-weight: 600; color: var(--color-ink-faint);
+    background: var(--color-surface-sunken); padding: 1px 5px; border-radius: 4px;
+  }
+  .map-drawer-grid-wrap {
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    overflow: auto; background: var(--color-surface); max-height: 320px;
+  }
+  .map-drawer-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+  .map-grid-gutter-col { width: 34px; }
+  /* Divisiones verticales entre columnas (pedido explícito: "como si
+     fuera un Excel") — un borde a la derecha de cada celda, header y
+     body por igual; se saca de la última columna para no duplicar la
+     línea contra el borde propio de `.map-drawer-grid-wrap`. */
+  .map-drawer-grid th, .map-drawer-grid td { border-right: 1px solid var(--color-border); }
+  .map-drawer-grid th:last-child, .map-drawer-grid td:last-child { border-right: none; }
+  .map-drawer-grid th {
+    position: sticky; top: 0; z-index: 1; padding: 0;
+    background: var(--color-surface-sunken); border-bottom: 1px solid var(--color-border-strong);
+    border-right-color: var(--color-border-strong);
+    vertical-align: bottom;
+  }
+  .map-grid-th { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px 6px; position: relative; overflow: hidden; }
+  /* Alineación del header — coincide siempre con la de sus valores
+     (pedido explícito, ver `gridColumnAlign()`/`.map-grid-align-*` en el
+     body): dinero empuja meta+nombre a la derecha, el resto se queda a
+     la izquierda (default de un flex row). */
+  .map-grid-th[data-align="right"] .map-grid-th-meta,
+  .map-grid-th[data-align="right"] .map-grid-th-name { justify-content: flex-end; }
+  /* Provenance rail — lo único que esta grilla hace que una tabla normal
+     no hace: una barra de 2px que dice de dónde vino la columna, sin
+     tener que clickear nada. Colores calcados 1:1 del componente de
+     referencia. */
+  .map-grid-th-rail { position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+  .map-grid-th[data-origin="landed"] .map-grid-th-rail { background: var(--color-border-strong); }
+  .map-grid-th[data-origin="written"] .map-grid-th-rail { background: var(--color-primary); }
+  .map-grid-th[data-origin="inherited"] .map-grid-th-rail { background: var(--color-primary-tint); }
+  .map-grid-th[data-origin="system"] .map-grid-th-rail { background: var(--color-border); }
+  .map-grid-th-meta { display: flex; align-items: center; gap: 5px; min-height: 12px; flex-wrap: nowrap; overflow: hidden; }
+  .map-grid-tag {
+    font-size: 9px; font-weight: 600; color: var(--color-ink-faint); white-space: nowrap;
+    text-transform: none; /* verbatim, minúscula — es un token que el usuario escribiría, no un label decorativo */
+  }
+  /* match-key / unique-identifier se destacan con un borde chico — son los
+     2 tags que alguien escanea primero (ver spec, "picked out because a
+     reader scans for them"). */
+  .map-grid-tag--key {
+    border: 1px solid var(--color-border-strong); border-radius: 4px; padding: 0 4px;
+    color: var(--color-ink-soft);
+  }
+  .map-grid-tag--lock { display: inline-flex; color: var(--color-ink-faint); }
+  .map-grid-tag--lock svg, .map-grid-tag--lock i { width: 10px; height: 10px; }
+  .map-grid-th-name {
+    display: flex; align-items: center; gap: 4px; cursor: grab;
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", Consolas, monospace;
+    font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: -.01em;
+  }
+  .map-grid-th-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .map-grid-th-name:active { cursor: grabbing; }
+  /* ƒ — marca visual de "esta columna la escribió una regla" (origin:
+     written). No abre nada todavía (Rulesets sigue sin modelo real, ver
+     docs/map.md → Pendiente) — el tooltip lo deja explícito en vez de
+     simular un click que no lleva a ningún lado. */
+  .map-grid-fx {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", Consolas, monospace;
+    font-style: italic; font-size: 12px; font-weight: 700; color: var(--color-primary); flex-shrink: 0;
+  }
+  .map-grid-col-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 7px; cursor: col-resize; z-index: 4; }
+  .map-grid-col-resize::after {
+    content: ''; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 1px;
+    background: transparent; transition: background var(--dur-fast) var(--ease-out);
+  }
+  .map-grid-col-resize:hover::after, .map-grid-col-resize.is-active::after { background: var(--color-primary); width: 2px; }
+  /* Reorder de columna: arrastrar el nombre — el header arrastrado baja de
+     opacidad, una línea de acento marca dónde caería si se soltara ahí. */
+  .map-drawer-grid th.is-grabbed { opacity: .4; }
+  .map-drawer-grid th.is-drop-target { box-shadow: inset 2px 0 0 var(--color-primary); }
+  .map-drawer-grid td {
+    padding: 6px 10px; border-bottom: 1px solid var(--color-border); color: var(--color-ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .map-drawer-grid tbody tr:last-child td { border-bottom: none; }
+  .map-drawer-grid tbody tr:hover td:not(.map-grid-gutter) { background: var(--color-surface-sunken); }
+  /* Selección de rango — click/drag sobre celdas, click en header/gutter
+     selecciona columna/fila entera, la esquina vacía selecciona todo. */
+  .map-drawer-grid td.is-selected { background: var(--color-primary-tint); }
+  .map-drawer-grid td.is-anchor { box-shadow: inset 0 0 0 2px var(--color-primary); }
+  .map-drawer-grid td.map-grid-gutter[data-grid-row-select] { cursor: pointer; }
+  .map-drawer-grid th.map-grid-gutter { cursor: pointer; }
+  /* Alineación de valores — SIEMPRE explícita, nunca heredada (pedido
+     explícito: "el valor que está en cada row tiene que tener la misma
+     justificación" que su header — antes las celdas no declaraban
+     `text-align` propio y se leían centradas). Una sola fuente de verdad
+     con el header: `gridColumnAlign()` decide los dos lados a la vez, ver
+     `buildGridHeaderCellHtml`/`buildNodeDrawerDataResultsHtml`. */
+  .map-drawer-grid td.map-grid-align-left { text-align: left; }
+  .map-drawer-grid td.map-grid-align-right { text-align: right; }
+  /* Números/ids en monospace (`ui-monospace`/`SF Mono`) — legibilidad
+     tabular real, mismo criterio que el componente de referencia. */
+  .map-drawer-grid td.map-grid-num, .map-drawer-grid td.map-grid-mono {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", Consolas, monospace;
+  }
+  .map-drawer-grid td.map-grid-num { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .map-drawer-grid td.map-grid-mono { font-size: 11px; }
+  .map-drawer-grid td.map-grid-empty { color: var(--color-ink-faint); }
+  .map-drawer-grid td.map-grid-gutter, .map-drawer-grid th.map-grid-gutter {
+    position: sticky; left: 0; z-index: 2;
+    background: var(--color-surface-sunken); color: var(--color-ink-faint);
+    text-align: right; font-size: 10.5px; padding: 6px 8px;
+  }
+  .map-drawer-grid th.map-grid-gutter { z-index: 3; }
+  .map-drawer-grid-status-pill {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .02em;
+    border-radius: 999px; padding: 2px 8px;
+  }
+  .map-drawer-grid-status-pill--success { background: var(--color-success-tint); color: var(--color-success); }
+  .map-drawer-grid-status-pill--warning { background: var(--color-warning-tint); color: var(--color-warning); }
+  .map-drawer-grid-status-pill--danger { background: var(--color-danger-tint); color: var(--color-danger); }
+  .map-drawer-grid-status-pill--mute { background: var(--color-surface-sunken); color: var(--color-ink-soft); }
   /* Rulesets/Contexto todavía no tienen modelo de datos real (ver
      docs/map.md → Pendiente) — mismo lenguaje visual de `.section-empty`
      que ya usa el propio empty state del mapa (Fase 0), con una variante
@@ -1415,14 +1697,23 @@
      detail view behind it yet, so a click intentionally does nothing (no
      disabled/opacity treatment either — same criterion as the non-navigating
      chat rows in Pinned/Recent and the Search modal results). */
-  .projects-view { flex: 1; overflow-y: auto; padding: 32px 40px; }
-  .projects-view-inner { width: 100%; max-width: 900px; margin: 0 auto; }
+  /* Header (title + search/Filter/view-toggle/New project) and the
+     ownership tabs stay fixed — only .projects-scroll-area below scrolls
+     once there are more projects than fit, per explicit request
+     (2026-08-18, same fix already applied to .chats-view — see its own
+     comment above). .projects-view itself no longer scrolls (was
+     overflow-y:auto on the whole thing, header included) — it's a column
+     flex container sized to its parent's full height instead, with
+     header/tabs as flex-shrink:0 children and the scroll area as the one
+     flex:1 child that actually grows/shrinks. */
+  .projects-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 32px 40px 0; }
+  .projects-view-inner { width: 100%; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* Single header row: title + search toggle on the left, Filter + view
      toggle + New project on the right — consolidated from 3 stacked rows
      (header / search+toggle / tag chips) into 1 so the view doesn't spend
      so much vertical space on chrome before showing any project. */
-  .projects-view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  .projects-view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-shrink: 0; }
   .projects-header-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .projects-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .projects-view-header h1 { font-size: 20px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; flex-shrink: 0; }
@@ -1432,7 +1723,14 @@
   .projects-view-header .btn-primary { height: 32px; padding: 0 14px; }
   .projects-view-header .btn-primary svg, .projects-view-header .btn-primary i { width: 14px; height: 14px; }
 
-  .projects-ownership-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+  .projects-ownership-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; flex-shrink: 0; }
+  /* The one scrolling region — min-height:0 is what lets a flex child
+     actually shrink below its content size and scroll internally instead
+     of forcing the whole column (and the fixed header/tabs above it) to
+     grow past .projects-view's own height. padding-bottom takes over the
+     bottom breathing room .projects-view's own padding used to provide
+     before it lost its bottom value above. */
+  .projects-scroll-area { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 32px; }
   /* Own class instead of reusing .search-tab: the Cmd+K search modal wires
      a global `document.querySelectorAll('.search-tab')` click handler that
      would otherwise fire on these too and stomp their active state — same
@@ -2455,7 +2753,15 @@
      past .chats-view's own height. padding-bottom takes over the bottom
      breathing room .chats-view's own padding used to provide before it
      lost its bottom value above. */
-  .chats-scroll-area { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 32px; }
+  /* display:flex column (2026-08-19, reportado por el usuario): antes era
+     un simple overflow-y:auto sin flex, así que su único hijo visible en
+     el estado vacío (#chatsEmpty/#chatsEmptyHero) quedaba con su alto de
+     contenido natural, pegado arriba — mismo bug ya corregido en
+     .panel-open-results/.panel-open-empty. #chatsList (la lista real) no
+     necesita ningún cambio: sin flex propio, sigue midiendo su alto de
+     contenido normal como siempre, solo #chatsEmpty/#chatsEmptyHero
+     ahora piden flex:1 para llenar y centrarse en el espacio disponible. */
+  .chats-scroll-area { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 32px; display: flex; flex-direction: column; }
   .chats-view-tab {
     padding: 6px 12px; border-radius: 999px; border: none; background: transparent;
     font-size: 13px; font-weight: 600; color: var(--color-ink-soft); cursor: pointer; white-space: nowrap;
@@ -2574,10 +2880,114 @@
   .chat-actions-menu .composer-menu-option { align-items: center; min-height: 32px; padding: 0 8px; }
   .chat-actions-menu .opt-icon { margin-top: 0; }
 
+  /* ---------- Toast / confirmation snackbar (2026-08-18) ----------
+     First use: confirming a real "Delete chat" (see deleteChat + showToast
+     in the page script). Generic on purpose, not a Chats-only component —
+     bottom-right stack, per explicit request, meant to be reused for other
+     confirmations built later in this file. Deliberately not prefixed
+     "chat-" or "delete-" so it doesn't read as chat-specific. Portal
+     (sibling of .app-shell, see the HTML comment near the end of <body>) so
+     it always floats above the current view regardless of what's open —
+     same reasoning as every other portal in this file. */
+  .toast-container {
+    position: fixed; right: 20px; bottom: 20px; z-index: 500;
+    display: flex; flex-direction: column-reverse; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 240px; max-width: 360px;
+    padding: 12px 14px; background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+    font-size: 13.5px; color: var(--color-ink); line-height: 1.4;
+    pointer-events: auto;
+    transform: translateY(8px); opacity: 0;
+    transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  }
+  .toast.is-open { transform: translateY(0); opacity: 1; }
+  .toast-icon {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .toast-icon svg, .toast-icon i { width: 13px; height: 13px; }
+  .toast--success .toast-icon { background: var(--color-success-tint); color: var(--color-success); }
+  .toast--error .toast-icon { background: var(--color-danger-tint); color: var(--color-danger); }
+  .toast-message { flex: 1; min-width: 0; }
+
   .chats-empty {
     border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 32px;
     text-align: center; color: var(--color-ink-faint); font-size: 13.5px;
+    flex: 1; display: flex; align-items: center; justify-content: center;
   }
+
+  /* ---------- Chats: genuinely-empty hero illustration (2026-08-18, revisada) ----------
+     Pedido explícito del usuario — see the HTML comment above #chatsEmptyHero
+     for what each piece represents and why. Segunda pasada, mismo día:
+     se sacó la coreografía de hover (cards separándose + remolino
+     desvaneciéndose + CTA apareciendo en su lugar) — el usuario la pidió
+     puntualmente para ese primer intento y después la quiso quitar. En su
+     lugar: las 4 cards ahora forman un arco fijo arriba/alrededor del
+     ícono (nunca una card justo debajo — ese espacio es del título +
+     descripción), el ícono tiene su propia animación ambiental permanente
+     (gira y encoge un poco, en loop, ver @keyframes abajo), y el botón
+     "New chat" vive en el flujo normal, debajo del texto, siempre visible
+     — ya no es algo que aparece solo al pasar el mouse. */
+  .chats-empty-hero {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    padding: 40px 32px; text-align: center;
+    flex: 1;
+  }
+  /* Arco de 4 cards por encima/alrededor del ícono — nunca debajo, para
+     dejarle ese espacio limpio al título+descripción. Todas comparten el
+     mismo transform: translate(-50%,-50%) (centran la card sobre su punto
+     top/left) — solo cambia el punto de cada una. Posiciones calculadas
+     sobre un arco de radio ~80px, ángulos -70/-25/25/70° desde la
+     vertical, centrado en el punto donde queda el ícono (ver .chats-empty-
+     core, bottom-anclado en esta misma caja). */
+  .chats-empty-orbit { position: relative; width: 240px; height: 140px; margin-bottom: 16px; flex-shrink: 0; }
+  .chats-empty-card {
+    position: absolute; width: 40px; height: 40px; border-radius: var(--radius-sm);
+    background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-md);
+    display: flex; align-items: center; justify-content: center; color: var(--color-ink-soft);
+    pointer-events: none; transform: translate(-50%, -50%);
+  }
+  .chats-empty-card svg, .chats-empty-card i { width: 17px; height: 17px; }
+  .chats-empty-card--app     { top: 77px;  left: 45px; }  /* outer-left */
+  .chats-empty-card--chat    { top: 32px;  left: 86px; }  /* inner-left */
+  .chats-empty-card--agent   { top: 32px;  left: 154px; } /* inner-right */
+  .chats-empty-card--project { top: 77px;  left: 195px; } /* outer-right */
+  /* Los dos rgba() de abajo están sampleados a mano de los propios colores
+     del remolino en assets/img/descarga.png — no hay (ni tiene sentido
+     crear) un token --color-* para "el gradiente exacto de esta imagen
+     puntual"; misma excepción que ya contemplan las leyes de diseño para
+     el acento AI-gradient. */
+  .chats-empty-core {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 72px; height: 72px; border-radius: var(--radius-lg);
+    background: var(--color-surface); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 26px rgba(79, 70, 229, .28), 0 4px 14px rgba(236, 72, 153, .22);
+  }
+  /* Animación ambiental permanente (no ligada a hover/foco) — gira un
+     poco y encoge un poco, en loop suave. Duración deliberadamente fuera
+     del canon 120/200/320ms: ese canon es para micro-interacciones que
+     responden a un estado (igual que el shimmer del skeleton de más abajo,
+     ya documentado con la misma excepción), esto es un loop ambiental. */
+  .chats-empty-core-icon { width: 40px; height: 40px; animation: chatsEmptyCoreIconPulse 4.5s ease-in-out infinite; }
+  @keyframes chatsEmptyCoreIconPulse {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    50%      { transform: rotate(-8deg) scale(.9); }
+  }
+  /* Botón en flujo normal, siempre visible — ya no position:absolute
+     sobre el ícono ni condicionado a :hover/:focus-within. */
+  .chats-empty-cta {
+    margin-top: 6px;
+    /* Mismo tamaño chico que ya usa "New chat" del header
+       (.chats-view-header .btn-primary más arriba) — reusado literal. */
+    height: 32px; padding: 0 14px;
+  }
+  .chats-empty-cta svg, .chats-empty-cta i { width: 14px; height: 14px; }
+  .chats-empty-hero h2 { font-size: 16px; font-weight: 700; color: var(--color-ink); }
+  .chats-empty-hero p { font-size: 13.5px; color: var(--color-ink-soft); max-width: 320px; line-height: 1.5; }
 
   /* ---------- Chats and Tasks loading skeleton ----------
      Same simulated-fetch treatment as Projects (queryChatsWithLoading/
@@ -3471,6 +3881,10 @@
             <button type="button" class="projects-ownership-tab" data-ownership="archived">Archived</button>
           </div>
 
+          <!-- Everything below is the one scrolling region (see
+               .projects-scroll-area in <style>) — header + ownership tabs
+               above stay fixed regardless of how many projects there are. -->
+          <div class="projects-scroll-area">
           <!-- Loading skeleton: shown briefly every time the Projects
                section is entered (mock "under request" delay, see
                loadProjectsView), never on re-filtering already-loaded
@@ -3511,6 +3925,7 @@
           <div class="projects-grid" id="projectsGrid"></div>
           <div class="projects-list" id="projectsList" hidden></div>
           <div class="projects-empty" id="projectsEmpty" hidden>No projects match your search.</div>
+          </div>
         </div>
       </div>
 
@@ -3687,6 +4102,42 @@
 
             <div class="chats-list" id="chatsList"></div>
             <div class="chats-empty" id="chatsEmpty" hidden>No chats match your search.</div>
+
+            <!-- Illustrated "genuinely empty" hero (see renderChatsList) —
+                 only for the All tab with zero chats and no search typed.
+                 4 decorative cards (app / chat / agent / project, left to
+                 right) form a fixed arc above/around the center icon —
+                 deliberately none directly below it, that space belongs to
+                 the title+description. They represent the things a chat
+                 can be started around — same context types CHATS_DATA
+                 already models (project/app/agent), plus chat itself. One
+                 card per type, not two "app" cards mirrored for symmetry
+                 anymore (that first pass was corrected — see
+                 chats-and-tasks.md). Center image is
+                 assets/img/descarga.png (a still-unused asset already
+                 sitting in the repo), not a Lucide icon — its own gradient
+                 colors, not a design token, are why the glow around it
+                 uses one-off rgba() instead of --color-* (see
+                 .chats-empty-core comment in <style>). No hover
+                 choreography anymore (removed the same day it was built,
+                 explicit user request) — the icon has its own permanent
+                 idle animation instead (see .chats-empty-core-icon
+                 @keyframes), and "New chat" sits in normal flow below the
+                 copy, always visible. -->
+            <div class="chats-empty-hero" id="chatsEmptyHero" hidden>
+              <div class="chats-empty-orbit">
+                <span class="chats-empty-card chats-empty-card--app" aria-hidden="true"><i data-lucide="layout-grid"></i></span>
+                <span class="chats-empty-card chats-empty-card--chat" aria-hidden="true"><i data-lucide="message-circle-more"></i></span>
+                <span class="chats-empty-card chats-empty-card--agent" aria-hidden="true"><i data-lucide="bot"></i></span>
+                <span class="chats-empty-card chats-empty-card--project" aria-hidden="true"><i data-lucide="folder"></i></span>
+                <span class="chats-empty-core" aria-hidden="true"><img src="../../assets/img/descarga.png" alt="" class="chats-empty-core-icon" /></span>
+              </div>
+              <h2>No chats yet</h2>
+              <p>Start a conversation, connect an app, or bring in an agent — it'll show up here.</p>
+              <button type="button" class="btn-primary chats-empty-cta" id="chatsEmptyNewChatBtn">
+                <i data-lucide="plus"></i> New chat
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -4082,6 +4533,13 @@
      copies — content + position are computed fresh on each open instead. -->
 <div class="chat-actions-menu" id="chatActionsMenu"></div>
 
+<!-- Toast / confirmation snackbar, portal (see showToast in the page
+     script). Bottom-right stack, generic — not scoped to any one action,
+     first user is deleteChat's success confirmation. column-reverse in the
+     CSS so newly-appended toasts push older ones up rather than down,
+     matching how a bottom-anchored stack should grow. -->
+<div class="toast-container" id="toastContainer"></div>
+
 <script src="../../shared/supabase-config.js"></script>
 <script src="../../shared/auth.js"></script>
 <script src="../../shared/shell.js"></script>
@@ -4103,6 +4561,34 @@
   // falta filtrar por organization_id acá — pero tampoco hay selector de
   // organización en la UI todavía: si el usuario perteneciera a más de una,
   // hoy se mezclarían sus datos (ver docs/supabase.md → Pendiente).
+  // ---------- Toast / confirmation snackbar ----------
+  // Generic utility, not tied to any one feature — first caller is
+  // deleteChat()'s success confirmation (see below), but any action in this
+  // file can call showToast(message) the same way. #toastContainer is the
+  // portal element declared near the end of <body> (see the HTML comment
+  // there). Auto-dismisses after 4s; class toggle (not display:none) so the
+  // CSS transition on .is-open actually gets to run on both the way in and
+  // the way out.
+  function showToast(message, { type = 'success' } = {}) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const iconName = type === 'error' ? 'circle-x' : 'circle-check';
+    const el = document.createElement('div');
+    el.className = `toast toast--${type}`;
+    el.innerHTML = `
+      <span class="toast-icon"><i data-lucide="${iconName}"></i></span>
+      <span class="toast-message"></span>
+    `;
+    el.querySelector('.toast-message').textContent = message; // textContent, not innerHTML — message can carry a user-entered chat name
+    container.appendChild(el);
+    if (window.lucide) lucide.createIcons();
+    requestAnimationFrame(() => el.classList.add('is-open'));
+    setTimeout(() => {
+      el.classList.remove('is-open');
+      el.addEventListener('transitionend', () => el.remove(), { once: true });
+    }, 4000);
+  }
+
   function formatRelativeTime(isoString) {
     const diffMs = Date.now() - new Date(isoString).getTime();
     const minutes = Math.round(diffMs / 60000);
@@ -4530,6 +5016,19 @@
     renderSidebarRecentList();
     refreshProjectsViewIfPresent();
     refreshAppsViewIfPresent();
+    // Bug fix (2026-08-19, user report): the gray context selector bar's
+    // popover (initContextSelector) renders once, synchronously, at page
+    // load — before this async load has any chance to resolve — so it was
+    // showing "No results for ''" against still-empty PROJECTS_DATA/
+    // APPS_DATA/PANEL_AGENTS_DATA, and (unlike the side panel's own open
+    // picker, which re-renders on every open) nothing ever refreshed it
+    // afterward, even on a later reopen. This refresh covers the "already
+    // open when data arrives" case; the reopen case is covered separately,
+    // see the trigger click listener in initContextSelector.
+    if (typeof renderContextResults === 'function') {
+      renderContextResults('empty');
+      renderContextResults('docked');
+    }
     // Suscripciones recién después del snapshot inicial — postgres_changes
     // solo entrega cambios hacia adelante, nunca historial, así que
     // suscribirse antes no aportaría nada y solo arriesgaría procesar un
@@ -6186,6 +6685,43 @@
   // futuro del inset no pueda desincronizarse silenciosamente de este uso.
   const PROJECT_MAP_ZOOM_CONTENT_INSET = 2000;
 
+  // Escape cierra el drawer de detalle de nodo (pedido explícito,
+  // 2026-08-18) — registrado UNA sola vez acá, a nivel de módulo, no
+  // dentro de `initProjectMapCanvas()` (que se vuelve a correr en cada
+  // `renderProjectMapTab()`, cada vez que se cambia de tab y se vuelve).
+  // Un listener de `document` agregado ahí se acumularía sin límite —
+  // mismo problema que cualquier listener global registrado dentro de una
+  // función que se re-ejecuta. `initProjectMapCanvas()` reasigna esta
+  // variable en cada corrida para que siempre apunte a la lógica de
+  // cierre del render ACTUAL; si el mapa nunca se montó o su drawer está
+  // cerrado, no hace nada.
+  let mapDrawerEscapeCloser = null;
+  // ⌘C/Ctrl+C del tab Data del drawer (2026-08-19) — mismo motivo/patrón
+  // que `mapDrawerEscapeCloser` (un solo listener de `document`, esta
+  // variable reasignada por `wireNodeDrawerGrid()` en cada render real del
+  // tab Data; `null` cuando ese tab no está montado, así la tecla no hace
+  // nada en el resto del prototipo).
+  let mapDrawerGridCopyHandler = null;
+  // Cierra el popover del buscador de nodos (pedido explícito, 2026-08-18)
+  // — a diferencia del drawer, este closer NO necesita un puntero
+  // reasignado por render: consulta el DOM en vivo (`.is-open`), así que
+  // funciona sin importar cuántas veces se haya vuelto a montar el mapa.
+  // Mismo patrón que ya usa `closeAllComposerMenus()` en otras partes de
+  // este archivo para sus propios dropdowns.
+  function closeAllMapSearchMenus() {
+    document.querySelectorAll('.project-map-search-menu.is-open').forEach((menu) => menu.classList.remove('is-open'));
+  }
+  document.addEventListener('click', () => closeAllMapSearchMenus());
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (typeof mapDrawerEscapeCloser === 'function') mapDrawerEscapeCloser();
+      closeAllMapSearchMenus();
+      return;
+    }
+    const isCopyKey = (e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C');
+    if (isCopyKey && typeof mapDrawerGridCopyHandler === 'function') mapDrawerGridCopyHandler(e);
+  });
+
   // ---------- Project View Map — Fase 2: nodos ----------
   // Ver docs/map.md para el modelo completo (tipos, variantes, estados) y
   // el porqué de cada decisión — este bloque es la implementación, no el
@@ -6223,6 +6759,127 @@
     return 'Function';
   }
 
+  // Generador determinístico de filas mock para el tab Data (2026-08-20,
+  // pedido explícito: "cada recurso tenga mínimos 100 registros") —
+  // reemplaza las 6 filas de muestra escritas a mano por corridas
+  // completas generadas con un PRNG de seed fija (mismo criterio que
+  // `datasets/generate.py` del componente de referencia: "Deterministic
+  // generator, seeded. Re-run it and you get the same rows" — recargar la
+  // página siempre muestra las mismas filas, no cambia en cada reload
+  // como pasaría con `Math.random()` sin seed). Simula ~108 eventos de
+  // transacción de punta a punta (feed bancario → feed ERP → datasets
+  // normalizados → conciliación → settlement), más un puñado de eventos
+  // huérfanos de cada lado para que la conciliación tenga algo real que
+  // no matchear — mismo espíritu narrativo que ya tenían las 6 filas
+  // originales (un match sin ERP del lado bancario), ahora a escala.
+  function mulberry32(seed) {
+    let a = seed;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // Cada plantilla es un tipo de movimiento real (compra, payroll, renta,
+  // wire...) con su propio signo (entrada/salida de caja), rango de monto
+  // y la cuenta contable donde lo asienta el ERP — de acá sale tanto la
+  // línea del feed bancario como su espejo en el feed ERP para el MISMO
+  // evento, así los dos lados quedan coherentes entre sí (no son dos
+  // generadores independientes que casualmente deberían matchear).
+  const GRID_TXN_TEMPLATES = [
+    { desc: 'POS PURCHASE - AMAZON MKTPLACE', counterparty: 'Amazon Marketplace', memo: 'Marketplace purchase', account: '6400-OPEX', sign: -1, min: 15, max: 220 },
+    { desc: 'POS PURCHASE - UBER EATS', counterparty: 'Uber Eats', memo: 'Food delivery expense', account: '6400-OPEX', sign: -1, min: 12, max: 65 },
+    { desc: 'POS PURCHASE - WALMART', counterparty: 'Walmart', memo: 'Office supplies', account: '6400-OPEX', sign: -1, min: 20, max: 180 },
+    { desc: 'POS PURCHASE - SHELL GAS', counterparty: 'Shell', memo: 'Fleet fuel', account: '6400-OPEX', sign: -1, min: 30, max: 90 },
+    { desc: 'ATM WITHDRAWAL', counterparty: 'ATM', memo: 'Cash withdrawal', account: '1010-CASH', sign: -1, min: 100, max: 400 },
+    { desc: 'ACH DEBIT - RENT', counterparty: 'Landlord', memo: 'Office rent', account: '6500-RENT', sign: -1, min: 1500, max: 2200 },
+    { desc: 'ACH DEBIT - INSURANCE', counterparty: 'Insurance carrier', memo: 'Insurance premium', account: '6400-OPEX', sign: -1, min: 300, max: 900 },
+    { desc: 'WIRE TRANSFER OUT', counterparty: 'Vendor wire', memo: 'Vendor wire payment', account: '1010-CASH', sign: -1, min: 500, max: 3000 },
+    { desc: 'ACH CREDIT - PAYROLL', counterparty: 'Payroll', memo: 'Payroll run', account: '6210-PAYROLL', sign: 1, min: 2500, max: 4200 },
+    { desc: 'ACH CREDIT - CLIENT PAYMENT', counterparty: 'Client payment', memo: 'Client invoice settlement', account: '4000-REV', sign: 1, min: 400, max: 5000 },
+    { desc: 'WIRE TRANSFER IN', counterparty: 'Incoming wire', memo: 'Incoming wire, client', account: '4000-REV', sign: 1, min: 800, max: 6000 },
+    { desc: 'ACH CREDIT - REFUND', counterparty: 'Vendor refund', memo: 'Vendor refund', account: '6400-OPEX', sign: 1, min: 20, max: 300 },
+  ];
+  function buildGridMockData() {
+    const rand = mulberry32(88213456);
+    const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const BASE_MS = Date.parse('2026-06-21T00:00:00Z');
+    const RANGE_DAYS = 58; // termina el 18/08/2026, misma fecha que el resto del grafo demo
+    function dateAtIndex(i, total) {
+      const dayOffset = Math.min(RANGE_DAYS, Math.floor((i / Math.max(1, total - 1)) * RANGE_DAYS));
+      return new Date(BASE_MS + dayOffset * 86400000);
+    }
+    const isoDate = (d) => d.toISOString().slice(0, 10);
+
+    const N_MATCHED = 100;
+    const N_BANK_ONLY = 4;
+    const N_ERP_ONLY = 4;
+    const TOTAL = N_MATCHED + N_BANK_ONLY + N_ERP_ONLY;
+
+    let txnSeq = 88213456;
+    let journalSeq = 100234;
+
+    const events = [];
+    for (let i = 0; i < TOTAL; i += 1) {
+      const kind = i < N_MATCHED ? 'matched' : (i < N_MATCHED + N_BANK_ONLY ? 'bank-only' : 'erp-only');
+      const tpl = pick(GRID_TXN_TEMPLATES);
+      const amount = round2((rand() * (tpl.max - tpl.min) + tpl.min) * tpl.sign);
+      events.push({ kind, tpl, amount, date: dateAtIndex(i, TOTAL), txnId: `TXN${txnSeq}`, journalId: `JE-${journalSeq}` });
+      txnSeq += Math.floor(rand() * 90) + 10;
+      journalSeq += 1;
+    }
+    // Cronológico, no agrupado por kind — un feed real no llega ordenado
+    // por "va a matchear o no", eso lo decide la conciliación después.
+    events.sort((a, b) => a.date - b.date);
+
+    const bankRows = [];
+    const erpRows = [];
+    const bankTxRows = [];
+    const erpJournalRows = [];
+    const reconRows = [];
+    const settlementRows = [];
+    let matchSeq = 1;
+    let settlementSeq = 3301;
+
+    events.forEach((ev) => {
+      const iso = isoDate(ev.date);
+      const hasBank = ev.kind !== 'erp-only';
+      const hasErp = ev.kind !== 'bank-only';
+      if (hasBank) {
+        bankRows.push(['ACC-4471-02', iso, ev.tpl.desc, ev.amount, 'USD', ev.txnId]);
+        bankTxRows.push([ev.txnId, iso, ev.amount, 'USD', ev.tpl.counterparty]);
+      }
+      if (hasErp) {
+        const debit = ev.tpl.sign === -1 ? Math.abs(ev.amount) : 0;
+        const credit = ev.tpl.sign === 1 ? Math.abs(ev.amount) : 0;
+        erpRows.push([ev.journalId, iso, ev.tpl.account, ev.tpl.memo, debit, credit]);
+        erpJournalRows.push([ev.journalId, iso, ev.tpl.account, ev.amount, ev.tpl.memo]);
+      }
+      if (ev.kind === 'matched') {
+        reconRows.push([`MATCH-${String(matchSeq).padStart(3, '0')}`, ev.txnId, ev.journalId, Math.abs(ev.amount), 'RECONCILED']);
+        matchSeq += 1;
+        // Settlement liquida un día después del match — casi todo
+        // SETTLED, el puñado más reciente todavía PENDING (mismo criterio
+        // narrativo que ya usa el resto del demo: "lo más nuevo sigue en
+        // curso").
+        settlementRows.push([`STL-${settlementSeq}`, isoDate(new Date(ev.date.getTime() + 86400000)), Math.abs(ev.amount), 'SETTLED']);
+        settlementSeq += 1;
+      } else if (ev.kind === 'bank-only') {
+        reconRows.push([`MATCH-${String(matchSeq).padStart(3, '0')}`, ev.txnId, null, Math.abs(ev.amount), 'UNRECONCILED']);
+        matchSeq += 1;
+      } else {
+        reconRows.push([`MATCH-${String(matchSeq).padStart(3, '0')}`, null, ev.journalId, Math.abs(ev.amount), 'UNRECONCILED']);
+        matchSeq += 1;
+      }
+    });
+    settlementRows.slice(-5).forEach((row) => { row[3] = 'PENDING'; });
+
+    return { bankRows, erpRows, bankTxRows, erpJournalRows, reconRows, settlementRows };
+  }
+  const GRID_MOCK_DATA = buildGridMockData();
+
   // DEMO temporal, no datos reales — pedido explícito de esta pasada:
   // "vamos trabajando directamente en el mapa... esa primera versión"
   // (ver el mockup "Nodos del Mapa"). PROJECTS_DATA ahora sale de Supabase
@@ -6234,13 +6891,56 @@
   // mensaje del chat dispare el reveal real (ver Pendiente en docs/map.md).
   const DEMO_MAP_GRAPH = {
     nodes: [
-      { id: 'n1', type: 'integracion', direccion: 'entrada', name: 'Bank statement feed', x: 24,  y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:02', icon: 'landmark', rows: 2400 },
-      { id: 'n2', type: 'integracion', direccion: 'entrada', name: 'ERP export feed',     x: 24,  y: 260, status: 'exito', updatedAt: '18/08/2026, 06:05', icon: 'building-2', rows: 1800 },
-      { id: 'n3', type: 'dataset',     name: 'ds_bank_transactions', x: 300, y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:07', icon: 'arrow-left-right', rows: 30 },
-      { id: 'n4', type: 'dataset',     name: 'ds_erp_journal',       x: 300, y: 260, status: 'exito', updatedAt: '18/08/2026, 06:08', icon: 'book-text', rows: 24 },
-      { id: 'n5', type: 'dataset',     name: 'ds_reconciliation',    x: 580, y: 150, status: 'corriendo', tags: ['conciliación'], updatedAt: '18/08/2026, 09:14', icon: 'scale', rows: 18 },
+      { id: 'n1', type: 'integracion', direccion: 'entrada', name: 'Bank statement feed', x: 24,  y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:02', icon: 'landmark', rows: 2400,
+        data: { columns: [
+          { name: 'ACCOUNT_NUMBER', format: 'mono', origin: 'landed', tags: ['identifier'] },
+          { name: 'TRANSACTION_DATE', format: 'mono', origin: 'landed', tags: ['date'] },
+          { name: 'DESCRIPTION', format: 'text', origin: 'landed', tags: ['text'] },
+          { name: 'AMOUNT', format: 'money', origin: 'landed', tags: ['money', 'usd'] },
+          { name: 'CURRENCY', format: 'mono', origin: 'landed', tags: ['currency-code'] },
+          { name: 'REFERENCE', format: 'mono', origin: 'landed', tags: ['identifier', 'unique-identifier', 'fixed'] },
+        ], rows: GRID_MOCK_DATA.bankRows } },
+      { id: 'n2', type: 'integracion', direccion: 'entrada', name: 'ERP export feed',     x: 24,  y: 260, status: 'exito', updatedAt: '18/08/2026, 06:05', icon: 'building-2', rows: 1800,
+        data: { columns: [
+          { name: 'JOURNAL_ID', format: 'mono', origin: 'landed', tags: ['identifier', 'unique-identifier', 'fixed'] },
+          { name: 'POSTING_DATE', format: 'mono', origin: 'landed', tags: ['date'] },
+          { name: 'ACCOUNT_CODE', format: 'mono', origin: 'landed', tags: ['identifier'] },
+          { name: 'DESCRIPTION', format: 'text', origin: 'landed', tags: ['text'] },
+          { name: 'DEBIT', format: 'money', origin: 'landed', tags: ['money', 'usd'] },
+          { name: 'CREDIT', format: 'money', origin: 'landed', tags: ['money', 'usd'] },
+        ], rows: GRID_MOCK_DATA.erpRows } },
+      { id: 'n3', type: 'dataset',     name: 'ds_bank_transactions', x: 300, y: 40,  status: 'exito', updatedAt: '18/08/2026, 06:07', icon: 'arrow-left-right', rows: 30,
+        data: { columns: [
+          { name: 'TXN_ID', format: 'mono', origin: 'landed', tags: ['identifier', 'match-key', 'fixed'] },
+          { name: 'TXN_DATE', format: 'mono', origin: 'landed', tags: ['date'] },
+          { name: 'AMOUNT', format: 'money', origin: 'written', tags: ['money', 'usd'] },
+          { name: 'CURRENCY', format: 'mono', origin: 'landed', tags: ['currency-code'] },
+          { name: 'COUNTERPARTY', format: 'text', origin: 'written', tags: ['text'] },
+        ], rows: GRID_MOCK_DATA.bankTxRows } },
+      { id: 'n4', type: 'dataset',     name: 'ds_erp_journal',       x: 300, y: 260, status: 'exito', updatedAt: '18/08/2026, 06:08', icon: 'book-text', rows: 24,
+        data: { columns: [
+          { name: 'ENTRY_ID', format: 'mono', origin: 'landed', tags: ['identifier', 'match-key', 'fixed'] },
+          { name: 'ENTRY_DATE', format: 'mono', origin: 'landed', tags: ['date'] },
+          { name: 'ACCOUNT', format: 'mono', origin: 'landed', tags: ['identifier'] },
+          { name: 'AMOUNT', format: 'money', origin: 'written', tags: ['money', 'usd'] },
+          { name: 'MEMO', format: 'text', origin: 'landed', tags: ['text'] },
+        ], rows: GRID_MOCK_DATA.erpJournalRows } },
+      { id: 'n5', type: 'dataset',     name: 'ds_reconciliation',    x: 580, y: 150, status: 'corriendo', tags: ['conciliación'], updatedAt: '18/08/2026, 09:14', icon: 'scale', rows: 18,
+        data: { columns: [
+          { name: 'MATCH_ID', format: 'mono', origin: 'written', tags: ['identifier', 'unique-identifier', 'fixed'] },
+          { name: 'BANK_TXN_ID', format: 'mono', origin: 'inherited', tags: ['identifier', 'match-key'] },
+          { name: 'ERP_ENTRY_ID', format: 'mono', origin: 'inherited', tags: ['identifier', 'match-key'] },
+          { name: 'AMOUNT', format: 'money', origin: 'written', tags: ['money', 'usd'] },
+          { name: 'STATUS', format: 'status', origin: 'written', tags: ['status'] },
+        ], rows: GRID_MOCK_DATA.reconRows } },
       { id: 'n6', type: 'function',    name: 'Apply manual match',   x: 880, y: 40,  lifecycle: 'Active', updatedAt: '17/08/2026, 18:40', icon: 'hand' },
-      { id: 'n7', type: 'integracion', direccion: 'salida',  name: 'Settlement report',   x: 880, y: 260, status: 'encolado', updatedAt: '18/08/2026, 06:09', icon: 'file-check', rows: 18 },
+      { id: 'n7', type: 'integracion', direccion: 'salida',  name: 'Settlement report',   x: 880, y: 260, status: 'encolado', updatedAt: '18/08/2026, 06:09', icon: 'file-check', rows: 18,
+        data: { columns: [
+          { name: 'SETTLEMENT_ID', format: 'mono', origin: 'system', tags: ['identifier', 'unique-identifier'] },
+          { name: 'DATE', format: 'mono', origin: 'written', tags: ['date'] },
+          { name: 'AMOUNT', format: 'money', origin: 'written', tags: ['money', 'usd'] },
+          { name: 'STATUS', format: 'status', origin: 'written', tags: ['status'] },
+        ], rows: GRID_MOCK_DATA.settlementRows } },
     ],
     edges: [
       { from: 'n1', to: 'n3' },
@@ -6461,34 +7161,542 @@
     `;
   }
 
-  // Reusa exactamente los mismos campos/condiciones que ya calcula
-  // buildNodeCardHtml() (rows por tipo/dirección, files solo
-  // Integración/entrada) — mismo dato, ahora en formato lista en vez de
-  // badge, no una fuente nueva de verdad.
-  function buildNodeDrawerDataHtml(n) {
-    const fields = [];
-    fields.push(['Type', nodeTypeLabel(n)]);
-    if (n.status) fields.push(['Status', NODE_STATUS_LABEL[n.status]]);
-    if (n.lifecycle) fields.push(['Lifecycle', n.lifecycle]);
-    const showsRows = n.type === 'dataset' || n.type === 'integracion';
-    if (showsRows && n.rows != null) fields.push(['Rows', n.rows.toLocaleString('en-US')]);
-    if (n.type === 'integracion' && n.direccion === 'entrada') {
-      fields.push(['Files', `${n.filesCount != null ? n.filesCount : 0}`]);
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // Tono del pill de una columna `format: 'status'` — mismo criterio de
+  // colores que ya usan los badges del resto del prototipo
+  // (success/warning/danger + un "mute" neutral para cualquier valor sin
+  // mapeo explícito, en vez de fallar silenciosamente a texto plano).
+  const GRID_STATUS_TONE = { RECONCILED: 'success', SETTLED: 'success', UNRECONCILED: 'danger', OPEN: 'warning', PENDING: 'warning' };
+
+  // Formatea una celda según el tipo de columna — mismo criterio que
+  // `fmtCell()` del componente de referencia (mock-v3/reference/
+  // Spreadsheets), acotado a los 4 tipos que hoy traen las columnas de
+  // DEMO_MAP_GRAPH (dinero, mono, status, texto plano).
+  function formatGridCell(value, column) {
+    if (value === '' || value === null || value === undefined) return { html: '—', cls: 'map-grid-empty' };
+    if (column.format === 'status') {
+      const tone = GRID_STATUS_TONE[String(value).toUpperCase()] || 'mute';
+      return { html: `<span class="map-drawer-grid-status-pill map-drawer-grid-status-pill--${tone}">${escapeHtml(value)}</span>`, cls: '' };
     }
-    if (n.updatedAt) fields.push(['Last updated', n.updatedAt]);
-    const fieldsHtml = fields.map(([label, value]) => `
-      <div class="map-drawer-field">
-        <span class="map-drawer-field-label">${label}</span>
-        <span class="map-drawer-field-value">${value}</span>
-      </div>
+    if (column.format === 'money') {
+      const num = Number(value);
+      const formatted = Number.isFinite(num) ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value);
+      return { html: escapeHtml(formatted), cls: 'map-grid-num' };
+    }
+    if (column.format === 'mono') return { html: escapeHtml(String(value)), cls: 'map-grid-mono' };
+    return { html: escapeHtml(String(value)), cls: '' };
+  }
+
+  // Texto del tooltip de la rail, uno por origen — mismo lenguaje que el
+  // componente de referencia. `proposed` queda sin usar hoy (ninguna
+  // columna de DEMO_MAP_GRAPH está "compuesta pero sin correr" — ese
+  // estado es del composer de fórmula, fuera de alcance) pero se deja
+  // definido por si algún nodo lo necesita más adelante.
+  const GRID_ORIGIN_LABEL = {
+    landed: 'As received — arrived on the file exactly as it is. No rule touched it.',
+    written: 'Written by a rule.',
+    inherited: 'Inherited from a side of a reconciliation.',
+    proposed: 'Composed but not run yet.',
+    system: 'Provenance / reconciliation bookkeeping.',
+  };
+
+  // Orden fijo de los tags de columna (mismo criterio que
+  // `LABEL_ORDER` del componente de referencia: dos columnas con los
+  // mismos tags siempre se leen en el mismo orden) — acotado a los tags
+  // que hoy usa DEMO_MAP_GRAPH.
+  const GRID_TAG_ORDER = ['identifier', 'unique-identifier', 'money', 'currency-code', 'date', 'status', 'text', 'match-key', 'fixed'];
+  function orderedColumnTags(col) {
+    return (col.tags || []).slice().sort((a, b) => (GRID_TAG_ORDER.indexOf(a) + 1 || 99) - (GRID_TAG_ORDER.indexOf(b) + 1 || 99));
+  }
+
+  // Ancho por default según el primer tag que matchee — mismo criterio
+  // que `W_BY_LABEL` del componente de referencia, acotado a los tags que
+  // hoy existen acá.
+  const GRID_DEFAULT_WIDTH_BY_TAG = [
+    ['text', 160], ['unique-identifier', 140], ['identifier', 130], ['match-key', 130],
+    ['status', 110], ['money', 110], ['date', 100], ['currency-code', 80],
+  ];
+  function defaultColumnWidth(col) {
+    for (const [tag, w] of GRID_DEFAULT_WIDTH_BY_TAG) { if ((col.tags || []).includes(tag)) return w; }
+    return 130;
+  }
+
+  // Estado de UI de la grilla — orden/ancho/filtro/selección de columna,
+  // vive directo en `n.data` (mismo criterio que la posición x/y de un
+  // nodo: muta el objeto del grafo en memoria, persiste dentro de la
+  // sesión, se resetea al reload — ver docs/map.md → "Interacción de
+  // nodos"). Se inicializa una sola vez por nodo, la primera vez que se
+  // abre su tab Data.
+  function ensureGridState(n) {
+    const d = n.data;
+    if (!d.uiOrder) d.uiOrder = d.columns.map((c) => c.name);
+    if (!d.uiWidths) {
+      d.uiWidths = {};
+      d.columns.forEach((c) => { d.uiWidths[c.name] = defaultColumnWidth(c); });
+    }
+    if (d.uiQuery == null) d.uiQuery = '';
+    if (d.uiSel === undefined) d.uiSel = null;
+    if (d.uiAnchor === undefined) d.uiAnchor = null;
+  }
+  function gridColumnIndex(n, name) { return n.data.columns.findIndex((c) => c.name === name); }
+  function orderedGridColumns(n) {
+    const byName = {};
+    n.data.columns.forEach((c) => { byName[c.name] = c; });
+    return n.data.uiOrder.map((name) => byName[name]).filter(Boolean);
+  }
+  // Texto contra el que se compara el filtro — el valor crudo (para que
+  // "TXN882" siga encontrando ids) MÁS el valor formateado tal como se ve
+  // en pantalla (para que buscar "1,200.00" o "1200.00" encuentre una
+  // celda de dinero, y no solo el número crudo `1200`).
+  function gridSearchableText(value, column) {
+    if (value === null || value === undefined || value === '') return '';
+    if (column.format === 'money') {
+      const num = Number(value);
+      const formatted = Number.isFinite(num) ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      return `${value} ${formatted}`.toLowerCase();
+    }
+    return String(value).toLowerCase();
+  }
+  // Filtro de filas (`Filter rows...`) — substring case-insensitive contra
+  // TODAS las columnas de la fila (pedido explícito: "que busque
+  // registros por todas las columnas"), no solo una — recorre el array
+  // crudo de la fila entera, sin importar en qué orden se estén viendo
+  // hoy las columnas (`n.data.columns[i]` es el orden ORIGINAL/canónico,
+  // el mismo que indexa `row`, independiente de `uiOrder`). Sin Views
+  // (filtros con nombre, guardados) — fuera de alcance de esta pasada.
+  function gridDisplayedRows(n) {
+    const q = (n.data.uiQuery || '').trim().toLowerCase();
+    if (!q) return n.data.rows;
+    return n.data.rows.filter((row) => row.some((v, i) => gridSearchableText(v, n.data.columns[i]).includes(q)));
+  }
+
+  let gridMeasureCtx = null;
+  const GRID_MONO_FONT = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", Consolas, monospace';
+  function measureGridTextWidth(text, weight) {
+    if (!gridMeasureCtx) gridMeasureCtx = document.createElement('canvas').getContext('2d');
+    gridMeasureCtx.font = `${weight} 11px ${GRID_MONO_FONT}`;
+    return gridMeasureCtx.measureText(text).width;
+  }
+  // "Fit to widest cell" (double-click de la resize handle, o "Fit
+  // widths" del toolbar para todas de una) — mide con canvas, igual
+  // criterio que el componente de referencia ("measured on canvas, capped
+  // at 420px" — acá el techo es 300px, este panel es más chico que una
+  // pantalla completa).
+  function measureGridColumnWidth(tableEl, ci, col) {
+    let maxWidth = measureGridTextWidth(col.name, 600);
+    tableEl.querySelectorAll(`tbody td[data-ci="${ci}"]`).forEach((td) => {
+      const w = measureGridTextWidth(td.textContent || '', 400);
+      if (w > maxWidth) maxWidth = w;
+    });
+    return Math.max(56, Math.min(300, Math.round(maxWidth + 28)));
+  }
+
+  // Alineación por columna — el header y sus valores SIEMPRE justifican
+  // igual (pedido explícito: "si el título de la columna está justificado
+  // a la derecha, todos los valores tienen que estar justificados a la
+  // derecha"). Dinero a la derecha (se lee como números, alineados por su
+  // punto decimal); el resto (mono/texto/status) a la izquierda, mismo
+  // criterio que ya aplica `formatGridCell` a las celdas del body — una
+  // sola función decide ambos lados, para que nunca puedan desalinearse
+  // entre sí.
+  function gridColumnAlign(col) { return col.format === 'money' ? 'right' : 'left'; }
+
+  function buildGridHeaderCellHtml(col) {
+    const origin = col.origin || 'landed';
+    const align = gridColumnAlign(col);
+    const tagsHtml = orderedColumnTags(col).map((t) => {
+      if (t === 'fixed') return `<span class="map-grid-tag map-grid-tag--lock tooltip-bottom" data-tooltip="Fixed — never modified once set"><i data-lucide="lock"></i></span>`;
+      const keyish = t === 'match-key' || t === 'unique-identifier';
+      return `<span class="map-grid-tag${keyish ? ' map-grid-tag--key' : ''}">#${t}</span>`;
+    }).join('');
+    // ƒ — solo decorativo (tooltip, sin click): Rulesets no tiene modelo
+    // real todavía, así que no hay una regla de verdad que abrir (ver
+    // docs/map.md → Pendiente).
+    const fxHtml = origin === 'written' ? `<span class="map-grid-fx tooltip-bottom" data-tooltip="Written by a rule">ƒ</span>` : '';
+    return `
+      <th data-col="${escapeHtml(col.name)}">
+        <div class="map-grid-th" data-origin="${origin}" data-align="${align}">
+          <div class="map-grid-th-rail tooltip-bottom" data-tooltip="${escapeHtml(GRID_ORIGIN_LABEL[origin] || '')}"></div>
+          <div class="map-grid-th-meta">${tagsHtml}</div>
+          <div class="map-grid-th-name" data-grid-col-drag data-col="${escapeHtml(col.name)}"><span>${escapeHtml(col.name)}</span>${fxHtml}</div>
+          <div class="map-grid-col-resize" data-col="${escapeHtml(col.name)}"></div>
+        </div>
+      </th>
+    `;
+  }
+
+  // Resultado (tabla + footer) — se regenera solo (no el toolbar) en cada
+  // filtro/resize-de-todas/reorder/reset, para no perder foco/cursor del
+  // input de filtro en cada tecla.
+  function buildNodeDrawerDataResultsHtml(n) {
+    const orderedCols = orderedGridColumns(n);
+    const colOrigIdx = orderedCols.map((c) => gridColumnIndex(n, c.name));
+    const rows = gridDisplayedRows(n);
+    const colgroupHtml = `<colgroup><col class="map-grid-gutter-col">${orderedCols.map((c) => `<col data-col="${escapeHtml(c.name)}" style="width:${n.data.uiWidths[c.name] || defaultColumnWidth(c)}px">`).join('')}</colgroup>`;
+    const theadHtml = `
+      <tr>
+        <th class="map-grid-gutter" data-grid-corner></th>
+        ${orderedCols.map((c) => buildGridHeaderCellHtml(c)).join('')}
+      </tr>
+    `;
+    const tbodyHtml = rows.map((row, ri) => `
+      <tr>
+        <td class="map-grid-gutter" data-grid-row-select data-ri="${ri}">${ri + 1}</td>
+        ${orderedCols.map((c, ci) => {
+          const cell = formatGridCell(row[colOrigIdx[ci]], c);
+          return `<td class="${cell.cls} map-grid-align-${gridColumnAlign(c)}" data-ri="${ri}" data-ci="${ci}">${cell.html}</td>`;
+        }).join('')}
+      </tr>
     `).join('');
-    const tagsHtml = (n.tags && n.tags.length) ? `
-      <div class="map-drawer-field">
-        <span class="map-drawer-field-label">Tags</span>
-        <div class="map-drawer-tags">${n.tags.map((t) => `<span class="map-drawer-tag">${t}</span>`).join('')}</div>
+    // Footer (pedido explícito: "un footer que diga 'total de rows' y
+    // 'total de columnas'") — vive DEBAJO de la tabla, no arriba (donde
+    // vivía el resumen equivalente antes de este pedido). `data-grid-
+    // summary-aux` es el mismo mecanismo que ya usaba el resumen viejo:
+    // muestra "Last updated" en reposo, y `paintSelection()` lo pisa con
+    // el conteo/suma de la selección activa mientras haya una.
+    const footerHtml = `
+      <div class="map-drawer-grid-footer" data-grid-footer>
+        <span data-grid-summary-main>Total rows: ${rows.length.toLocaleString('en-US')} · Total columns: ${orderedCols.length}</span>
+        <span data-grid-summary-aux>${n.updatedAt ? `Last updated ${n.updatedAt}` : ''}</span>
       </div>
-    ` : '';
-    return `${fieldsHtml}${tagsHtml}`;
+    `;
+    // Espacio reservado debajo del footer (pedido explícito, 2026-08-20:
+    // "que pueda utilizar como espacio para renderizar contenido, pero
+    // aún no lo estoy utilizando") — vacío a propósito, sin contenido
+    // inventado; mismo criterio ya aplicado al footer/"extra" de la card
+    // del nodo en el mapa ("el footer lo utilizamos para otra cosa
+    // todavía sin definir", ver docs/map.md).
+    const extraHtml = `<div class="map-drawer-grid-extra" data-grid-extra></div>`;
+    return `<div class="map-drawer-grid-wrap"><table class="map-drawer-grid" data-grid-table>${colgroupHtml}<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table></div>${footerHtml}${extraHtml}`;
+  }
+
+  // Registros reales del nodo — no metadata (eso ya vive en el header del
+  // drawer + la card del mapa). Function queda afuera a propósito (nunca
+  // trae `data`): no transporta filas propias, opera sobre las de un
+  // Dataset (ver supabase/migrations/0010_node_data_and_context.sql).
+  // `n.data` hoy sale de DEMO_MAP_GRAPH (muestras representativas, mismo
+  // criterio que documenta esa migración para `map_node_data`, incluidos
+  // origen/tags de columna puestos a mano) — conectar esto a la tabla
+  // real es parte de la Fase 5, todavía sin arrancar. El toolbar
+  // (filtro/copy/fit/reset) queda AFUERA de `data-grid-results` a
+  // propósito: ese contenedor es lo único que `wireNodeDrawerGrid()`
+  // reemplaza en cada filtro/reorder/resize-de-todas, así el input de
+  // filtro nunca pierde foco mientras se escribe.
+  function buildNodeDrawerDataHtml(n) {
+    if (n.type === 'function') {
+      return buildNodeDrawerEmptyHtml('square-function', 'No data to show', "Function nodes don't transport rows of their own — they operate on a Dataset's data.");
+    }
+    if (!n.data || !n.data.rows || !n.data.rows.length) {
+      return buildNodeDrawerEmptyHtml('table', 'No rows yet', "This node hasn't received any data yet.");
+    }
+    ensureGridState(n);
+    const toolbarHtml = `
+      <div class="map-drawer-grid-toolbar">
+        <label class="map-grid-filter">
+          <i data-lucide="search"></i>
+          <input type="text" data-grid-filter-input placeholder="Filter rows..." value="${escapeHtml(n.data.uiQuery || '')}" autocomplete="off" />
+        </label>
+        <button type="button" class="btn-secondary map-grid-toolbar-btn" data-grid-copy>Copy <span class="map-grid-kbd">⌘C</span></button>
+        <button type="button" class="btn-secondary map-grid-toolbar-btn" data-grid-fit-widths>Fit widths</button>
+        <button type="button" class="btn-secondary map-grid-toolbar-btn" data-grid-reset>Reset</button>
+      </div>
+    `;
+    return `${toolbarHtml}<div data-grid-results>${buildNodeDrawerDataResultsHtml(n)}</div>`;
+  }
+
+  // Cablea las interacciones reales del tab Data — selección de
+  // celda/rango (click, drag, shift-click, header=columna, gutter=fila,
+  // esquina=todo), resize + reorder de columna, filtro, copy-to-clipboard
+  // (⌘C / Shift⌘C con headers). Se llama una vez por render real del
+  // body (ver renderDrawerBody) — el toolbar se cablea una sola vez acá;
+  // `refreshResults()` (filtro/reorder/reset/fit-widths) solo reemplaza
+  // `data-grid-results` y re-cablea la tabla (`wireGridTable`), nunca el
+  // toolbar entero, mismo motivo que separa ambos bloques de HTML arriba.
+  function wireNodeDrawerGrid(bodyEl, n) {
+    const resultsEl = bodyEl.querySelector('[data-grid-results]');
+    if (!resultsEl) return;
+
+    function refreshResults() {
+      resultsEl.innerHTML = buildNodeDrawerDataResultsHtml(n);
+      if (window.lucide) lucide.createIcons();
+      wireGridTable();
+    }
+
+    function paintSelection(tableEl, orderedCols) {
+      const sel = n.data.uiSel;
+      tableEl.querySelectorAll('td.is-selected, td.is-anchor').forEach((td) => td.classList.remove('is-selected', 'is-anchor'));
+      const summaryAux = resultsEl.querySelector('[data-grid-summary-aux]');
+      if (!sel) {
+        if (summaryAux) summaryAux.textContent = n.updatedAt ? `Last updated ${n.updatedAt}` : '';
+        return;
+      }
+      const r1 = Math.min(sel.r1, sel.r2), r2 = Math.max(sel.r1, sel.r2);
+      const c1 = Math.min(sel.c1, sel.c2), c2 = Math.max(sel.c1, sel.c2);
+      let count = 0;
+      let sum = 0;
+      let allNumeric = true;
+      tableEl.querySelectorAll('tbody td[data-ri]').forEach((td) => {
+        const ri = Number(td.dataset.ri);
+        const ci = Number(td.dataset.ci);
+        if (ri < r1 || ri > r2 || ci < c1 || ci > c2) return;
+        td.classList.add('is-selected');
+        count += 1;
+        const raw = gridRawValueAt(n, orderedCols, ri, ci);
+        const num = Number(raw);
+        if (raw === '' || raw === null || raw === undefined || Number.isNaN(num)) allNumeric = false;
+        else sum += num;
+      });
+      if (n.data.uiAnchor) {
+        const anchorTd = tableEl.querySelector(`tbody td[data-ri="${n.data.uiAnchor.ri}"][data-ci="${n.data.uiAnchor.ci}"]`);
+        if (anchorTd) anchorTd.classList.add('is-anchor');
+      }
+      if (summaryAux) {
+        summaryAux.textContent = (allNumeric && count)
+          ? `${count} cell${count === 1 ? '' : 's'} selected · sum ${sum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : `${count} cell${count === 1 ? '' : 's'} selected`;
+      }
+    }
+
+    function gridRawValueAt(nd, orderedCols, ri, ci) {
+      const rows = gridDisplayedRows(nd);
+      const origIdx = gridColumnIndex(nd, orderedCols[ci].name);
+      return rows[ri] ? rows[ri][origIdx] : undefined;
+    }
+
+    function wireGridTable() {
+      const tableEl = resultsEl.querySelector('[data-grid-table]');
+      if (!tableEl) return;
+      const orderedCols = orderedGridColumns(n);
+
+      // Selección: click/drag sobre celdas, click en gutter/esquina.
+      tableEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('[data-grid-corner]')) {
+          const totalRows = tableEl.querySelectorAll('tbody tr').length;
+          n.data.uiSel = { r1: 0, c1: 0, r2: totalRows - 1, c2: orderedCols.length - 1 };
+          n.data.uiAnchor = { ri: 0, ci: 0 };
+          paintSelection(tableEl, orderedCols);
+          return;
+        }
+        // El header tiene su propio mousedown (reorder vs. seleccionar
+        // columna, ver más abajo) — este handler delegado se queda afuera
+        // para no duplicar la acción.
+        if (e.target.closest('th[data-col]')) return;
+        const gutterTd = e.target.closest('td.map-grid-gutter[data-grid-row-select]');
+        if (gutterTd) {
+          const ri = Number(gutterTd.dataset.ri);
+          n.data.uiSel = { r1: ri, c1: 0, r2: ri, c2: orderedCols.length - 1 };
+          n.data.uiAnchor = { ri, ci: 0 };
+          paintSelection(tableEl, orderedCols);
+          return;
+        }
+        const cellTd = e.target.closest('td[data-ri][data-ci]');
+        if (!cellTd) return;
+        const ri = Number(cellTd.dataset.ri);
+        const ci = Number(cellTd.dataset.ci);
+        if (e.shiftKey && n.data.uiAnchor) {
+          n.data.uiSel = { r1: n.data.uiAnchor.ri, c1: n.data.uiAnchor.ci, r2: ri, c2: ci };
+          paintSelection(tableEl, orderedCols);
+          return;
+        }
+        n.data.uiAnchor = { ri, ci };
+        n.data.uiSel = { r1: ri, c1: ci, r2: ri, c2: ci };
+        paintSelection(tableEl, orderedCols);
+        function onMove(moveEvent) {
+          const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+          const td = target && target.closest ? target.closest('td[data-ri][data-ci]') : null;
+          if (!td || !tableEl.contains(td)) return;
+          n.data.uiSel = { r1: n.data.uiAnchor.ri, c1: n.data.uiAnchor.ci, r2: Number(td.dataset.ri), c2: Number(td.dataset.ci) };
+          paintSelection(tableEl, orderedCols);
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      // Header: click selecciona la columna entera, drag la reordena
+      // (mismo umbral de 4px que ya usa el drag de nodos del canvas para
+      // distinguir click de drag real).
+      tableEl.querySelectorAll('.map-grid-th-name').forEach((nameEl) => {
+        nameEl.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          const colName = nameEl.dataset.col;
+          const thEl = nameEl.closest('th');
+          const startX = e.clientX;
+          let moved = false;
+          let dropIndex = null;
+          function onMove(moveEvent) {
+            if (!moved && Math.abs(moveEvent.clientX - startX) < 4) return;
+            moved = true;
+            thEl.classList.add('is-grabbed');
+            const headers = Array.from(tableEl.querySelectorAll('thead th[data-col]'));
+            let closestIdx = headers.length - 1;
+            let closestDist = Infinity;
+            headers.forEach((th, idx) => {
+              const rect = th.getBoundingClientRect();
+              const mid = rect.left + rect.width / 2;
+              const dist = Math.abs(moveEvent.clientX - mid);
+              if (dist < closestDist) { closestDist = dist; closestIdx = idx; }
+            });
+            dropIndex = closestIdx;
+            tableEl.querySelectorAll('th.is-drop-target').forEach((th) => th.classList.remove('is-drop-target'));
+            if (headers[dropIndex]) headers[dropIndex].classList.add('is-drop-target');
+          }
+          function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            thEl.classList.remove('is-grabbed');
+            tableEl.querySelectorAll('th.is-drop-target').forEach((th) => th.classList.remove('is-drop-target'));
+            if (moved && dropIndex != null) {
+              const order = n.data.uiOrder.slice();
+              const fromIdx = order.indexOf(colName);
+              order.splice(fromIdx, 1);
+              order.splice(dropIndex, 0, colName);
+              n.data.uiOrder = order;
+              n.data.uiSel = null;
+              n.data.uiAnchor = null;
+              refreshResults();
+            } else {
+              const ci = orderedCols.findIndex((c) => c.name === colName);
+              const totalRows = tableEl.querySelectorAll('tbody tr').length;
+              n.data.uiSel = { r1: 0, c1: ci, r2: totalRows - 1, c2: ci };
+              n.data.uiAnchor = { ri: 0, ci };
+              paintSelection(tableEl, orderedCols);
+            }
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      });
+
+      // Resize (drag del handle, 56px mínimo) + fit-to-widest (doble
+      // click) — muta el `<col>` en vivo durante el drag (sin re-render,
+      // igual criterio de performance que el resize del panel del
+      // drawer), y recién confirma en `n.data.uiWidths` al soltar.
+      tableEl.querySelectorAll('.map-grid-col-resize').forEach((handle) => {
+        handle.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          const colName = handle.dataset.col;
+          const colEl = tableEl.querySelector(`col[data-col="${CSS.escape(colName)}"]`);
+          if (!colEl) return;
+          const startX = e.clientX;
+          const startWidth = colEl.getBoundingClientRect().width;
+          handle.classList.add('is-active');
+          function onMove(moveEvent) {
+            const next = Math.max(56, Math.round(startWidth + (moveEvent.clientX - startX)));
+            colEl.style.width = `${next}px`;
+          }
+          function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            handle.classList.remove('is-active');
+            n.data.uiWidths[colName] = colEl.getBoundingClientRect().width;
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+        handle.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          const colName = handle.dataset.col;
+          const ci = orderedCols.findIndex((c) => c.name === colName);
+          const fitted = measureGridColumnWidth(tableEl, ci, orderedCols[ci]);
+          n.data.uiWidths[colName] = fitted;
+          const colEl = tableEl.querySelector(`col[data-col="${CSS.escape(colName)}"]`);
+          if (colEl) colEl.style.width = `${fitted}px`;
+        });
+      });
+
+      paintSelection(tableEl, orderedCols);
+    }
+
+    // Toolbar — cableado una sola vez, vive afuera de `data-grid-results`
+    // así que `refreshResults()` nunca lo toca.
+    const filterInput = bodyEl.querySelector('[data-grid-filter-input]');
+    if (filterInput) {
+      filterInput.addEventListener('input', () => {
+        n.data.uiQuery = filterInput.value;
+        n.data.uiSel = null;
+        n.data.uiAnchor = null;
+        refreshResults();
+      });
+    }
+    const fitBtn = bodyEl.querySelector('[data-grid-fit-widths]');
+    if (fitBtn) {
+      fitBtn.addEventListener('click', () => {
+        const tableEl = resultsEl.querySelector('[data-grid-table]');
+        const orderedCols = orderedGridColumns(n);
+        orderedCols.forEach((c, ci) => {
+          n.data.uiWidths[c.name] = tableEl ? measureGridColumnWidth(tableEl, ci, c) : defaultColumnWidth(c);
+        });
+        refreshResults();
+      });
+    }
+    const resetBtn = bodyEl.querySelector('[data-grid-reset]');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        n.data.uiOrder = n.data.columns.map((c) => c.name);
+        n.data.uiWidths = {};
+        n.data.columns.forEach((c) => { n.data.uiWidths[c.name] = defaultColumnWidth(c); });
+        n.data.uiQuery = '';
+        n.data.uiSel = null;
+        n.data.uiAnchor = null;
+        if (filterInput) filterInput.value = '';
+        refreshResults();
+      });
+    }
+    // Copy exporta valores crudos, no formateados (pedido explícito del
+    // componente de referencia: "1200.91, not 1,200.91" — lo que llega a
+    // Excel tiene que ser un número que el destinatario pueda calcular).
+    // Sin selección activa, copia la grilla entera (filtrada) — mismo
+    // criterio que el botón "Copy" de la referencia, que no exige
+    // seleccionar antes.
+    function doGridCopy(withHeaders) {
+      const orderedCols = orderedGridColumns(n);
+      const colOrigIdx = orderedCols.map((c) => gridColumnIndex(n, c.name));
+      const rows = gridDisplayedRows(n);
+      const sel = n.data.uiSel;
+      let r1 = 0, r2 = rows.length - 1, c1 = 0, c2 = orderedCols.length - 1;
+      if (sel) {
+        r1 = Math.min(sel.r1, sel.r2); r2 = Math.max(sel.r1, sel.r2);
+        c1 = Math.min(sel.c1, sel.c2); c2 = Math.max(sel.c1, sel.c2);
+      }
+      const lines = [];
+      if (withHeaders) lines.push(orderedCols.slice(c1, c2 + 1).map((c) => c.name).join('\t'));
+      for (let ri = r1; ri <= r2 && ri < rows.length; ri += 1) {
+        const line = [];
+        for (let ci = c1; ci <= c2; ci += 1) {
+          const raw = rows[ri][colOrigIdx[ci]];
+          line.push(raw === null || raw === undefined ? '' : String(raw));
+        }
+        lines.push(line.join('\t'));
+      }
+      const tsv = lines.join('\n');
+      const rowCount = Math.max(0, r2 - r1 + 1);
+      const colCount = Math.max(0, c2 - c1 + 1);
+      const message = `Copied ${colCount} column${colCount === 1 ? '' : 's'} × ${rowCount} row${rowCount === 1 ? '' : 's'}${withHeaders ? ' with headers' : ''}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tsv)
+          .then(() => showToast(message))
+          .catch(() => showToast('Could not copy — try again', { type: 'error' }));
+      }
+    }
+    const copyBtn = bodyEl.querySelector('[data-grid-copy]');
+    if (copyBtn) copyBtn.addEventListener('click', () => doGridCopy(false));
+    // ⌘C / Ctrl+C (Shift = con headers) — reasignado en cada corrida de
+    // `wireNodeDrawerGrid` (mismo patrón que `mapDrawerEscapeCloser`: un
+    // solo listener de `document` a nivel de módulo, ver más arriba, esta
+    // variable solo apunta a la lógica del render ACTUAL).
+    mapDrawerGridCopyHandler = (e) => { e.preventDefault(); doGridCopy(e.shiftKey); };
+
+    wireGridTable();
   }
 
   function buildNodeDrawerBodyHtml(n, activeTab) {
@@ -6529,14 +7737,15 @@
   // a propósito — lo llena `renderDrawerBody()` (ver
   // initProjectMapCanvas) con el skeleton primero y el contenido real
   // después, por separado del resto del shell (que no tiene delay).
-  function renderNodeDrawerShellHtml(n, activeTab) {
+  function renderNodeDrawerShellHtml(n, activeTab, expanded) {
     return `
       <div class="map-drawer-header">
         <div class="map-drawer-title">
-          <span class="map-drawer-title-icon"><i data-lucide="${nodeContentIcon(n)}"></i></span>
+          <span class="map-drawer-type-tag map-drawer-type-tag--${n.type}"><i data-lucide="${nodeIconName(n)}"></i><span>${nodeTypeLabel(n)}</span></span>
           <span class="map-drawer-title-name">${n.name}</span>
         </div>
-        <button type="button" class="map-drawer-close" data-drawer-close aria-label="Close"><i data-lucide="x"></i></button>
+        <button type="button" class="map-drawer-expand tooltip-bottom" data-drawer-expand aria-label="${expanded ? 'Minimize panel' : 'Maximize panel'}" data-tooltip="${expanded ? 'Minimize panel' : 'Maximize panel'}"><i data-lucide="${expanded ? 'minimize' : 'maximize'}"></i></button>
+        <button type="button" class="map-drawer-close tooltip-bottom tooltip-end" data-drawer-close aria-label="Close panel" data-tooltip="Close panel"><i data-lucide="x"></i></button>
       </div>
       <div class="map-drawer-tabs" role="tablist">
         ${MAP_DRAWER_TABS.map((key) => `<button type="button" class="map-drawer-tab${key === activeTab ? ' is-active' : ''}" data-drawer-tab="${key}" role="tab" aria-selected="${key === activeTab}">${MAP_DRAWER_TAB_LABEL[key]}</button>`).join('')}
@@ -6716,6 +7925,16 @@
           </div>
           <div class="project-map-filter">
             <button type="button" class="project-map-control-btn tooltip-bottom tooltip-end" data-map-filter aria-label="Filter" data-tooltip="Filter"><i data-lucide="filter"></i></button>
+          </div>
+          <div class="project-map-search" data-map-search>
+            <button type="button" class="project-map-control-btn tooltip-bottom tooltip-end" data-map-search-trigger aria-label="Search nodes" data-tooltip="Search nodes"><i data-lucide="search"></i></button>
+            <div class="project-map-search-menu" data-map-search-menu>
+              <div class="project-map-search-input-row">
+                <i data-lucide="search"></i>
+                <input type="text" data-map-search-input placeholder="Search nodes..." autocomplete="off" />
+              </div>
+              <div class="project-map-search-results" data-map-search-results></div>
+            </div>
           </div>` : ''}
         </div>
         ${tieneNodos ? `
@@ -6753,18 +7972,34 @@
     const drawerEl = panelTabContent.querySelector('[data-map-drawer]');
     const drawerResizeEl = panelTabContent.querySelector('[data-map-drawer-resize]');
     const shellEl = panelTabContent.querySelector('[data-map-shell]');
+    const mapSearchTrigger = panelTabContent.querySelector('[data-map-search-trigger]');
+    const mapSearchMenu = panelTabContent.querySelector('[data-map-search-menu]');
+    const mapSearchInput = panelTabContent.querySelector('[data-map-search-input]');
+    const mapSearchResultsEl = panelTabContent.querySelector('[data-map-search-results]');
     if (!canvas || !zoomContent) return;
 
     let panX = 0;
     let panY = 0;
     let zoom = 1;
 
-    // Alto mínimo del canvas que el resize del panel no puede pisar — sin
-    // esto, arrastrar el panel hasta arriba del todo dejaría el canvas en
-    // 0px, sin forma de volver a agarrar los controles de zoom (que viven
-    // DENTRO del canvas) para revertirlo.
+    // Alto mínimo del canvas que el RESIZE MANUAL del panel no puede pisar
+    // — sin esto, arrastrar el panel hasta arriba del todo dejaría el
+    // canvas en 0px, sin forma de volver a agarrar los controles de zoom
+    // (que viven DENTRO del canvas) para revertirlo. "Maximizar" (ver
+    // toggleDrawerExpanded) es un modo aparte que sí ocupa el 100% real
+    // (pedido explícito, 2026-08-18: "¿es posible que ocupe el 100%?...
+    // prácticamente queda totalmente por encima del mapa") — no comparte
+    // este mínimo porque el handle de resize sigue disponible y funcional
+    // aunque el canvas quede en 0px (es un elemento propio, su hit-area no
+    // depende del alto del canvas).
     const MAP_DRAWER_MIN_HEIGHT = 120;
     const MAP_CANVAS_MIN_HEIGHT = 120;
+    // Alto por default del panel — apertura fresca y "minimizar" desde
+    // maximizado, los dos caen acá (pedido explícito, 2026-08-18: subido
+    // de 50% a 70% de la altura de la vista del mapa disponible). Un solo
+    // valor con nombre en vez de repetir el número en los dos lugares que
+    // lo usan, para que no se desincronicen si vuelve a cambiar.
+    const MAP_DRAWER_DEFAULT_RATIO = 0.7;
 
     // Drawer de detalle de nodo (pedido explícito, 2026-08-18) — ver CSS
     // `.project-map-drawer` y las funciones `buildNodeDrawer*`/
@@ -6777,6 +8012,15 @@
     let drawerNode = null;
     let drawerTab = 'data';
     let drawerBodyTimer = null;
+    // Expandir el panel (pedido explícito, 2026-08-18: "que ocupe el 100%
+    // de la altura, casi que ocultando el mapa"). Minimizar NO restaura un
+    // resize manual previo — vuelve siempre a MAP_DRAWER_DEFAULT_RATIO
+    // (pedido explícito: "que minimice el panel a su estado inicial",
+    // subido después de 50% a 70%), mismo cálculo que ya usa una apertura
+    // fresca. El handle de resize sigue disponible incluso maximizado
+    // (pedido explícito aparte) — no es un estado excluyente con el drag
+    // manual, solo un atajo a un alto específico.
+    let drawerExpanded = false;
     // Body del tab activo: skeleton primero, contenido real después
     // (pedido explícito, 2026-08-18 — "no es necesario [el esqueleto de
     // los tabs], sino para el contenido de cada tab"). 350ms, mismo
@@ -6797,36 +8041,106 @@
         if (drawerNode !== nodeAtRequest || drawerTab !== tabAtRequest) return;
         bodyEl.innerHTML = buildNodeDrawerBodyHtml(nodeAtRequest, tabAtRequest);
         if (window.lucide) lucide.createIcons();
+        // ⌘C solo debe copiar mientras el tab Data con una grilla real
+        // está montado — cualquier otro tab/nodo limpia el puntero, así
+        // Escape/otros atajos no heredan un handler que ya no corresponde
+        // a lo que se ve en pantalla.
+        mapDrawerGridCopyHandler = null;
+        if (tabAtRequest === 'data' && nodeAtRequest.type !== 'function' && nodeAtRequest.data && nodeAtRequest.data.rows && nodeAtRequest.data.rows.length) {
+          wireNodeDrawerGrid(bodyEl, nodeAtRequest);
+        }
       }, 350);
     }
     function renderDrawerContent() {
       if (!drawerEl || !drawerNode) return;
-      drawerEl.innerHTML = renderNodeDrawerShellHtml(drawerNode, drawerTab);
+      drawerEl.innerHTML = renderNodeDrawerShellHtml(drawerNode, drawerTab, drawerExpanded);
       if (window.lucide) lucide.createIcons();
       renderDrawerBody();
     }
     function openNodeDrawer(nodeData) {
       if (!nodeData) { closeNodeDrawer(); return; }
+      // Solo una apertura "fresca" (el panel estaba cerrado) resetea a
+      // expandido=no + MAP_DRAWER_DEFAULT_RATIO — cambiar de nodo con el
+      // panel YA abierto conserva el alto/estado que el usuario ya había
+      // elegido (expandido o resize manual), no lo pisa cada vez que se
+      // selecciona otro nodo.
+      const wasOpen = !!(drawerEl && drawerEl.classList.contains('is-open'));
       drawerNode = nodeData;
       drawerTab = 'data';
       renderDrawerContent();
       if (drawerEl) {
         drawerEl.classList.add('is-open');
-        // 50% de la altura de la vista del mapa DISPONIBLE en este momento
-        // (pedido explícito) — se mide `shellEl` (canvas + panel juntos)
-        // ANTES de que el panel tome espacio, así que "50%" es siempre la
-        // mitad del total, no la mitad de lo que ya le quedó al canvas.
-        // Se recalcula cada vez que abre — un resize manual anterior no
-        // persiste entre aperturas (mismo criterio que ya usa pan/zoom).
-        const shellHeight = shellEl ? shellEl.clientHeight : 0;
-        if (shellHeight > 0) drawerEl.style.height = `${Math.round(shellHeight * 0.5)}px`;
+        if (!wasOpen) {
+          // MAP_DRAWER_DEFAULT_RATIO (70%) de la altura de la vista del
+          // mapa DISPONIBLE en este momento (pedido explícito) — se mide
+          // `shellEl` (canvas + panel juntos) ANTES de que el panel tome
+          // espacio, así que el porcentaje es siempre sobre el total, no
+          // sobre lo que ya le quedó al canvas. Se recalcula en cada
+          // apertura fresca — un resize manual anterior no persiste entre
+          // aperturas (mismo criterio que ya usa pan/zoom).
+          drawerExpanded = false;
+          const shellHeight = shellEl ? shellEl.clientHeight : 0;
+          if (shellHeight > 0) drawerEl.style.height = `${Math.round(shellHeight * MAP_DRAWER_DEFAULT_RATIO)}px`;
+        }
       }
+      // El handle de resize se muestra siempre que el panel está abierto
+      // (pedido explícito, 2026-08-18: "que se mantenga la opción de
+      // resize sobre el borde superior de este Drawer") — incluye modo
+      // "maximizado", ya no se oculta ahí.
       if (drawerResizeEl) drawerResizeEl.hidden = false;
     }
     function closeNodeDrawer() {
       if (drawerEl) { drawerEl.classList.remove('is-open'); drawerEl.style.height = '0px'; }
       if (drawerResizeEl) drawerResizeEl.hidden = true;
       drawerNode = null;
+      drawerExpanded = false;
+      mapDrawerGridCopyHandler = null;
+    }
+    // Cerrar el panel (botón "×" o Escape, ver más abajo) siempre pasa por
+    // acá — deseleccionar la card es lo que realmente cierra el panel
+    // (`onSelectNode(null)`, ver renderMapGraph); `closeNodeDrawer()` solo
+    // es el fallback si por algún motivo `mapApi` todavía no existe.
+    function requestCloseDrawer() {
+      if (mapApi) mapApi.deselectAll();
+      else closeNodeDrawer();
+    }
+    function toggleDrawerExpanded() {
+      if (!drawerEl || !shellEl) return;
+      const shellHeight = shellEl.clientHeight;
+      drawerExpanded = !drawerExpanded;
+      if (drawerExpanded) {
+        // 100% real (pedido explícito, 2026-08-18: "¿es posible que ocupe
+        // el 100%?... prácticamente queda totalmente por encima del
+        // mapa") — no `shellHeight - sliver` como el primer intento, que
+        // dejaba ~40px de canvas asomando. El canvas puede llegar a 0px
+        // sin problema (`flex:1; min-height:0`) — sus controles, que viven
+        // adentro, simplemente quedan clippeados por el propio
+        // `overflow:hidden` del canvas mientras tanto.
+        // +2px de margen (bug real, reportado: quedaba "un pixel
+        // pendiente por cerrar" al maximizar) — `clientHeight` redondea a
+        // entero, así que si el alto real del shell tiene una fracción de
+        // píxel, restar exactamente ese entero puede dejar justo esa
+        // fracción de canvas asomando. El +2 sobregira a propósito; es
+        // seguro porque `.panel-tab-content--map` (el ancestro directo del
+        // shell) ya tiene `overflow: hidden`, así que ese sobrante nunca
+        // se ve — no hace que el panel se salga de su contenedor.
+        drawerEl.style.height = `${shellHeight + 2}px`;
+      } else {
+        drawerEl.style.height = `${Math.round(shellHeight * MAP_DRAWER_DEFAULT_RATIO)}px`;
+      }
+      // El handle de resize NO se oculta acá (pedido explícito: se
+      // mantiene disponible incluso maximizado) — su hit-area es propia,
+      // no depende del alto del canvas.
+      // Solo el ícono/tooltip del botón necesita cambiar — no hace falta
+      // rehacer todo el shell (que además dispararía de nuevo el skeleton
+      // del body sin necesidad, ver renderDrawerContent).
+      const expandBtn = drawerEl.querySelector('[data-drawer-expand]');
+      if (expandBtn) {
+        expandBtn.setAttribute('aria-label', drawerExpanded ? 'Minimize panel' : 'Maximize panel');
+        expandBtn.setAttribute('data-tooltip', drawerExpanded ? 'Minimize panel' : 'Maximize panel');
+        expandBtn.innerHTML = `<i data-lucide="${drawerExpanded ? 'minimize' : 'maximize'}"></i>`;
+        if (window.lucide) lucide.createIcons();
+      }
     }
     if (drawerEl) {
       drawerEl.addEventListener('click', (e) => {
@@ -6836,12 +8150,21 @@
           renderDrawerContent();
           return;
         }
-        if (e.target.closest('[data-drawer-close]')) {
-          if (mapApi) mapApi.deselectAll();
-          else closeNodeDrawer();
+        if (e.target.closest('[data-drawer-expand]')) {
+          toggleDrawerExpanded();
+          return;
         }
+        if (e.target.closest('[data-drawer-close]')) requestCloseDrawer();
       });
     }
+    // Escape cierra el panel (pedido explícito, 2026-08-18) y con eso
+    // deselecciona el nodo también — mismo camino que el botón "×"
+    // (requestCloseDrawer). El listener real vive a nivel de módulo (ver
+    // `mapDrawerEscapeCloser` más arriba); acá solo se reasigna en cada
+    // corrida para que apunte siempre a la lógica de ESTE render.
+    mapDrawerEscapeCloser = () => {
+      if (drawerEl && drawerEl.classList.contains('is-open')) requestCloseDrawer();
+    };
     // Arrastrar el alto del panel (pedido explícito: "el comportamiento
     // como el resize que ya tenemos implementado, pero en horizontal") —
     // mismo mecanismo que `chatResizeHandle` (mousedown captura el punto
@@ -6980,6 +8303,72 @@
       setZoom(1);
     }
     if (fitBtn) fitBtn.addEventListener('click', resetView);
+
+    // Buscador de nodos (pedido explícito, 2026-08-18): botón con lupa,
+    // esquina superior derecha del canvas — al abrir, lista TODOS los
+    // nodos; escribir filtra por nombre (substring, case-insensitive).
+    // Clickear un resultado centra ese nodo en la vista.
+    function renderMapSearchResults(query) {
+      if (!mapSearchResultsEl || !graph) return;
+      const q = query.trim().toLowerCase();
+      const matches = graph.nodes.filter((n) => !q || n.name.toLowerCase().includes(q));
+      mapSearchResultsEl.innerHTML = matches.length
+        ? matches.map((n) => `
+            <button type="button" class="project-map-search-result" data-search-result-id="${n.id}">
+              <span class="project-map-search-result-icon"><i data-lucide="${nodeContentIcon(n)}"></i></span>
+              <span class="project-map-search-result-name">${n.name}</span>
+            </button>
+          `).join('')
+        : `<div class="project-map-search-empty">No nodes match "${query}"</div>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    // Centrar un nodo en la vista: se mide su posición EN PANTALLA ya
+    // renderizada (`getBoundingClientRect()`, después de aplicar pan/zoom
+    // actuales) contra el centro del canvas, y el delta crudo en píxeles
+    // de pantalla se suma directo a `panX`/`panY` — mismo truco que ya usa
+    // el pan por arrastre (`translate()` antes que `scale()` en el
+    // transform hace que un delta de pantalla funcione igual sin importar
+    // el zoom actual, ver applyTransform() más arriba), así que no hace
+    // falta ningún cálculo analítico aparte contra el origen del
+    // transform. El zoom actual no se toca — solo centra, no acerca.
+    function centerNodeInView(nodeId) {
+      const cardEl = zoomContent.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!cardEl) return;
+      const cardRect = cardEl.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      panX += (canvasRect.left + canvasRect.width / 2) - (cardRect.left + cardRect.width / 2);
+      panY += (canvasRect.top + canvasRect.height / 2) - (cardRect.top + cardRect.height / 2);
+      applyTransform();
+    }
+    if (mapSearchTrigger && mapSearchMenu) {
+      mapSearchTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = !mapSearchMenu.classList.contains('is-open');
+        closeAllMapSearchMenus();
+        mapSearchMenu.classList.toggle('is-open', willOpen);
+        if (willOpen) {
+          if (mapSearchInput) mapSearchInput.value = '';
+          renderMapSearchResults('');
+          if (mapSearchInput) mapSearchInput.focus();
+        }
+      });
+      // Un solo listener en el menú: `stopPropagation` para que clickear
+      // adentro (el input, un resultado) no burbujee hasta `document` y
+      // dispare el cierre global (ver closeAllMapSearchMenus más arriba)
+      // antes de que el propio click de un resultado termine de procesar
+      // — y, si el click cayó sobre un resultado puntual, centrar el nodo
+      // y recién ahí cerrar explícito.
+      mapSearchMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const resultBtn = e.target.closest('[data-search-result-id]');
+        if (!resultBtn) return;
+        centerNodeInView(resultBtn.dataset.searchResultId);
+        closeAllMapSearchMenus();
+      });
+      if (mapSearchInput) {
+        mapSearchInput.addEventListener('input', () => renderMapSearchResults(mapSearchInput.value));
+      }
+    }
 
     resetView();
   }
@@ -7410,6 +8799,22 @@
 
   function initContextSelector(suffix) {
     contextState[suffix] = { selected: null, cycleIndex: 0, cycleTimer: null, tab: 'all', term: '' };
+
+    // Bug fix (2026-08-19): re-render on every open, not just once at init —
+    // same reasoning as maybeLoadPanelOpenPicker() for the side panel's own
+    // picker. The generic [data-menu-trigger] listener (registered earlier,
+    // above) already toggled .is-open by the time this runs, so checking
+    // the class here reads the post-toggle state. Without this, a popover
+    // opened before PROJECTS_DATA/APPS_DATA/PANEL_AGENTS_DATA finished
+    // loading from Supabase stayed stuck on "No results for ''" forever,
+    // even after closing and reopening it later with real data available.
+    const trigger = document.querySelector(`[data-menu-trigger="project-${suffix}"]`);
+    if (trigger) {
+      trigger.addEventListener('click', () => {
+        const menu = document.querySelector(`.composer-menu[data-menu="project-${suffix}"]`);
+        if (menu && menu.classList.contains('is-open')) renderContextResults(suffix);
+      });
+    }
 
     const search = document.querySelector(`[data-context-search="${suffix}"]`);
     if (search) {
@@ -9724,12 +11129,14 @@
   async function deleteChat(id) {
     const index = CHATS_DATA.findIndex((c) => c.id === id);
     if (index === -1) return;
+    const chatName = CHATS_DATA[index].name; // read before splice — gone from the array right after
     const sidebarItem = findSidebarPinnedChatItem(id);
     if (sidebarItem) sidebarItem.remove();
     const sidebarMenu = document.querySelector(`.sidebar-pinned-chat-actions-menu[data-sidebar-chat-actions-menu="${id}"]`);
     if (sidebarMenu) sidebarMenu.remove();
     CHATS_DATA.splice(index, 1);
     applyChatsFilters();
+    showToast(`Chat "${chatName}" deleted successfully`); // optimistic, same as the rest of this function — fires before the Supabase call settles
     const { error } = await supabaseClient.from('chats').delete().eq('id', id);
     if (error) console.error('deleteChat', error);
   }
@@ -9752,8 +11159,18 @@
         </div>
       </div>
     `).join('');
+    // Three distinct empty states, not one: a genuinely empty All tab (no
+    // chats exist yet, no search typed) gets the illustrated hero
+    // (#chatsEmptyHero) — everything else (a search with no matches, or an
+    // Archived tab with nothing archived) stays the plain dashed-box text
+    // (#chatsEmpty), same as before. Only the first one is worth a CTA:
+    // the other two describe a filter finding nothing, not an invitation
+    // to create something.
+    const isGenuinelyEmpty = chatsTab === 'all' && !chatsSearchTerm.trim() && chats.length === 0;
     const emptyEl = document.getElementById('chatsEmpty');
-    emptyEl.hidden = chats.length > 0;
+    const heroEl = document.getElementById('chatsEmptyHero');
+    emptyEl.hidden = chats.length > 0 || isGenuinelyEmpty;
+    heroEl.hidden = !isGenuinelyEmpty;
     // "No chats match your search" reads oddly on the Archived tab when
     // nothing's been archived yet (no search involved at all) — same
     // dedicated-message pattern Projects already uses for its own
@@ -9774,6 +11191,14 @@
     document.getElementById('chatsSkeletonList').hidden = false;
     document.getElementById('chatsList').hidden = true;
     document.getElementById('chatsEmpty').hidden = true;
+    // Bug fix (2026-08-19, reportado por el usuario): faltaba ocultar el
+    // hero ilustrado (#chatsEmptyHero) acá — es un elemento aparte de
+    // #chatsEmpty (ver renderChatsList), así que cuando ya estaba visible
+    // (Chats genuinamente vacío) y se disparaba una nueva carga (re-entrar
+    // a la sección, buscar), el esqueleto aparecía encima sin que el hero
+    // se ocultara nunca — los dos quedaban visibles a la vez, no solo un
+    // instante sino durante toda la carga.
+    document.getElementById('chatsEmptyHero').hidden = true;
   }
   function hideChatsSkeleton() {
     document.getElementById('chatsSkeletonList').hidden = true;
@@ -9987,6 +11412,11 @@
     // click handlers wholesale (reset to empty state, nav active state,
     // etc.) instead of re-implementing any of it.
     document.getElementById('chatsNewChatBtn').addEventListener('click', () => {
+      document.getElementById('newChatBtn').click();
+    });
+    // Same forwarding for the CTA inside the genuinely-empty hero — one
+    // real action, two entry points, same as the line above.
+    document.getElementById('chatsEmptyNewChatBtn').addEventListener('click', () => {
       document.getElementById('newChatBtn').click();
     });
 

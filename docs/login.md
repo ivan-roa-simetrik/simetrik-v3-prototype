@@ -1,6 +1,6 @@
 # Login
 
-> Last updated: 2026-08-13
+> Last updated: 2026-08-18
 > Related file: `index.html`
 
 ## Purpose
@@ -19,17 +19,16 @@ Entry point of the journey. Communicates what Simetrik V3 is ("everything goes t
 
 - **Product naming shifted to match the reference**: "Simetrik Agéntico" (the working title from earlier sessions) is replaced by **"Simetrik V3"** / eyebrow "Simetrik as Code", with tagline "Everything goes through the agent." This now needs to be reconciled with Home/Sidebar/Chat copy, which still uses generic "Simetrik" branding (no direct conflict yet, but worth aligning in the next pass).
 
-- **"Continue with Google" uses Google's real multi-color G mark.** This is a standard, expected pattern for OAuth buttons (Google publishes this asset for exactly this use) — different from the earlier concern about using Claude's logo out of context.
+- **"Continue with Google" uses Google's real multi-color G mark.** This is a standard, expected pattern for OAuth buttons (Google publishes this asset for exactly this use) — different from the earlier concern about using Claude's logo out of context. **Update 2026-08-18**: the button now triggers a real `signInWithOAuth({ provider: 'google' })` call, not a simulated one — see "Real authentication wired" below.
 
 - **Floating "Workflow · Period close" mockup** represents the product's core loop: Dataset → Rule → Reconciliation → Output, with two floating badges ("Deterministic · Auditable" and a 92%-match ring). It exists purely to make the value proposition tangible on the dark panel, same spirit as the earlier chat→artifact mini-preview it replaces. **Note:** described as "static" here originally, but it has run as a self-playing looping demo since "Demo animation loop on the mockup card (2026-08-12)" below — this line was stale even before today's changes, corrected now.
 
 ## Current implementation state
 
 - ✅ Light/dark split matching the reference structure
-- ✅ Google button (visual only — triggers the same simulated auth as email/password)
+- ✅ **Real authentication (2026-08-18)**: `signInWithPassword` on submit, `signInWithOAuth({ provider: 'google' })` on the Google button, inline error message (`#loginError`, e.g. "Incorrect email or password.") instead of silently failing, automatic redirect to `flows/home/index.html` if a session already exists (`getSession()` on load) — skips the login screen entirely for a returning user. Full backend/schema story lives in `docs/supabase.md`, not duplicated here; this file only tracks how it shows up on *this screen*.
 - ✅ Email/password fields, show/hide password toggle, loading state on submit
 - ✅ Right panel: flat black background, floating workflow mockup with an animated rotating gradient border + colored ambient glow, self-playing demo loop (typed prompt → typing indicator → pipeline steps → two floating badges)
-- ⛔ No real OAuth, no real validation — any input signs in
 - ⛔ Pills in the dark panel ("Card reconciliation", "Accounting close"...) are static, non-interactive
 
 ## Centering pass (2026-08-12)
@@ -132,6 +131,19 @@ User shared the isologo image again to request it as the favicon. Verified no ne
 
 Email and password fields ship prefilled for demo convenience: `ivan.roa@simetrik.com` (real, non-sensitive) and `demo1234` (**fictitious** — not the user's real password). The user initially asked for their real password to be hardcoded; flagged that a real credential in plaintext HTML is a bad idea if this folder ever gets shared, committed, or handed to a teammate for feedback, since the field doesn't validate anything anyway. User agreed to a fake value instead. If this ever needs the real value for some reason, don't just paste it back in without re-raising the same flag.
 
+**Superseded 2026-08-18**: both fields are empty again (placeholder only, no `value`). With real auth in place, a hardcoded fake password no longer means anything — see "Real authentication wired" below and `docs/supabase.md` ("Login real reemplaza el prellenado de demo").
+
+## Real authentication wired, prefilled demo credentials removed (2026-08-18)
+
+The submit-and-redirect-after-650ms simulation is gone. `index.html` now does real auth via Supabase:
+
+- **New script includes**: `shared/supabase-config.js` (project URL + publishable anon key) and `shared/auth.js` (`getSupabaseClient()` wrapper), loaded before the inline `<script>`, plus the `@supabase/supabase-js` CDN bundle in `<head>`.
+- **Submit handler**: `client.auth.signInWithPassword({ email, password })`. On error, shows `#loginError` (new `.login-error` element under the password field) with a friendlier message for the common case (`'Invalid login credentials'` → "Incorrect email or password."), otherwise the raw Supabase error message. On success, redirects to `flows/home/index.html` same as before.
+- **Google button**: now `client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: ... } })` instead of just re-triggering the email/password submit path.
+- **Session skip**: `client.auth.getSession()` runs on page load; if a session already exists, redirects straight to Home without showing the login form at all.
+- **Prefilled demo credentials removed** (see superseded note above) — fields are empty with placeholder text only.
+- **Not this file's job to duplicate**: schema, RLS, migrations, the `mock-v3` precedent, and the full decision trail for the Supabase project itself all live in `docs/supabase.md`. This entry only exists so this screen's own doc doesn't contradict what the code actually does.
+
 ## Agent icon resolved (2026-08-12)
 
 Earlier flagged as ambiguous (`simetrik-agent-icon.png` / `descarga.png`, same file, purpose unconfirmed). The user confirmed it's an official corporate asset representing **the agent** specifically (distinct from `Simetrik_isologo.png`, which represents the company/product mark). Applied to the headline icon in `.value-headline` — "Everything goes through the **agent**." now shows the agent icon instead of the generic isologo, sized up slightly (30px → 36px) since it's a more detailed multi-color mark. `descarga.png` (the duplicate) stays unused/unreferenced.
@@ -159,5 +171,7 @@ Adding `align-items: center` to `.login-value` changed how `.mockup-wrap` sizes 
 - `assets/img/Simetrik_isologo.png` — icon mark, inline in the headline
 - `assets/img/simetrik-agent-icon.png` — agent mark, headline icon + mockup typing indicator avatar
 - `docs/chat.md` — source of truth for the real chat conventions the mockup animation now mirrors (avatar rules, bubble styling, typing indicator)
+- `shared/supabase-config.js` / `shared/auth.js` — real auth wiring this screen calls into (`getSupabaseClient()`)
+- `docs/supabase.md` — **authoritative doc for the real authentication** (schema, RLS, project setup, full decision trail). This file only tracks how it behaves on this specific screen.
 
 `assets/img/Cover.png` is no longer used by this screen (superseded 2026-08-13 by a flat `#000000` background) — it's still referenced from `shared/tokens.css` for the sidebar avatar in the Home flow.

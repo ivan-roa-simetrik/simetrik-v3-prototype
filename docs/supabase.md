@@ -1,11 +1,11 @@
 # Supabase (persistencia)
 
-> Última actualización: 2026-08-18
+> Última actualización: 2026-08-19
 > Este archivo es distinto a los demás de `docs/`: no documenta una pantalla, documenta la **capa de persistencia** del prototipo — hasta el 2026-08-14 el prototipo no tenía ninguna (todo vivía en arrays JS en memoria o directo en el DOM, se perdía en cada reload). Ver `proyecto.md`/`apps.md`/`project-map.md` para los modelos conceptuales que este archivo traduce a esquema real.
 
 ## Propósito
 
-Persistir en una base de datos real (Supabase/Postgres) lo que hoy vive hardcodeado en `flows/home/index.html` (`PROJECTS_DATA`, `APPS_DATA`, `CHATS_DATA`, `PANEL_AGENTS_DATA`) y reemplazar el login falso (`setTimeout` + redirect) por autenticación real, sin romper la naturaleza del prototipo (HTML estático, sin build step). El plan completo está en 6 fases; este documento cubre **Fase 0** (fundaciones: esquema + auth), **Fase 1** (lectura real), **Fase 2** (escritura real), **Fase 3** (mensajes de chat reales) y **Fase 4** (Realtime: sincronización en vivo entre sesiones). Fases 5-6 (mapa del proyecto, RLS fino por rol) siguen pendientes — ver "Pendiente/abierto".
+Persistir en una base de datos real (Supabase/Postgres) lo que hoy vive hardcodeado en `flows/home/index.html` (`PROJECTS_DATA`, `APPS_DATA`, `CHATS_DATA`, `PANEL_AGENTS_DATA`) y reemplazar el login falso (`setTimeout` + redirect) por autenticación real, sin romper la naturaleza del prototipo (HTML estático, sin build step). El plan completo está en 6 fases; este documento cubre **Fase 0** (fundaciones: esquema + auth), **Fase 1** (lectura real), **Fase 2** (escritura real), **Fase 3** (mensajes de chat reales) y **Fase 4** (Realtime: sincronización en vivo entre sesiones) — las 4 completamente implementadas. **El esquema de la Fase 5** (mapa del proyecto: nodos, edges, versiones, ambientes, Data/Context de nodo) **ya está completo y definido**, pero su construcción real en `flows/home/index.html` (reemplazar el `DEMO_MAP_GRAPH` de `docs/map.md` por datos reales) todavía no arrancó. **Fase 6** (RLS fino por rol) sigue pendiente — ver "Pendiente/abierto".
 
 ## Decisiones tomadas
 
@@ -34,14 +34,22 @@ Persistir en una base de datos real (Supabase/Postgres) lo que hoy vive hardcode
 
 - **2026-08-18 — Corrección: los Chats son privados a quien los inició, no compartidos por toda la organización.** Pedido explícito del usuario, con ejemplo concreto: si vos y Juan tienen acceso al mismo Proyecto 1, cada uno ve solo sus propios chats bajo ese proyecto, nunca los del otro — el acceso compartido es al Proyecto (sus datos, su mapa), no a las conversaciones que cada usuario tiene con el agente sobre él. Esto corrige un error real de las policies de `0003_chats.sql`: `select`/`update`/`delete` scopeaban por membresía de organización completa (cualquier miembro veía/editaba todos los chats de la org), no por dueño. `0005_chats_private_per_user.sql` las reemplaza por `owner_user_id = auth.uid()`; `insert` suma ese check al de membresía que ya tenía. Reasigna los 8 chats sembrados en `0003` (quedaron con `owner_user_id` NULL, ningún usuario existía todavía en ese momento) al primer `org_admin` de "Simetrik" para no dejarlos huérfanos. Projects/Apps NO cambian — siguen compartidos por toda la organización, la corrección es específica a Chats/chat_messages. Ver también `proyecto.md` → Reglas clave.
 
+- **2026-08-19 — Bug encontrado (reportado por el usuario) y corregido: el popover del selector de contexto del composer quedaba pegado en "No results for ''".** Es el mismo problema ya aceptado-sin-resolver más arriba ("Flash de estado vacío") para Projects/Apps, pero en una versión peor: `initContextSelector` (la barra gris "Select a project/app/agent") renderiza su popover una sola vez, de forma síncrona, al cargar la página — antes de que `bootstrapDataFromSupabase()` termine de poblar `PROJECTS_DATA`/`APPS_DATA`/`PANEL_AGENTS_DATA` — y a diferencia de Projects/Apps (donde el segundo render que dispara el bootstrap corrige el flash solo), acá nada volvía a tocar ese popover después: ni cerrarlo y reabrirlo lo arreglaba, porque (a diferencia del picker del panel lateral, que sí se re-renderiza en cada apertura) no tenía ningún hook de "render on open". Fix, dos partes: `bootstrapDataFromSupabase()` ahora también dispara `renderContextResults('empty'|'docked')` al terminar de cargar (mismo patrón que `refreshProjectsViewIfPresent`/`refreshAppsViewIfPresent`), y además el trigger de cada popover ahora re-renderiza sus resultados en cada apertura (no solo al escribir o cambiar de tab), cerrando el gap de raíz en vez de solo parchear el timing de esta vez. Ver `chat.md` → "Selector de contexto" para el detalle completo.
+
 ## Estado actual de implementación
 
 - ✅ Proyecto Supabase creado (`ponrsihkujkkqefkznor.supabase.co`), separado del de `mock-v3`.
-- ✅ 4 migraciones aplicadas vía SQL Editor, en `supabase/migrations/`:
+- ✅ **10 migraciones aplicadas vía SQL Editor** (todas corridas y verificadas), en `supabase/migrations/`:
   - `0001_organizations.sql` — `organizations` + `organization_members` (roles, RLS), seed de la org "Simetrik" + `ivan.roa@simetrik.com` como `org_admin`.
-  - `0002_projects_apps_agents.sql` — `projects`, `apps`, `apps_projects` (junction N:N), `agents`, RLS por membresía, seed de los 3 proyectos / 3 apps / 3 agentes que hoy siguen además hardcodeados en `flows/home/index.html` (Fase 1, todavía no hecha, es la que apunta la UI a leer de acá en vez de los arrays en memoria).
+  - `0002_projects_apps_agents.sql` — `projects`, `apps`, `apps_projects` (junction N:N), `agents`, RLS por membresía, seed de los 3 proyectos / 3 apps / 3 agentes (ya migrados a lectura/escritura real en Fases 1-2, ver abajo).
   - `0003_chats.sql` — `chats` (con el `CHECK` de "a lo sumo un contexto") + `chat_messages` (tabla nueva, append-only — no existía ningún backing store para mensajes antes de esto, vivían solo en el DOM), seed de los 8 chats actuales.
   - `0004_project_map.sql` — `map_nodes` / `map_edges` / `map_versions`, sin seed (el mapa arranca vacío por decisión de producto ya confirmada, ver `project-map.md`).
+  - `0005_chats_private_per_user.sql` — corrige RLS de chats a `owner_user_id = auth.uid()` (ver Decisiones tomadas).
+  - `0006_project_environments.sql` — ajena a esta línea de trabajo (ver nota más abajo), campo `environments` en `projects`.
+  - `0007_enable_realtime.sql` — habilita Realtime sobre `projects`/`apps`/`apps_projects`/`chats`.
+  - `0008_pinned_per_user.sql` — `project_user_state`/`app_user_state` (pin por usuario, ver Decisiones tomadas).
+  - `0009_project_environment_promotions.sql` — modelo de promoción de ambientes del mapa (ver Decisiones tomadas).
+  - `0010_node_data_and_context.sql` — `map_node_data` + `map_nodes.agent_context` (ver Decisiones tomadas).
 - ✅ `shared/supabase-config.js` — URL + `anonKey` (formato `sb_publishable_...`, el reemplazo moderno del anon key clásico) del proyecto nuevo. Segura para exponer en el cliente: el acceso real lo controla RLS, no el secreto de esta key.
 - ✅ `shared/auth.js` — wrapper (`getSupabaseClient`/`requireSession`/`signOutAndRedirect`), mismo patrón que `mock-v3/shared/auth.js`.
 - ✅ `index.html`: login real. `signInWithPassword` en el submit del form (con mensaje de error inline, `#loginError`, para credenciales inválidas), `signInWithOAuth({provider:'google'})` en el botón de Google, y skip automático de la pantalla si ya hay sesión activa (`getSession()` al cargar). Campos de email/password ya no vienen prellenados.
@@ -65,11 +73,12 @@ Persistir en una base de datos real (Supabase/Postgres) lo que hoy vive hardcode
   - **"Context"**: sin precedente en el producto real. Interpretación en lenguaje natural del nodo, **construida y mantenida por el agente** al impactar el nodo desde el chat, nunca editada a mano. Columna nueva `map_nodes.agent_context`.
   - **Tags: confirmados sin cambios** — siguen informativos/libres (para filtrar más adelante, incluso a nivel de columna de un dataset a futuro), nunca disparan ejecución. Divergencia ya conocida y mantenida frente al producto real (que usa un discriminador estructurado en vez de tags).
   `0010_node_data_and_context.sql`. Ambos conceptos ya estaban anticipados como pestañas del drawer de detalle en el plan original del mapa, sin definir hasta ahora. Ver `project-map.md` → "Estructura interna de nodo: Data y Context".
+- ✅ **Versionado por nodo — evaluado y descartado, sin migración (2026-08-18)**: el usuario preguntó si hacía falta una tabla `map_node_versions` aparte del historial del mapa completo. Decisión: no — `map_versions.snapshot` ya contiene la foto completa de todos los nodos; "la versión de un nodo" se obtiene filtrando esa foto por id, no guardando una segunda línea de tiempo (mismo criterio de evitar segunda fuente de verdad ya aplicado al pin y a `SEARCH_DATA`). Requisito para la Fase 5 real: `snapshot` debe tener forma predecible `{ nodes: [...], edges: [...] }`. Ver `project-map.md` → "Versionado: una sola línea de tiempo".
+- ✅ **Alcance inicial: 2 ambientes activos, no 3 (2026-08-18)**: pedido explícito del usuario — la Fase 5 real arranca con `dev`/`production` únicamente; `qa` queda definido en el enum (0006) y visible como badge, pero sin flujo de promoción propio todavía.
 - ⛔ **Todavía sin RLS fino por rol (Fase 6)**.
 
 ## Pendiente / abierto
 
-- **Correr `0009_project_environment_promotions.sql` y `0010_node_data_and_context.sql` en el SQL Editor** — escritas pero todavía no aplicadas a la base real.
 - **Selector de ambiente en el canvas del mapa** — el modelo de datos ya está resuelto, pero el canvas de `docs/map.md` no tiene ningún UI para elegir qué ambiente se está viendo. Necesario durante la construcción real de la Fase 5.
 - **Abrir un chat existente desde la vista Chats o el sidebar sigue siendo un no-op** — Fase 3 solo hizo real el único punto que ya "abría" un chat (el popover de historial de un proyecto). Clickear una fila en `renderChatsList` o en el sidebar's Recent/Pinned no navega a ningún lado todavía (gap de UI preexistente a Fase 3, confirmado por investigación explícita — no regresión de esta fase). Construir esa navegación es trabajo nuevo de UI, no solo de persistencia.
 - **Realtime no cubre `chat_messages`**: un chat abierto en 2 pestañas del mismo usuario no se sincroniza en vivo entre ellas todavía — decisión explícita de alcance de la Fase 4, no un olvido.
@@ -90,3 +99,4 @@ Persistir en una base de datos real (Supabase/Postgres) lo que hoy vive hardcode
 - `docs/proyecto.md` — modelo de organización/roles/permisos que la Fase 6 debe traducir a RLS
 - `docs/project-map.md` — modelo de nodos que `map_nodes.config` traduce a esquema, y la sección "Ambientes y el mapa" (modelo de promoción)
 - `docs/map.md` — la pantalla del canvas ya construida, esperando la Fase 5 para reemplazar `DEMO_MAP_GRAPH` por datos reales
+- `docs/chat.md` — selector de contexto del composer (barra gris), afectado por el mismo patrón de "render síncrono contra datos que cargan async" que Projects/Apps, con su propio bug ya corregido (ver "Decisiones tomadas" arriba)
